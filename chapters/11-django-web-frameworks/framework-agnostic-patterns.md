@@ -711,6 +711,7 @@ Server-side rendering (SSR) uses a template engine to produce HTML on the server
 # Template inheritance: base.html defines the skeleton, child templates fill in blocks.
 ```
 
+{% raw %}
 ```html
 <!-- templates/base.html -->
 <!DOCTYPE html>
@@ -728,7 +729,9 @@ Server-side rendering (SSR) uses a template engine to produce HTML on the server
 </body>
 </html>
 ```
+{% endraw %}
 
+{% raw %}
 ```html
 <!-- templates/books/book_list.html -->
 {% extends "base.html" %}
@@ -760,6 +763,7 @@ Server-side rendering (SSR) uses a template engine to produce HTML on the server
     {% endif %}
 {% endblock %}
 ```
+{% endraw %}
 
 Context processors inject variables that are available in every template (the logged-in user, site settings, etc.), which is Django's equivalent of global template variables in other frameworks.
 

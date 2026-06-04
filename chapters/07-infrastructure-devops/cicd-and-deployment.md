@@ -47,6 +47,7 @@ Popular container registries include Amazon ECR, Google Artifact Registry, GitHu
 
 Below is a comprehensive GitHub Actions workflow that implements all the stages discussed above.
 
+{% raw %}
 ```yaml
 # .github/workflows/ci-cd.yml
 name: CI/CD Pipeline
@@ -323,6 +324,7 @@ jobs:
             sleep 10
           done
 ```
+{% endraw %}
 
 > **Key Takeaway:** A CI/CD pipeline is your automated quality gate. Every commit passes through lint, type check, test, security scan, build, and deploy stages. Use parallelism and caching to keep pipelines fast. Use environments with manual approvals for production deployments. Never store secrets in code; use the CI system's secret management and prefer OIDC federation over long-lived credentials.
 

@@ -343,6 +343,7 @@ scrape_configs:
       - targets: ["redis-exporter:9121"]
 ```
 
+{% raw %}
 ```yaml
 # prometheus/rules/alerts.yml
 groups:
@@ -395,6 +396,7 @@ groups:
         annotations:
           summary: "Disk usage above 85% on {{ $labels.instance }}"
 ```
+{% endraw %}
 
 #### Grafana and PromQL
 

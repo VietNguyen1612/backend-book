@@ -251,7 +251,7 @@ DATABASE_URL=postgresql://dev_user:dev_password@localhost:5432/myapp_dev
 DJANGO_SECRET_KEY=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4
 DJANGO_DEBUG=True
 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
-STRIPE_API_KEY=sk_test_4eC39HqLyjWDarjtT1zdp7dc
+STRIPE_API_KEY=your_stripe_test_key_here
 ```
 
 **Loading .env in Django settings:**
@@ -553,6 +553,7 @@ class DataBreachLog(models.Model):
 
 Third-party dependencies are a major attack vector. A single vulnerable library can compromise your entire application. Automated scanning and updating is essential.
 
+{% raw %}
 ```bash
 # Python: Safety (checks for known vulnerabilities in installed packages)
 pip install safety
@@ -589,6 +590,7 @@ requests==2.31.0
 #   env:
 #     SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 ```
+{% endraw %}
 
 #### Penetration Testing and Static/Dynamic Analysis
 

@@ -67,7 +67,21 @@ Here is a step-by-step walkthrough of how a senior engineer debugs an intermitte
 grep "Connection is not available" /var/log/order-service/app.log | tail -20
 ```
 
-Hundreds of "Connection is not available, request timed out after 30000ms" messages starting at 14:30.
+This returns something like (timestamps and request IDs vary):
+
+```console
+2026-03-25T14:30:11.482Z ERROR [http-nio-8080-exec-7] c.e.order.OrderController - Failed to save order
+  java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+2026-03-25T14:30:11.733Z ERROR [http-nio-8080-exec-3] c.e.order.OrderController - Failed to save order
+  java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+2026-03-25T14:30:12.004Z ERROR [http-nio-8080-exec-9] c.e.order.OrderController - Failed to save order
+  java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+... (hundreds more, all starting around 14:30)
+```
+
+**How to read this output:** The exception type is the smoking gun. `SQLTransientConnectionException` from `HikariPool-1` means the application never got a connection from the pool -- it waited the full `connectionTimeout` (30000ms) and gave up. This is *not* a database error; the database itself is fine. The thread name (`http-nio-8080-exec-7`) tells you a request-handling thread was blocked for 30 full seconds before failing, which is why the 500 rate climbed: each blocked thread is one fewer worker available to serve traffic. The tight clustering of timestamps starting at 14:30 confirms the onset matches the alert. In an interview or a real incident, this is the moment you stop guessing about the network and start asking "what is holding the connections?"
+
+Hundreds of "Connection is not available, request timed out after 30000ms" messages confirm the pool is starved.
 
 **Step 4: Narrow down the root cause.** Why is the pool exhausted?
 
@@ -79,6 +93,20 @@ FROM pg_stat_activity
 WHERE datname = 'orders' AND state = 'active'
 ORDER BY duration DESC LIMIT 10;
 ```
+
+The result set looks like:
+
+```text
+  pid  |    duration     | state  |                                  query
+-------+-----------------+--------+--------------------------------------------------------------------------
+ 31847 | 00:13:42.118203 | active | SELECT * FROM order_items WHERE created_at > '2026-03-25' ORDER BY created_at
+ 31902 | 00:12:55.640871 | active | SELECT * FROM order_items WHERE created_at > '2026-03-25' ORDER BY created_at
+ 32014 | 00:12:08.305199 | active | SELECT * FROM order_items WHERE created_at > '2026-03-25' ORDER BY created_at
+ 33150 | 00:00:00.004112 | active | SELECT pid, now() - query_start AS duration, state, query FROM pg_stat_a...
+(4 rows)
+```
+
+**How to read this output:** `pg_stat_activity` is PostgreSQL's live view of every backend process; `now() - query_start` gives you each query's wall-clock age, and sorting descending floats the worst offenders to the top. Three backends (`pid` 31847, 31902, 32014) have been running the *same* `SELECT * FROM order_items` for 12-13 minutes each -- and each of those backends is holding a pooled connection hostage for that entire time, which is exactly why HikariCP ran dry. The bottom row with the four-millisecond duration is just your own diagnostic query showing up in its own results, which is normal and safe to ignore. The duration column is the key signal: a healthy OLTP query finishes in single-digit milliseconds, so a 12-minute `active` query is almost always a missing index, a full table scan, or a report aimed at the wrong database.
 
 Result: Three queries running for 12+ minutes, all executing the same query: `SELECT * FROM order_items WHERE created_at > '2026-03-25' ORDER BY created_at`. This query is doing a full table scan on a 200-million-row table.
 

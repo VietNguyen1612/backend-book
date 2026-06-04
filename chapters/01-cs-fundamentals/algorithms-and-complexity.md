@@ -73,6 +73,8 @@ def all_subsets(items):
     return rest + [[items[0]] + subset for subset in rest]
 ```
 
+> **Common pitfall:** The `O(1)` average on `dict.get()` and the `O(n log n)` on `sorted()` describe *growth rate*, not wall-clock time. A constant-factor-heavy O(n) pass over a NumPy array can beat a "better" O(log n) pure-Python loop for the n values you actually have. In interviews state the Big-O; in production profile the real input sizes before optimizing.
+
 #### Amortized Analysis
 
 Amortized analysis looks at the **average cost per operation over a sequence**, not the worst case of a single operation. The classic example is Python's `list.append()`:
@@ -196,6 +198,8 @@ def merge_sort(arr):
     return result
 ```
 
+> **Common pitfall:** This recursive `quicksort` recurses to a depth of O(log n) on average, but a naive (non-random) pivot on already-sorted input recurses n deep and hits Python's default recursion limit (1000) — a `RecursionError` in production on the very input people forget to test. Random pivots fix the average case; an explicit stack or `sys.setrecursionlimit` is needed only if you must guarantee it.
+
 #### Non-Comparison Sorts
 
 When keys are integers (or can be mapped to integers) within a known range, non-comparison sorts can beat the O(n log n) barrier:
@@ -244,6 +248,8 @@ def radix_sort(arr):
 print(radix_sort([170, 45, 75, 90, 802, 24, 2, 66]))
 # [2, 24, 45, 66, 75, 90, 170, 802]
 ```
+
+**How to read this output:** The numbers come out fully sorted even though each pass only looks at one digit. That only works because the per-digit counting sort is *stable* — after sorting on the ones digit, the tens-digit pass preserves the ones-digit order for ties, and so on. Break stability (e.g. iterate `arr` forward instead of `reversed`) and the result is silently wrong, which is exactly the kind of bug that passes small tests and corrupts a production sort of fixed-width keys like timestamps or zero-padded IDs.
 
 #### Stability in Sorting
 
@@ -355,6 +361,8 @@ def fib_optimized(n):
         prev2, prev1 = prev1, prev2 + prev1
     return prev1
 ```
+
+> **Common pitfall:** `@lru_cache` keys on the *arguments*, so it only works when every argument is hashable. Decorate a function that takes a `list` or `dict` (a common DP setup like `solve(grid, i, j)`) and you get `TypeError: unhashable type: 'list'`. Convert mutable state to a `tuple` first, or carry it via indices/closure instead of arguments. Also note the cache is process-global and never evicts with `maxsize=None` — a memory leak if keyed on unbounded user input.
 
 #### Classic DP Patterns
 
@@ -583,6 +591,8 @@ def floyd_warshall(n, edges):
     return dist
 ```
 
+> **Common pitfall:** This implementation uses Python's `float('inf')`, where `inf + inf == inf` stays well-behaved. Port the same triple loop to C/Java/Go with a large sentinel like `INT_MAX` and `dist[i][k] + dist[k][j]` overflows to a *negative* number, which then looks shorter than the real path and silently corrupts the matrix. Use a sentinel no larger than `MAX/2`, or skip the relaxation when either operand is the sentinel.
+
 Best suited for **small, dense graphs** (V < ~500) where you need all pairs of shortest paths, such as computing distances between all pairs of data centers.
 
 #### Network Flow
@@ -653,6 +663,8 @@ text = "ABABDABACDABABCABAB"
 print(kmp_search(text, "ABABCABAB"))  # [9]
 print(kmp_search(text, "ABAB"))       # [0, 9, 14]
 ```
+
+**How to read this output:** The returned lists are the 0-based start indices of every match. The second search is the interesting one: `"ABAB"` matches at index 14, then *again* at... no — indices 0, 9, 14 are non-overlapping here, but note KMP deliberately resets `j = failure[j - 1]` after a hit rather than to 0, so it *can* report overlapping matches (searching `"AA"` in `"AAAA"` returns `[0, 1, 2]`). That single-pass, no-backtracking behavior is the whole point: KMP never re-examines a text character, giving the guaranteed O(n + m) that naive `text.find` in a loop cannot promise on adversarial inputs like `"AAAA...AAB"`.
 
 #### Rabin-Karp
 

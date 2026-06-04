@@ -60,6 +60,17 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 The resulting runtime image contains no compiler, no gcc, no build headers -- only the Python runtime and your installed packages.
 
+The size difference is the whole point. After building both a naive single-stage image and the multi-stage one above, `docker images` shows something like (exact sizes vary by base image version and dependency set):
+
+```console
+$ docker images
+REPOSITORY      TAG              IMAGE ID       SIZE
+myapp           single-stage     a1b2c3d4e5f6   1.18GB
+myapp           multi-stage      f6e5d4c3b2a1   214MB
+```
+
+**How to read this output:** The single-stage image carries `gcc`, `libpq-dev`, apt caches, and build headers that are only needed at build time -- roughly a gigabyte of dead weight that ships to every node, slows every `docker pull`, and widens the attack surface. The multi-stage image discarded all of it by copying only `/install` into a fresh runtime base. In an interview, "how do you shrink a Docker image?" is answered first with multi-stage builds; in production, smaller images mean faster autoscaling and rollouts because nodes pull layers in seconds, not minutes.
+
 #### Layer Caching
 
 Every instruction in a Dockerfile creates a layer. Docker caches each layer and reuses it if the instruction and all preceding layers have not changed. When a layer's cache is invalidated, every subsequent layer is also rebuilt. This means the order of instructions in your Dockerfile has a significant impact on build speed.
@@ -88,6 +99,21 @@ Additional tips for maximizing cache hits:
 - Combine related `RUN` commands with `&&` to reduce layer count, but do not combine unrelated ones (that would unnecessarily invalidate caches).
 - Use `--no-cache-dir` with pip to avoid storing the download cache inside the image layer.
 - Use `--mount=type=cache` (BuildKit feature) for persistent build caches across builds.
+
+You can see caching at work in the build output. When you rebuild after changing only source code (not `requirements.txt`), the expensive dependency layers are reused:
+
+```console
+$ docker build -t myapp .
+ => CACHED [builder 3/5] COPY requirements.txt .
+ => CACHED [builder 4/5] RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+ => [builder 5/5] COPY . .
+ => exporting to image
+ => => naming to docker.io/library/myapp:latest
+```
+
+**How to read this output:** The `CACHED` prefix means Docker reused a previously built layer instead of re-running the instruction. The `pip install` step -- usually the slowest part of the build -- is skipped entirely because `requirements.txt` was unchanged, turning a multi-minute rebuild into a few seconds. If you had used the BAD ordering (`COPY . .` before `pip install`), editing a single source file would invalidate the copy layer and force a full reinstall every time -- the difference between a 5-second and a 5-minute CI build.
+
+> **Common pitfall:** Layer caching is invalidated by *content*, not just by named files. `COPY . .` is invalidated by any change in the build context, including files you do not care about -- which is exactly why a tight `.dockerignore` (next section) is part of cache hygiene, not just security.
 
 #### Security
 
@@ -161,6 +187,16 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 - `--timeout=5s`: If the check takes more than 5 seconds, consider it failed.
 - `--start-period=10s`: Grace period after container start during which failures are not counted (gives the app time to initialize).
 - `--retries=3`: Mark as unhealthy after 3 consecutive failures.
+
+Once the container is running, the health state surfaces in `docker ps` under the STATUS column:
+
+```console
+$ docker ps
+CONTAINER ID   IMAGE       STATUS                            PORTS
+9f3a1c0b2d4e   myapp       Up 2 minutes (healthy)            0.0.0.0:8000->8000/tcp
+```
+
+**How to read this output:** The `(healthy)` annotation appears only because a `HEALTHCHECK` is defined; without one the status would just read `Up 2 minutes` and Docker would have no opinion about whether your app actually works. During the `--start-period` window it shows `(health: starting)`, and after `--retries` consecutive failures it flips to `(unhealthy)`. This matters because tools downstream -- Compose's `depends_on: condition: service_healthy`, Swarm's restart logic -- key off exactly this state, so a missing or naive health check (e.g. one that only checks the port is open, not that the app can serve a request) silently defeats your self-healing.
 
 In Kubernetes, you do not use Docker's `HEALTHCHECK`. Instead, you use Kubernetes-native probes (`livenessProbe`, `readinessProbe`, `startupProbe`), which offer more flexible configuration and integrate with the Kubernetes service mesh and scheduling system. See the Kubernetes Probes section below.
 
@@ -318,6 +354,21 @@ The **sidecar pattern** adds a helper container alongside the main container. Co
 A Deployment is the standard way to run stateless applications on Kubernetes. You declare the desired state -- which container image to run, how many replicas, what resources to allocate -- and the Deployment controller continuously works to make the actual state match.
 
 When you update the image tag or configuration, the Deployment performs a **rolling update** by default: it creates new Pods with the updated spec, waits for them to pass readiness checks, and then terminates old Pods. At no point is the service fully down. If something goes wrong, you can roll back with `kubectl rollout undo deployment/myapp`.
+
+Watching a rollout makes the strategy concrete. With `maxSurge: 1` and `maxUnavailable: 0` (as in the manifest below), `kubectl rollout status` reports the controller bringing up one new Pod at a time:
+
+```console
+$ kubectl set image deployment/myapp myapp=registry.example.com/myapp:1.4.3 -n production
+deployment.apps/myapp image updated
+
+$ kubectl rollout status deployment/myapp -n production
+Waiting for deployment "myapp" rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deployment "myapp" rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deployment "myapp" rollout to finish: 1 old replicas are pending termination...
+deployment "myapp" successfully rolled out
+```
+
+**How to read this output:** Each line marks a step in the surge-and-drain dance: a new Pod is created (surge), it must pass its readiness probe before any old Pod is terminated, and only then does an old Pod drain. Because `maxUnavailable: 0`, capacity never drops below the desired 3 -- there is no availability dip during the deploy, which is exactly the guarantee an interviewer wants you to articulate. The critical dependency is the readiness probe: if it is missing or always returns 200, Kubernetes happily routes traffic to Pods that are not actually ready, and a "successful" rollout can take down production despite the green output above.
 
 ```yaml
 # deployment.yaml
@@ -537,6 +588,15 @@ data:
   api-key: c3VwZXItc2VjcmV0LWFwaS1rZXk=
 ```
 
+Note how trivially the "secret" is recovered -- base64 is encoding, not encryption:
+
+```console
+$ echo c3VwZXItc2VjcmV0LWFwaS1rZXk= | base64 -d
+super-secret-api-key
+```
+
+**How to read this output:** Anyone with `get secret` RBAC permission, or read access to an etcd backup, can decode these values in one command -- there is no key, no password, nothing to crack. This is the single most common Kubernetes security misconception in interviews: candidates assume Secrets are encrypted because they look opaque. They are not, unless you explicitly enable encryption at rest on etcd or front them with an external secrets manager. Treat a Kubernetes Secret as "kept out of the image and out of the pod spec," not as "cryptographically protected."
+
 #### Resource Management
 
 Every container in Kubernetes should declare resource `requests` and `limits`. Without them, a single misbehaving container can starve other workloads on the same Node.
@@ -551,6 +611,23 @@ Kubernetes assigns a QoS (Quality of Service) class based on how requests and li
 - **Guaranteed:** requests equal limits for all containers. Highest priority; last to be evicted under pressure.
 - **Burstable:** requests set but lower than limits. Medium priority.
 - **BestEffort:** no requests or limits set. Lowest priority; first to be evicted.
+
+When a container breaches its memory limit, the symptom is unmistakable in `kubectl describe pod`:
+
+```console
+$ kubectl describe pod myapp-7d9f8c-xk2lp -n production
+...
+    Last State:     Terminated
+      Reason:       OOMKilled
+      Exit Code:    137
+      Started:      Wed, 04 Jun 2026 10:14:02
+      Finished:     Wed, 04 Jun 2026 10:41:55
+    Restart Count:  4
+```
+
+**How to read this output:** `Reason: OOMKilled` with `Exit Code: 137` (128 + signal 9, SIGKILL) means the kernel's OOM killer terminated the process for exceeding the memory `limit` -- not a bug in your code per se, but a hard ceiling you set. A climbing `Restart Count` paired with OOMKilled is the textbook fingerprint of a memory leak or an undersized limit; this is one of the most common "the pod keeps restarting, why?" debugging questions in interviews and on-call. CPU pressure looks different -- there is no kill, the container is just throttled and gets slow -- which is why you almost always set a memory limit but often leave CPU limits off to avoid needless throttling.
+
+> **Key Takeaway:** Requests drive scheduling (where a Pod can fit), limits drive enforcement (when a Pod is throttled or killed). Always set memory requests and limits to protect Nodes from leaks; set CPU requests for fair scheduling but be cautious with CPU limits, since they throttle rather than kill. The QoS class that results determines who gets evicted first when a Node runs out of resources.
 
 #### HPA (Horizontal Pod Autoscaler)
 
@@ -599,6 +676,16 @@ spec:
           type: Utilization
           averageUtilization: 80
 ```
+
+You can watch the autoscaler make decisions with `kubectl get hpa`:
+
+```console
+$ kubectl get hpa myapp-hpa -n production
+NAME        REFERENCE          TARGETS                MINPODS   MAXPODS   REPLICAS
+myapp-hpa   Deployment/myapp   cpu: 84%/70%, ...      3         20        7
+```
+
+**How to read this output:** The `TARGETS` column reads `current/target`: CPU is at 84% against a 70% target, so the HPA has scaled `REPLICAS` up to 7 to drive utilization back down. When load subsides the figure will fall below 70%, but scale-down waits out the 300-second stabilization window from the manifest before removing Pods -- this asymmetry (scale up fast, scale down slow) is deliberate and prevents thrashing during spiky traffic. A frequent gotcha surfaces here: if `TARGETS` shows `<unknown>`, the metrics-server is not installed or the Pods have no CPU `requests`, and the HPA cannot compute a percentage at all -- autoscaling silently does nothing.
 
 For event-driven workloads (scaling based on Kafka lag, SQS queue depth, cron schedules), KEDA (Kubernetes Event-Driven Autoscaling) extends the HPA with a rich set of scalers and can even scale to zero replicas.
 

@@ -49,6 +49,32 @@ vault write auth/approle/role/myapp \
     secret_id_ttl=720h
 ```
 
+Running `vault kv get secret/myapp/database` prints something like:
+
+```text
+====== Secret Path ======
+secret/data/myapp/database
+
+======= Metadata =======
+Key                Value
+---                -----
+created_time       2026-06-04T10:12:03.482Z
+custom_metadata    <nil>
+deletion_time      n/a
+destroyed          false
+version            1
+
+====== Data ======
+Key         Value
+---         -----
+host        db.internal.example.com
+password    s3cur3P@ssw0rd
+port        5432
+username    db_user
+```
+
+**How to read this output:** the KV v2 engine wraps every secret in versioned metadata, which is why the path you read is `secret/data/myapp/...` even though you wrote to `secret/myapp/...` -- the `data/` segment is injected automatically and trips up most newcomers. The `version` field means you can roll back to a prior value, and `destroyed: false` means a soft-deleted secret is still recoverable until explicitly destroyed. In an interview, the giveaway that someone has actually run Vault is that they know the policy path must be `secret/data/myapp/*` (with `data/`) even though the CLI write path omits it.
+
 **Python application using Vault (with hvac library):**
 
 ```python
@@ -353,6 +379,26 @@ trufflehog git file://. --only-verified
 # gitleaks detect --source . --verbose
 ```
 
+When TruffleHog finds a live credential it has confirmed against the provider's API, the output looks like:
+
+```text
+🐷🔑🐷  TruffleHog. Unearth your secrets. 🐷🔑🐷
+
+Found verified result 🐷🔑
+Detector Type: AWS
+Decoder Type: PLAIN
+Raw result: AKIAIOSFODNN7EXAMPLE
+Commit: 4f1c2e9a8b7d6c5e4f3a2b1c0d9e8f7a6b5c4d3e
+File: config/settings_old.py
+Line: 42
+Repository: file://.
+Timestamp: 2026-06-04 10:31:55 +0000
+```
+
+**What's happening:** `--only-verified` is the flag that separates noise from emergencies -- TruffleHog actually calls AWS (or GitHub, Stripe, etc.) with the candidate key, and only reports it if the provider confirms it is live. A "verified" hit means the secret is real, valid, and exploitable right now, so it warrants immediate rotation, not just deletion. The `Commit` and `Line` fields matter because deleting the file does nothing: the credential lives forever in git history, so the only safe remediation is to rotate the secret at the source and treat it as compromised.
+
+> **Common pitfall:** Removing a leaked secret with a follow-up commit feels like a fix but is not -- anyone with the repo can `git checkout` the old commit and read it. Always rotate the credential, and only then optionally rewrite history with `git filter-repo` or BFG.
+
 #### Encryption
 
 All data should be encrypted both at rest and in transit. Application-level encryption provides an additional layer of protection for particularly sensitive fields.
@@ -592,6 +638,20 @@ requests==2.31.0
 ```
 {% endraw %}
 
+A `pip-audit` run against an environment with a known-vulnerable package prints something like:
+
+```text
+Found 2 known vulnerabilities in 1 package
+Name      Version  ID                  Fix Versions
+--------  -------  ------------------  ------------
+requests  2.31.0   GHSA-9wx4-h78v-vm56 2.32.0
+requests  2.31.0   PYSEC-2024-47       2.32.0
+```
+
+**How to read this output:** each row is one CVE/advisory affecting an installed package, and the `Fix Versions` column tells you the minimum safe upgrade -- this is exactly the report that drives a Dependabot or Renovate pull request. The process exits non-zero when vulnerabilities are found, which is what makes it usable as a CI gate: a failing exit code blocks the merge until the dependency is bumped. In production terms, a clean `pip-audit` does not prove you are safe (the advisory database lags real disclosures), but a dirty one is an unambiguous signal you are shipping a known hole.
+
+> **Common pitfall:** Pinning exact versions in `requirements.txt` makes builds reproducible but also freezes you on vulnerable releases until something forces an upgrade. Pinning is correct -- but it only works paired with automated scanning that nudges those pins forward.
+
 #### Penetration Testing and Static/Dynamic Analysis
 
 Regular security testing is non-negotiable for production systems. A combination of automated tools and manual penetration testing provides the most comprehensive coverage.
@@ -613,6 +673,14 @@ bandit -r ./myapp/ -f json -o bandit-report.json
 # Semgrep: pattern-based static analysis with custom rules
 pip install semgrep
 semgrep --config auto ./myapp/
+
+# A single Bandit finding (from the JSON report or terminal) reads like:
+# >> Issue: [B602:subprocess_popen_with_shell_equals_true] subprocess
+#    call with shell=True identified, security issue.
+#    Severity: High   Confidence: High
+#    Location: ./myapp/tasks.py:88
+#    87  cmd = f"ping {user_host}"
+#    88  subprocess.Popen(cmd, shell=True)
 
 # Dynamic Application Security Testing (DAST)
 # OWASP ZAP: automated scanner for running applications
@@ -637,6 +705,8 @@ semgrep --config auto ./myapp/
 #           pip install pip-audit
 #           pip-audit
 ```
+
+**How to read a SAST finding:** each issue carries a rule ID (`B602`), a *severity* (how bad it is if exploited) and a *confidence* (how sure the tool is it is a real match), plus the exact file and line. The severity/confidence split is the key insight -- in CI you typically gate on high-severity, high-confidence findings (`bandit -r ./myapp/ -ll` filters to medium-and-up) so the build fails on genuine `shell=True` command injection while a noisy low-confidence guess does not block every merge. SAST proves a pattern *exists* in source; DAST tools like OWASP ZAP prove a vulnerability is *reachable* on the running app -- you want both because a dangerous-looking line behind dead code is lower priority than the same line on a live request path.
 
 #### Zero-Trust Architecture
 

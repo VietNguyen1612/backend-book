@@ -387,6 +387,22 @@ Escalation contacts:
     capacity planning
 ```
 
+The single highest-value command in that runbook is the Step 2 query against `pg_stat_activity`. At 3 AM, the on-call engineer who runs it sees something like (PIDs, durations, and SQL text vary by incident):
+
+```text
+  pid  |    duration     | state  |                         query
+-------+-----------------+--------+--------------------------------------------------------
+ 18244 | 00:04:12.882190 | active | UPDATE inventory SET reserved = reserved + $1 WHERE ...
+ 18102 | 00:03:58.114007 | active | SELECT * FROM order_items WHERE order_id = $1
+ 17995 | 00:03:51.770233 | active | SELECT * FROM order_items WHERE order_id = $1
+ 18301 | 00:00:00.004118 | active | SELECT pid, now() - query_start AS duration, state, ...
+(4 rows)
+```
+
+**How to read this output:** Sort by `duration` descending and the culprit jumps out. Here, one `UPDATE inventory` has been holding a row lock for over four minutes, and behind it several `SELECT * FROM order_items` queries are piling up because they are blocked or doing full table scans — each one holding a connection from the pool the whole time. That is exactly how pool exhaustion happens: it is rarely "too much traffic," it is a handful of slow queries each pinning a connection. The last row (a few milliseconds) is your own diagnostic query, which you ignore. In an incident this single screen tells you which `pid` to feed into `pg_terminate_backend()` (Remediation Option A) and whether the root cause is lock contention or a missing index — the difference between a 60-second fix and a follow-up schema ticket.
+
+> **Common pitfall:** `pg_terminate_backend()` frees the connection immediately, but if the underlying cause is a missing index or an unbounded query, the next request simply re-creates the same long-running query and you are back where you started within minutes. Killing queries buys time; it is not the fix. Always pair Option A with `statement_timeout` (Option D) or the schema fix so the problem cannot silently recur.
+
 #### ADRs (Architecture Decision Records)
 
 An ADR is a short document that captures a single architectural decision: the context, the decision itself, and the consequences. Unlike an RFC, which is written *before* a decision is made to solicit feedback, an ADR is written *after* the decision to record it for posterity.
@@ -448,6 +464,8 @@ When constructing an estimate, break the work into tasks, estimate each task ind
 - If you are working with an unfamiliar technology or a poorly documented legacy system, add another 20-30%.
 
 Communicate your assumptions. "This estimate assumes the Payment Gateway API documentation is accurate and we will not need to reverse-engineer their behavior" tells your stakeholder exactly what could cause a delay.
+
+> **Common pitfall:** Do not bury your contingency inside a single padded point estimate (quietly turning a 3-week base case into "5 weeks" and presenting only "5 weeks"). When the work finishes early, you look like you sandbagged; when it slips anyway, the hidden buffer is already spent and you have nothing left to absorb the surprise. State the base case, the contingency, and the assumptions separately so stakeholders can see your reasoning and renegotiate scope rather than just the number.
 
 #### Saying No Constructively
 

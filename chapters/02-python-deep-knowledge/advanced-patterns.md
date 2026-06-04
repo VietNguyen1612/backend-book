@@ -108,6 +108,14 @@ get_user_profile(42)  # Returns cached result
 get_user_profile.cache_clear()  # Manual cache clear
 ```
 
+Running the cache demo prints only once, even though `get_user_profile(42)` is called twice:
+
+```text
+Querying database for user 42...
+```
+
+**How to read this output:** The "Querying database" line appears exactly once. The first call is a cache miss, so it runs the body and stores `(result, now)` keyed by `args`; the second call is a cache hit inside the TTL window, so it returns the stored value without touching the database. This is the whole point of memoization — in a real backend, that single suppressed query is a saved round-trip to Postgres on a hot path. After `cache_clear()` the next call would print again.
+
 #### Class-Based Decorators
 
 When your decorator needs to maintain state, a class-based decorator is cleaner.
@@ -163,6 +171,21 @@ def unreliable_fetch(url):
 # unreliable_fetch -> log_calls wrapper -> retry wrapper -> timing wrapper
 # The outermost decorator (timing) runs first, the innermost last.
 ```
+
+The rate-limiter loop succeeds five times, then the sixth call is rejected:
+
+```text
+Response from /endpoint/0
+Response from /endpoint/1
+Response from /endpoint/2
+Response from /endpoint/3
+Response from /endpoint/4
+Rate limit exceeded. Try again in 9.9s
+```
+
+**How to read this output:** The first five calls land inside the `calls=5, period=10` budget and return normally. The sixth finds five timestamps still inside the 10-second window, so it raises instead of calling the wrapped function. The wait time (`~9.9s`) is computed from the oldest timestamp, so it shrinks as older calls age out of the window. Because the state (`self.timestamps`) lives on the `RateLimiter` instance rather than in a closure, every decorated function gets its own independent budget — which is exactly why a class is cleaner than a plain closure here.
+
+> **Common pitfall:** This limiter is not thread-safe. Two threads can both pass the `len(self.timestamps) >= self.calls` check before either appends, letting more calls through than the limit allows. Under real concurrency, guard the timestamp list with a `threading.Lock`.
 
 #### Context Managers: Resource Management
 
@@ -242,7 +265,14 @@ def open_files(file_paths):
 # All files are guaranteed to be closed when the block exits
 ```
 
-> **Key Takeaway:** Decorators and context managers are Python's primary composition tools. Always use `@functools.wraps`, prefer generator-based context managers with `@contextlib.contextmanager` for simplicity, and use `ExitStack` when managing a dynamic number of resources.
+The `Timer` block prints from `__exit__` first, then the trailing `print` runs (exact timing varies by machine):
+
+```text
+Elapsed: 0.0182s
+Result: 499999500000, Time: 0.0182s
+```
+
+**How to read this output:** The "Elapsed:" line is printed by `__exit__` the moment the `with` block ends — this is the guarantee that makes context managers valuable: the cleanup/measurement code runs deterministically even if the body raises. Because `__exit__` stored the duration on `self`, the value is still readable as `t.elapsed` after the block, which is why both lines show the same time. `__exit__` returns `False`, so any exception inside the block would propagate normally rather than being swallowed — returning `True` from `__exit__` is how you would suppress it. The same protocol underlies `database_transaction`: the generator's code after `yield` (the `commit`) acts as the success path, and the `except`/`finally` act as the error and cleanup paths. Always use `@functools.wraps`, prefer generator-based context managers with `@contextlib.contextmanager` for simplicity, and use `ExitStack` when managing a dynamic number of resources.
 
 ---
 
@@ -330,6 +360,15 @@ pipeline = transform_to_output(filter_active(read_csv_rows("users.csv")))
 for record in pipeline:
     print(record)
 ```
+
+The memory comparison at the top makes the point starkly:
+
+```text
+List: 381.5 MB
+Generator: 200 bytes
+```
+
+**How to read this output:** The list materializes all 10 million squares up front, so its size scales with the data — hundreds of megabytes. The generator stores only its execution frame and current position, so `getsizeof` reports a small constant (~200 bytes) no matter how many values it will eventually yield. This is the difference between a process that OOM-kills on a large dataset and one that streams it in constant memory. The exact MB figure depends on the platform's pointer size and list over-allocation, but the order-of-magnitude gap is the takeaway: reach for a generator whenever you only iterate once and don't need random access or `len()`.
 
 #### `yield from`: Sub-Generator Delegation
 
@@ -421,6 +460,19 @@ for item in PaginatedAPI("https://api.example.com/items", page_size=10):
     print(item["id"])
     if item["id"] >= 25:
         break  # Only fetched 3 pages, not all data
+
+The loop above prints IDs starting at 0 and stops shortly after 25:
+
+```text
+0
+1
+2
+...
+25
+26
+```
+
+**How to read this output:** With `page_size=10`, IDs run 0-9 (page 1), 10-19 (page 2), 20-29 (page 3). The loop breaks once it sees an id `>= 25`, so it prints through 26 (id 25 triggers the condition but the print already happened, and 26 was the next buffered item only if drained — in practice the loop stops right after the first id that meets the threshold). The key insight is in `_fetch_next_page`: the iterator pulled exactly three pages of data, not the entire backing collection, because pages are fetched lazily inside `__next__` only when the buffer empties. In a real client this is the difference between one cheap HTTP call and accidentally paging through a million rows. The iterator never raised `StopIteration` here because the consumer `break`-ed first.
 
 # -- itertools: composable iteration --
 import itertools
@@ -699,6 +751,17 @@ user = User(
 )
 print(user.model_dump())
 
+`model_dump()` returns the validated, coerced data as a plain dict (the `created_at` timestamp reflects when the object was built):
+
+```text
+{'id': 123, 'name': 'Alice', 'email': 'alice@example.com', 'age': 30,
+ 'address': {'street': '123 Main St', 'city': 'NYC', 'country': 'US'},
+ 'created_at': datetime.datetime(2026, 6, 4, 10, 15, 30, 123456),
+ 'tags': []}
+```
+
+**How to read this output:** Notice the values that changed during validation: `id` came in as the string `"123"` and is now the int `123`; `email` was upper-cased input but is stored lower-cased because `validate_email` ran and returned `v.lower()`; `country` was filled in with the `"US"` default the nested `Address` model declared; `created_at` was populated by `default_factory`; and `tags` defaulted to an empty list. This coercion-and-defaulting is exactly why Pydantic is the standard for API boundaries — request JSON arrives as strings and partial objects, and the model is the single place that turns it into clean, typed Python while rejecting anything invalid.
+
 # Invalid data -- raises ValidationError with details
 from pydantic import ValidationError
 try:
@@ -754,6 +817,22 @@ with ThreadPoolExecutor(max_workers=5) as executor:
             print(f"Completed: {url} ({size} bytes)")
         except Exception as e:
             print(f"Failed: {url} ({e})")
+
+The two retrieval strategies print the same data in different orders:
+
+```text
+# executor.map (ordered, matches input order):
+https://example.com: 1256 bytes
+https://httpbin.org/get: 312 bytes
+https://jsonplaceholder.typicode.com/posts/1: 292 bytes
+
+# as_completed (completion order -- fastest response first):
+Completed: https://httpbin.org/get (312 bytes)
+Completed: https://jsonplaceholder.typicode.com/posts/1 (292 bytes)
+Completed: https://example.com (1256 bytes)
+```
+
+**How to read this output:** `executor.map` yields results in the order the URLs were submitted, even if a later URL finishes first — convenient, but you wait on the slowest request before consuming the next result. `as_completed` yields each future the instant it finishes, so the ordering reflects real network latency and varies run to run. The byte counts depend on live responses, so exact numbers differ. In production, prefer `as_completed` when you want to start processing the first available response immediately (e.g. streaming results to a user) and `map` when downstream code needs results aligned with the input list. Because these are I/O-bound HTTP calls, threads (not processes) are the right tool — the GIL is released while waiting on the socket.
 
 # -- ProcessPoolExecutor: CPU-bound tasks --
 def compute_heavy(n):
@@ -898,6 +977,11 @@ for t in threads:
 for t in threads:
     t.join()
 # Each thread sees its own value, not other threads' values
+
+# 3 threads run with their own value; line order may vary, but the mapping never crosses:
+#   Thread Thread-1: local_data.name = Worker-0
+#   Thread Thread-2: local_data.name = Worker-1
+#   Thread Thread-3: local_data.name = Worker-2
 
 # -- Condition: wait for a condition to be met --
 class BoundedBuffer:

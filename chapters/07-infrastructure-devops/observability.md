@@ -272,6 +272,31 @@ Prometheus supports four metric types:
 
 **Summary:** Similar to histogram but computes quantiles client-side. Less flexible for aggregation across instances. Generally, prefer histograms.
 
+Each service exposes these metrics over the `/metrics` endpoint in Prometheus's text-based exposition format. Hitting it with `curl localhost:8000/metrics` returns something like:
+
+```text
+# HELP http_requests_total Total HTTP requests.
+# TYPE http_requests_total counter
+http_requests_total{method="POST",path="/api/v1/orders",status_code="201"} 1482
+http_requests_total{method="GET",path="/api/v1/orders",status_code="200"} 90413
+http_requests_total{method="POST",path="/api/v1/orders",status_code="500"} 37
+# HELP http_request_duration_seconds Request latency in seconds.
+# TYPE http_request_duration_seconds histogram
+http_request_duration_seconds_bucket{path="/api/v1/orders",le="0.1"} 88201
+http_request_duration_seconds_bucket{path="/api/v1/orders",le="0.5"} 91802
+http_request_duration_seconds_bucket{path="/api/v1/orders",le="1.0"} 91930
+http_request_duration_seconds_bucket{path="/api/v1/orders",le="+Inf"} 91932
+http_request_duration_seconds_sum{path="/api/v1/orders"} 7184.3
+http_request_duration_seconds_count{path="/api/v1/orders"} 91932
+# HELP db_pool_active_connections Active DB connections.
+# TYPE db_pool_active_connections gauge
+db_pool_active_connections 14
+```
+
+**How to read this output:** Each `# HELP`/`# TYPE` pair documents a metric so Prometheus knows how to treat it. The label sets in `{...}` create separate time series — `http_requests_total` is split per method, path, and status so you can compute per-endpoint error rates later. The histogram is the subtle one: each `_bucket{le="..."}` is a *cumulative* counter of observations at or below that boundary (`le` = "less than or equal"), plus a `_sum` and `_count`. Prometheus stores only these raw counters; the P95/P99 percentiles are reconstructed at query time with `histogram_quantile()`. This is why a single scrape is just an instantaneous snapshot of counters — the interesting signal comes from `rate()` over time, not the absolute numbers.
+
+> **Common pitfall:** Every distinct label value creates a new time series. Putting high-cardinality values (user IDs, request IDs, raw URLs with query strings) into labels causes a "cardinality explosion" that can OOM Prometheus. Keep labels bounded — normalize `/orders/12345` to a templated `/orders/{id}` before it becomes a label.
+
 ```yaml
 # prometheus/prometheus.yml
 global:
@@ -448,6 +473,16 @@ sum(rate(http_request_duration_seconds_count[5m]))
 # P99 latency per endpoint
 histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, path))
 ```
+
+Run in Grafana's Explore view (or `curl` against Prometheus's `/api/v1/query`), the per-endpoint P99 query returns one value per series, something like:
+
+```text
+{path="/api/v1/orders"}    0.412
+{path="/api/v1/search"}    1.870
+{path="/api/v1/health"}    0.003
+```
+
+**How to read this output:** Values are in seconds, so `/api/v1/search` has a P99 of ~1.87s — one in a hundred search requests takes that long, even though the median is likely far lower. This is exactly the tail that an average would hide, and it is the number you compare against your SLO. In an interview, the key point is that `histogram_quantile` interpolates *within* the bucket that crosses the target quantile, so your percentile is only as precise as your bucket boundaries: if your largest finite bucket is `le="1.0"` but real latency reaches 5s, everything piles into `+Inf` and P99 is reported as effectively unbounded. Choose buckets that bracket your expected latency range.
 
 **Resource Utilization:**
 ```promql

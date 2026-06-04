@@ -116,6 +116,8 @@ RISKS:
   to use JSONB vs. relational columns.
 ```
 
+> **Common pitfall:** The matrix is easy to weaponize. If you pick the winner first and then tune the weights and scores until the math agrees, you have built a rationalization, not an analysis -- and reviewers will smell it. Set the weights from your requirements *before* you score the options, ideally with a stakeholder who was not in the room when you formed your opinion. A matrix where every criterion conveniently favors your preferred choice is a red flag, not a result.
+
 > **Key Takeaway:** A trade-off matrix does not make the decision for you -- it structures your thinking and makes it auditable. The weights reveal your priorities. The scores reveal your assumptions. Both can be challenged, discussed, and refined. The goal is not mathematical precision but transparent, systematic reasoning.
 
 ---
@@ -232,6 +234,8 @@ Fan-out QPS: 100B / 100K = 1,000,000 writes/second (!)
 
 This is a huge number. This is why Twitter uses a hybrid approach: fan-out on write for normal users (< 10K followers) and fan-out on read for celebrity accounts (millions of followers). A celebrity tweet would generate billions of fan-out writes -- it is cheaper to merge celebrity tweets into the timeline at read time.
 
+> **Common pitfall:** The average of 200 followers hides the real cost. Fan-out writes are dominated by the tail of the distribution, not the average -- a single account with 100 million followers generates as many writes as 500,000 ordinary users tweeting once. Estimating with the mean alone makes fan-out-on-write look affordable; the celebrity tail is exactly what breaks it. Always ask "what does the worst case look like?" not just "what does the average look like?"
+
 **Step 7: Estimate bandwidth**
 
 ```
@@ -343,6 +347,8 @@ Compensate on-call fairly. Engineers who carry pagers outside business hours are
 |       |                   | significant user impact.       | No formal updates|
 +-------+-------------------+-------------------------------+------------------+
 ```
+
+> **Common pitfall:** Severity inflation and severity timidity are both dangerous. Teams that page everyone at SEV1 for minor degradations train responders to ignore the pager (alert fatigue), while teams that under-declare to avoid scrutiny rob themselves of the response resources and postmortem rigor a real outage demands. Define severity by concrete, measurable user impact -- not by who is watching or how stressful the incident feels in the moment.
 
 #### Blameless Postmortem
 

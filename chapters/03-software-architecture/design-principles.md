@@ -314,7 +314,20 @@ class TeamLead:
 def assign_coding_task(coder: Coder) -> None:
     """Accepts anything that can code -- does not care about other abilities."""
     coder.write_code()
+
+
+assign_coding_task(Developer())
+assign_coding_task(TeamLead())
 ```
+
+Running the two calls at the bottom prints:
+
+```text
+Writing code
+Writing code
+```
+
+**What's happening:** Both `Developer` and `TeamLead` satisfy the `Coder` protocol because each has a `write_code()` method -- and crucially, neither inherits from `Coder`. With `typing.Protocol`, conformance is *structural* (duck typing checked by the type checker), so `assign_coding_task` accepts any object shaped like a `Coder` without a declared base class. In production this is why you can pass a real adapter in deployment and a hand-rolled fake in tests through the same function signature, with `mypy` still catching a missing `write_code` at lint time rather than at 3 a.m. The `Manager`/`Accountant` capabilities a `TeamLead` may or may not have are simply irrelevant to this call site -- which is the entire point of segregating interfaces.
 
 In a Django project, ISP shows up when you define serializers. Rather than one giant serializer with every field, create purpose-specific serializers: `UserListSerializer` (few fields), `UserDetailSerializer` (more fields), `UserAdminSerializer` (all fields).
 
@@ -394,8 +407,21 @@ class FakeOrderRepository(OrderRepository):
     def save(self, order_data: dict) -> None:
         self.saved_orders.append(order_data)
 
-service = OrderService(FakeOrderRepository())
+fake = FakeOrderRepository()
+service = OrderService(fake)
+service.place_order({"product": "Widget", "qty": 3})
+print(fake.saved_orders)
 ```
+
+The test path runs with no database at all and prints:
+
+```text
+[{'product': 'Widget', 'qty': 3}]
+```
+
+**How to read this output:** `OrderService.place_order` ran its business validation and called `repository.save`, but because we injected `FakeOrderRepository`, "saving" just appended to an in-memory list -- no SQLite file, no connection, no SQL. Asserting on `fake.saved_orders` lets a unit test verify *what* the service tried to persist without spinning up a database, which is the concrete payoff of DIP: tests run in milliseconds and stay deterministic. The exact same `OrderService` instead receives `SqliteOrderRepository()` in production, so the business logic is written and tested once and the storage backend becomes a swappable detail.
+
+> **Common pitfall:** Injecting a fake is only sound if the fake honors the same contract as the real adapter. If `SqliteOrderRepository.save` enforces a NOT NULL column or a uniqueness constraint that `FakeOrderRepository` silently ignores, your tests pass while production rejects the write. Keep fakes faithful, and back them with a small set of integration tests against the real adapter.
 
 In a Django project, DIP is applied by injecting service dependencies. Instead of importing `MyModel.objects.filter(...)` directly inside a view, pass a repository or service object. This is especially valuable when you need to test views without hitting the database or when you want to swap backends.
 
@@ -475,7 +501,16 @@ class AppConfig:
     secret_key: str = "change-me"
 
 config = AppConfig(debug=True)
+print(config)
 ```
+
+The `@dataclass` decorator gives you a readable `__repr__` for free, so printing the instance shows:
+
+```text
+AppConfig(debug=True, database_url='sqlite:///db.sqlite3', secret_key='change-me')
+```
+
+**What's happening:** One `@dataclass` line generated `__init__`, `__repr__`, and `__eq__`, and the defaults filled in every field the caller did not override. That is the whole KISS argument in miniature: the metaclass version on the left builds a registry and custom `__new__` that a reviewer must reverse-engineer, while the dataclass produces an object whose structure is obvious at a glance and trivial to debug. Reach for the metaclass only when you genuinely need that registry behavior -- in interviews, "I'd start with a dataclass and add a metaclass only if requirements forced it" signals good judgment about complexity.
 
 ---
 
@@ -606,6 +641,8 @@ class Address:
 def get_shipping_label(order: Order) -> str:
     return f"Ship to: {order.shipping_label()}"
 ```
+
+> **Common pitfall:** The Law of Demeter is about *behavior*, not about counting dots. Fluent builders (`query.filter(...).order_by(...).limit(10)`) and Django's chained QuerySets are long dot-chains that do *not* violate it, because each call returns the same kind of object rather than exposing a different object's internals. The smell is reaching *through* foreign objects (`a.b.c.d`), not chaining methods on one. Applied too literally, the law spawns an explosion of pass-through "wrapper" methods that add indirection without decoupling anything.
 
 ---
 

@@ -313,6 +313,17 @@ old_product = product.history.as_of(datetime(2025, 1, 1))
 print(old_product.price)  # Price as of Jan 1, 2025
 ```
 
+For a product that was created and then re-priced twice, the history loop prints something like (newest first, since `history.all()` orders by `-history_date`):
+
+```text
+2025-05-20 14:03:11+00:00: ~ by carol@example.com
+2025-03-02 09:47:55+00:00: ~ by bob@example.com
+2025-01-01 08:00:00+00:00: + by alice@example.com
+19.99
+```
+
+**How to read this output:** each historical record is a full snapshot of the row at that moment, not a diff -- `simple-history` writes a new row to `historicalproduct` on every save, tagged with `history_type` (`+` create, `~` update, `-` delete) and `history_user`. The two `~` rows are the price changes; the `+` row is the original create. The final `19.99` is what `as_of(Jan 1)` returned: it walked back through history to the version that was live on that date, which is the production-grade way to answer "what price did this customer actually see at checkout?" during a billing dispute. The cost to be aware of: this doubles your write volume and grows the history table unboundedly, so a retention/archival policy is required for hot tables.
+
 #### Multi-Tenancy
 
 Multi-tenancy is the pattern of serving multiple customers (tenants) from a single application deployment. There are three common strategies, each with different trade-offs:
@@ -385,7 +396,21 @@ WHERE aggregate_type = 'Order' AND aggregate_id = 'a1b2c3'
 ORDER BY version;
 ```
 
-Benefits of event sourcing include a complete audit trail, the ability to reconstruct state at any point in time, and decoupled systems (other services can subscribe to events). The costs are significant complexity (every read requires replaying or maintaining a projection), eventual consistency between the event store and read models, and increased storage usage. Use snapshots to avoid replaying thousands of events:
+The replay query returns the events in the exact order they happened:
+
+```text
+ event_type  |                  event_data                  |          created_at
+-------------+----------------------------------------------+-------------------------------
+ OrderCreated| {"customer_id": 42}                          | 2025-06-04 10:15:02.331+00
+ ItemAdded   | {"price": 999.99, "product": "Laptop"}       | 2025-06-04 10:15:04.882+00
+ ItemAdded   | {"price": 29.99, "product": "Mouse"}         | 2025-06-04 10:16:11.204+00
+ OrderShipped| {"tracking": "1Z999AA10123456784"}           | 2025-06-04 10:42:55.017+00
+(4 rows)
+```
+
+**How to read this output:** the rows ARE the order's history -- there is no `orders` table holding a current row, only this append-only log. To get the order's current state you fold these events left-to-right: create the order, add a laptop, add a mouse, mark it shipped. Note `ORDER BY version` (not `created_at`) is what guarantees correctness -- wall-clock timestamps can tie or skew under concurrency, but the monotonic `version` (backed by the unique index on `(aggregate_type, aggregate_id, version)`) gives a deterministic replay order. This is exactly why event sourcing shines in audit-heavy domains (finance, healthcare): you can answer "what did this order look like at 10:20?" by replaying only events up to that point, something a mutable `orders` row throws away on every UPDATE.
+
+> **Common pitfall:** rebuilding state by replaying the full log on every read does not scale -- an aggregate with 50,000 events becomes unusably slow. That is the entire reason for the snapshot table below: periodically persist the folded state at a known version, then replay only the events newer than the snapshot. include a complete audit trail, the ability to reconstruct state at any point in time, and decoupled systems (other services can subscribe to events). The costs are significant complexity (every read requires replaying or maintaining a projection), eventual consistency between the event store and read models, and increased storage usage. Use snapshots to avoid replaying thousands of events:
 
 ```sql
 -- Snapshot table for performance
@@ -439,6 +464,17 @@ df = df.drop(columns=['email'])  # Remove PII
 warehouse_engine = create_engine('postgresql://user:pass@warehouse-db/analytics')
 df.to_sql('dim_users', warehouse_engine, if_exists='append', index=False, method='multi')
 ```
+
+After the TRANSFORM step, inspecting `df.head()` shows the reshaped frame that gets loaded (PII column dropped, derived columns added):
+
+```text
+   id           created_at           last_login_at  order_count email_domain  days_since_login user_segment
+0   1  2025-01-03 09:12:00     2025-05-30 11:02:00            3    gmail.com                  5      casual
+1   2  2025-01-07 14:55:00     2025-02-01 08:30:00           41  outlook.com                123       power
+2   3  2025-01-09 22:01:00                     NaT            0  company.com                NaN         new
+```
+
+**How to read this output:** the `email` column is gone (intentionally dropped for PII compliance before anything touches the warehouse), replaced by the non-identifying `email_domain`. `user_segment` comes from `pd.cut`, which buckets `order_count` into labeled bins -- 41 orders lands in `power`, 0 lands in `new`. Watch the row with no `last_login_at`: pandas propagates the missing value as `NaT`, and the arithmetic yields `NaN` for `days_since_login` rather than raising. That silent null is the classic ETL trap -- it loads cleanly but skews every downstream "average days since login" metric, which is exactly the kind of defect the Great Expectations checks later in this section are meant to catch before the data reaches a dashboard.
 
 #### Orchestration with Apache Airflow
 
@@ -560,6 +596,33 @@ results = validator.validate()
 if not results.success:
     raise DataQualityError(f"Validation failed: {results}")
 ```
+
+When one expectation fails -- say a handful of `user_id` values are null -- `results` summarizes which checks passed and which did not:
+
+```text
+{
+  "success": false,
+  "statistics": {
+    "evaluated_expectations": 5,
+    "successful_expectations": 4,
+    "unsuccessful_expectations": 1,
+    "success_percent": 80.0
+  },
+  "results": [
+    {
+      "expectation_config": {"expectation_type": "expect_column_values_to_not_be_null",
+                             "kwargs": {"column": "user_id"}},
+      "success": false,
+      "result": {"element_count": 12450, "unexpected_count": 18,
+                 "unexpected_percent": 0.1445, "partial_unexpected_list": [null, null, null]}
+    }
+  ]
+}
+```
+
+**How to read this output:** `success: false` at the top is the single boolean the pipeline branches on -- here it flips the `if` and raises `DataQualityError`, which in an Airflow DAG fails the task and stops bad data from propagating downstream. The detail block tells you *why*: 18 of 12,450 rows (0.14%) had a null `user_id` despite the not-null expectation. That `unexpected_percent` is what you alert on -- a row count that's slightly off may be tolerable, but a primary-key column going null almost always means a broken upstream join. The other four expectations passed, so the failure is narrowly scoped, which is the whole point of declaring expectations per-column rather than one monolithic check: you learn exactly which assumption the data violated.
+
+> **Common pitfall:** Treating any failed expectation as a hard stop. Some checks (an unusual row count, a slightly stale timestamp) warrant a warning, not a pipeline halt -- wiring every expectation to `raise` causes alert fatigue and tempts on-call engineers to disable validation entirely. Separate blocking expectations (null primary keys, broken foreign keys) from advisory ones.
 
 Data quality dimensions to monitor include:
 - **Completeness**: Are required fields populated? What percentage of rows have null values?

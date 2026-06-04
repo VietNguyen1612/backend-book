@@ -42,6 +42,10 @@ SCALE:
   1 billion requests/day .............  ~12,000 requests/second
 ```
 
+The two latency numbers worth internalizing above all others: an SSD read (~150 us) is roughly **1,000x faster** than an HDD read (~10 ms), and a same-datacenter round-trip (~0.5 ms) is roughly **300x faster** than a cross-ocean one (~150 ms). In an interview these ratios are what let you say "this should be served from a replica in-region, not over a trans-Atlantic call" without reaching for exact figures.
+
+> **Common pitfall:** Mixing up the unit prefixes is the single most common way these estimates go wrong. 1 us = 1,000 ns, 1 ms = 1,000 us = 1,000,000 ns, and 1 GB/s = 1,000 MB/s. A misplaced factor of 1,000 turns "fits on one box" into "needs a cluster," so write the units next to every number and check that the powers of ten line up before you trust the verdict.
+
 ### Walkthrough Example 1: URL Shortener Scale Estimation
 
 **Problem**: Design a URL shortener that handles 100 million new URLs per month and a 100:1 read-to-write ratio. Estimate the storage, bandwidth, and caching requirements.
@@ -96,6 +100,10 @@ BANDWIDTH:
   Verdict: Bandwidth is not a bottleneck for this system.
 ```
 
+Notice the shape of the answer: writes are trivial (40/sec, 10 KB/s), storage is comfortable on one box (1.5 TB), and the entire system is dominated by the **4,000 reads/sec**. That is the number that drives the architecture toward read replicas plus a cache, and the 80/20 estimate shows a 1.75 GB Redis instance can absorb ~80% of it. In an interview, calling out "this is a read-heavy system" before computing anything earns more credit than the arithmetic itself.
+
+> **Key Takeaway:** Let the read-to-write ratio decide the architecture. A 100:1 ratio means the cache and read replicas are the design, not an afterthought -- size them first, then confirm the write path and storage are the easy parts.
+
 ### Walkthrough Example 2: Chat System Scale Estimation
 
 **Problem**: Design a chat system for 10 million daily active users (DAU). Each user sends an average of 40 messages per day. Estimate the storage, connection, and message throughput requirements.
@@ -147,6 +155,12 @@ PRESENCE (Redis):
   Verdict: ~210 MB total. Trivial for Redis.
 ```
 
+The decisive number here is storage: 220 TB over five years is what rules out a single relational instance and forces a horizontally partitioned store. Equally important is the **3x peak multiplier** on throughput (~14,000 msg/sec) and the stateful WebSocket fan-out -- 3 million long-lived connections is a capacity-planning problem (60 servers, connection draining on deploy) that a stateless HTTP service never has.
+
+> **Common pitfall:** Sizing for the daily average instead of the peak. Traffic is bursty -- a chat system spikes at evenings, an e-commerce system spikes during flash sales -- and a system provisioned for the 4,600/sec average will fall over at the 14,000/sec peak. Always carry a peak factor (this book uses 3x for chat, 5x for flash sales) through the throughput and worker-count math, and state the multiplier as an explicit assumption.
+
+> **Key Takeaway:** For a stateful, high-volume system, storage growth over the retention window and peak concurrent connections are the two numbers that pick your database and your server count. Compute both before anything else.
+
 ### Walkthrough Example 3: Notification System Scale Estimation
 
 **Problem**: A notification system for an e-commerce platform with 50 million registered users. On average, each user receives 3 notifications per day. Estimate throughput and worker capacity.
@@ -187,5 +201,9 @@ STORAGE (notification log, 1 year):
   Verdict: Manageable with a partitioned database. Partition by
   user_id for efficient "show my notifications" queries.
 ```
+
+The interesting result is how cheap the workers are: even at a 5x flash-sale peak, email needs ~66 threads (~7 servers) and push needs a single worker. That asymmetry comes straight from the per-channel cost -- a serial SendGrid call at 50 ms versus an FCM batch of 500 tokens in 100 ms is a 100x difference in per-worker throughput. The lesson for real systems: **batching is the lever**, and you should reach for the provider's batch API before scaling out worker count.
+
+> **Key Takeaway:** Throughput per worker is dominated by per-item latency and batch size, not by raw request volume. When a queue backs up, first ask whether the downstream call can be batched -- it is usually cheaper than adding servers.
 
 > **Key Takeaway**: Back-of-envelope calculations are not about getting exact numbers. They are about getting the right order of magnitude. The difference between 100 requests/second and 100,000 requests/second determines whether you need a single server or a distributed cluster. Always start with the daily active users, derive the operations per second, estimate storage per record, multiply out over your retention period, and then determine how many servers/instances each component needs. Present your assumptions clearly -- they matter more than the final numbers.

@@ -98,6 +98,17 @@ with multiprocessing.Pool(processes=4) as pool:
     results = pool.map(cpu_intensive, [10_000_000] * 4)
 ```
 
+Running this prints something like (the threaded section stays near 1 second regardless of how many URLs you add, as long as the work is I/O-bound):
+
+```text
+Sequential: 3.0s
+Threaded: 1.0s
+```
+
+**How to read this output:** The sequential loop pays the 1-second sleep three times in a row (3.0s). The threaded version starts all three sleeps at once and they overlap, so the wall-clock time collapses to roughly the single longest sleep (1.0s). This works *despite* the GIL because `time.sleep` (like real socket/disk waits) releases the GIL while blocked — the interpreter is free to run another thread. This is exactly why threading still helps a Django view that makes several blocking HTTP or database calls: the requests wait in parallel. The `multiprocessing` block prints nothing, but it is the one place real CPU work runs on multiple cores at once, because each process has its own GIL.
+
+> **Common pitfall:** Reaching for `threading` to speed up CPU-bound Python (image resizing, parsing, math). The GIL serializes bytecode execution, so threaded CPU work runs no faster — and sometimes slower due to lock contention — than a single thread. Use `multiprocessing` or a native extension that releases the GIL.
+
 #### Coroutines
 
 **Coroutines** are user-space cooperative multitasking. Unlike threads, coroutines are not preempted by the OS — they explicitly yield control. This eliminates context-switch overhead (~100ns vs ~1-10us for threads) and avoids most synchronization issues.
@@ -123,6 +134,20 @@ async def main():
 
 asyncio.run(main())
 ```
+
+Running this prints (the three fetches all start before any of them complete):
+
+```text
+  Starting fetch: api/users
+  Starting fetch: api/products
+  Starting fetch: api/orders
+  Completed fetch: api/products
+  Completed fetch: api/orders
+  Completed fetch: api/users
+All results: ['data from api/users', 'data from api/products', 'data from api/orders']
+```
+
+**How to read this output:** All three "Starting" lines print first because `asyncio.gather` schedules every coroutine before the event loop blocks on any of them. The "Completed" lines then arrive in *delay order* (0.5s products, 0.8s orders, 1.0s users) — not submission order — proving the waits overlapped on a single thread. Yet `results` preserves submission order, because `gather` returns values positionally regardless of finish order. This single-threaded concurrency is what lets one FastAPI/ASGI worker juggle thousands of in-flight requests without the per-thread stack cost.
 
 #### Process States
 
@@ -334,6 +359,16 @@ with open("/var/log/syslog", "r+b") as f:
     mm.close()
 ```
 
+If the log contains the word `error`, this prints something like (the offset and line text depend on your file's contents):
+
+```text
+Found at offset 48213: b'Jun  4 09:12:01 host app[1234]: error: connection refused\n'
+```
+
+**How to read this output:** `mm.find` scans the file's bytes as if they were one giant in-memory buffer, but the OS only faults in the 4KB pages it actually touches during the scan — so you can search a multi-gigabyte log without the RSS of your process ballooning to the file size. The returned offset is a byte position into the file, and `readline()` reads from there to the next newline. In production this is how tools grep huge files cheaply; the trade-off is that random access across a file larger than RAM still costs page faults (disk reads), so it shines for scanning, not for repeated random lookups.
+
+> **Common pitfall:** Opening the file in text mode (`"r"`) instead of binary (`"r+b"`). `mmap` operates on bytes, so your search needles must be `bytes` literals (`b"error"`, not `"error"`) and the file must be opened in binary mode, or you will get a type error.
+
 **Real-world use:** Database page caches (SQLite, MongoDB), shared memory IPC, large file processing without loading into RAM, efficient log scanning.
 
 #### OOM Killer and Memory Monitoring
@@ -353,6 +388,17 @@ cat /proc/$(pidof python3)/status | grep -E 'VmRSS|VmSize|VmPeak'
 # Per-container memory limits (Docker)
 # docker run --memory=512m --memory-swap=512m myapp
 ```
+
+The `grep` on `/proc/.../status` prints something like (values are in kB):
+
+```console
+$ cat /proc/$(pidof python3)/status | grep -E 'VmRSS|VmSize|VmPeak'
+VmPeak:    412880 kB
+VmSize:    398220 kB
+VmRSS:     156432 kB
+```
+
+**How to read this output:** `VmRSS` (~156 MB here) is the physical RAM actually resident — this is the number the OOM killer and your container's memory cgroup care about. `VmSize` (~398 MB) is the total virtual address space mapped, which is almost always larger than RSS because it counts shared libraries and lazily-allocated/`mmap`'d regions that aren't resident. `VmPeak` is the high-water mark of `VmSize`. In an interview the key point is: a high VSZ alone is not a leak — watch RSS climbing steadily over time, because that is what triggers OOM kills in a 512 MB container.
 
 > **Key Takeaway:** Memory management is where many production performance issues live. Understanding virtual memory, the TLB, stack vs heap, and Python's GC helps you diagnose memory leaks, reduce GC pauses, and configure memory limits. Use `tracemalloc` in Python to profile memory allocations, and always set memory limits on containers to prevent OOM cascades.
 
@@ -512,6 +558,17 @@ cat /proc/sys/fs/file-max    # e.g., 9223372036854775807
 # For a running process
 ls /proc/$(pidof nginx)/fd | wc -l   # Count open file descriptors
 ```
+
+A typical session looks like:
+
+```console
+$ ulimit -n
+1024
+$ ls /proc/$(pidof nginx)/fd | wc -l
+312
+```
+
+**How to read this output:** The soft limit (1024) is the per-process ceiling on open file descriptors, and every socket, pipe, and open file counts against it. A busy server with 312 descriptors is fine, but a connection leak — sockets never closed — marches that count toward 1024, at which point `accept()`/`open()` start failing with `EMFILE: Too many open files` and the service stops accepting connections while still appearing "up." This is why production deployments raise `LimitNOFILE` (see the systemd unit below) and why "Too many open files" is a classic incident signature pointing at a descriptor leak, not a memory problem.
 
 #### Page Cache
 

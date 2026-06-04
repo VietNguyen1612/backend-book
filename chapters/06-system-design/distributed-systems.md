@@ -109,6 +109,8 @@ Prevention mechanisms include:
 - **ZooKeeper**: Uses ZAB (ZooKeeper Atomic Broadcast). Powers Kafka (older versions), Hadoop, and HBase. Hierarchical namespace (like a filesystem). Being gradually replaced by Raft-based alternatives.
 - **Consul**: Uses Raft. Provides service mesh capabilities alongside key-value storage. Includes health checking and DNS-based service discovery out of the box.
 
+> **Key Takeaway**: Consensus is fundamentally about turning a quorum of fallible machines into a single source of truth. The recurring theme -- in Raft's "majority of votes," in quorum writes, and in split-brain prevention -- is that **a majority can never exist on both sides of a partition**, so at most one side ever makes progress. When you reach for etcd, ZooKeeper, or Consul, you are renting that hard-won guarantee instead of building it yourself; the cardinal sin is putting consensus-critical state behind a system that has no quorum and can silently split-brain.
+
 ### Service Communication Patterns
 
 **Synchronous Communication** (HTTP REST, gRPC) follows the request-response pattern. The caller sends a request and blocks until it receives a response. This is simple to reason about and ideal for user-facing requests that need an immediate response (e.g., "show me my profile"). The downsides are temporal coupling (if the downstream service is down, the caller fails), latency accumulation (each hop adds latency), and cascading failure risk (one slow dependency can exhaust the caller's thread pool, causing it to fail, which cascades to its callers).
@@ -297,6 +299,45 @@ def process_order(order_id: str, customer_id: str, amount: float):
         return {"status": "failed", "error": str(e)}
 ```
 
+The classes and example functions above are pure definitions, so they produce nothing on import. The behavior worth seeing is the state machine *tripping*. Here is a small driver that forces five failures and then one more call, with logging turned on:
+
+```python
+import logging
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
+breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=30.0,
+                         expected_exceptions=(ConnectionError,))
+
+@breaker
+def flaky():
+    raise ConnectionError("dependency down")
+
+for i in range(7):
+    try:
+        flaky()
+    except CircuitBreakerError as e:
+        print(f"call {i}: BLOCKED -- {e}")
+    except ConnectionError:
+        print(f"call {i}: reached dependency, failed")
+```
+
+Running this prints something like:
+
+```text
+call 0: reached dependency, failed
+call 1: reached dependency, failed
+call 2: reached dependency, failed
+call 3: reached dependency, failed
+WARNING Circuit transitioning from CLOSED to OPEN (failures: 5/5)
+call 4: reached dependency, failed
+call 5: BLOCKED -- Circuit is OPEN. Calls blocked for 30.0s.
+call 6: BLOCKED -- Circuit is OPEN. Calls blocked for 30.0s.
+```
+
+**How to read this output:** Calls 0-4 actually reach the (failing) dependency and increment `_failure_count`. The fifth failure hits the threshold, so `_handle_failure` flips the state to OPEN and logs the transition. From that moment, calls 5 and 6 never touch the dependency at all -- `call()` sees `CircuitState.OPEN` and raises `CircuitBreakerError` immediately. That instantaneous rejection is the entire point: instead of 1000 callers each waiting 5 seconds on a `timeout=5.0` that will fail anyway, they fail in microseconds and run their fallback. This is what stops one sick dependency from exhausting every caller's thread pool and cascading the outage upstream -- the exact scenario interviewers probe when they ask "what happens when your payment provider goes down?"
+
+**Common pitfall:** A circuit breaker with no fallback path just converts slow failures into fast failures -- users still see errors. The value comes from pairing OPEN with a degraded response (cached data, "queued for later," a default), as `process_order` does. Also note this breaker counts *consecutive* failures and resets on any success; a high-traffic service usually wants a rolling failure-*rate* window instead, so a steady trickle of errors among mostly-good traffic still trips the circuit.
+
 **Retry with Exponential Backoff + Jitter** prevents overwhelming a recovering service with a flood of retries. The formula is:
 
 ```
@@ -305,7 +346,33 @@ retry_delay = min(base_delay * 2^attempt + random(0, jitter), max_delay)
 
 The exponential backoff spaces out retries (1s, 2s, 4s, 8s, ...) while the random jitter prevents the "thundering herd" problem where many clients retry at exactly the same time. Always set a maximum delay cap and a maximum retry count. Only retry idempotent operations (operations that produce the same result when executed multiple times).
 
+A quick simulation makes the cap and the jitter visible:
+
+```python
+import random
+base_delay, jitter, max_delay = 1.0, 0.5, 10.0
+for attempt in range(7):
+    delay = min(base_delay * 2 ** attempt + random.uniform(0, jitter), max_delay)
+    print(f"attempt {attempt}: {delay:.2f}s")
+```
+
+Running this prints something like (the jitter is random, so the fractional parts differ on every run):
+
+```text
+attempt 0: 1.31s
+attempt 1: 2.07s
+attempt 2: 4.42s
+attempt 3: 8.19s
+attempt 4: 10.00s
+attempt 5: 10.00s
+attempt 6: 10.00s
+```
+
+**How to read this output:** The integer part doubles each attempt (1, 2, 4, 8) while the random fraction added on top means two clients that failed at the same instant will *not* retry at the same instant -- that desynchronization is what breaks the thundering herd. From attempt 4 onward the raw value (16s, 32s, ...) exceeds `max_delay`, so `min()` clamps it to 10s; without that cap a few unlucky retries would back off for minutes and look like a hang. In production this loop also needs a retry *count* limit and should only wrap idempotent calls -- retrying a non-idempotent `POST /charge` after a timeout can double-charge a customer.
+
 **Timeout Budgets** propagate a remaining time budget through a chain of service calls. If an upstream API gateway sets a 5-second timeout for a request, and the first internal service call takes 2 seconds, the next service call should be given at most 3 seconds. This prevents wasted work: there is no point in a downstream service spending 10 seconds computing a result if the upstream caller has already timed out after 5 seconds. Timeout budgets are typically propagated via HTTP headers (e.g., `grpc-timeout` in gRPC).
+
+> **Key Takeaway**: Synchronous calls are simple but couple services in time; asynchronous messaging buys decoupling at the cost of eventual-consistency complexity. Whichever you choose, every remote call needs the resilience trio -- a **timeout** (never wait forever), **bounded retries with jittered backoff** (recover from blips without a thundering herd), and a **circuit breaker** (stop hammering a dependency that is already down). Together they convert slow, cascading failures into fast, contained ones, which is the difference between one degraded service and a full site outage.
 
 ### Observability (Three Pillars)
 

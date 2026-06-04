@@ -72,6 +72,8 @@ With 6 characters of Base62 encoding, you get 62^6 = 56.8 billion unique codes -
 
 **Additional Features**: Custom aliases (let users choose their own short code), link expiration (TTL on the short code), rate limiting (prevent abuse -- limit URL creation per user/IP), and abuse prevention (check submitted URLs against known spam/malware databases like Google Safe Browsing).
 
+> **Key Takeaway:** A URL shortener is deceptively simple but exercises every read-heavy system design muscle: pick a short-code scheme that matches your constraints (Base62-on-counter for compactness, hash for determinism, random for unpredictability), accept the 100:1 read/write ratio by caching the hot 20% in Redis, and push analytics off the redirect path onto an async event stream so a click never waits on a write.
+
 ### Distributed Rate Limiter
 
 Rate limiting controls how many requests a client can make within a time window. It protects services from abuse, ensures fair usage, and prevents cascading failures from traffic spikes.
@@ -323,7 +325,37 @@ def rate_limit_middleware(request):
     return None  # Allow the request to proceed
 ```
 
+To see the behavior, imagine driving `token_bucket_check` in a tight loop against a fresh bucket (`capacity=5, refill_rate=1.0`) and firing 8 requests faster than one per second:
+
+```python
+for i in range(8):
+    allowed = token_bucket_check("user42", capacity=5, refill_rate=1.0)
+    print(f"request {i}: allowed={allowed}")
+```
+
+The output looks something like this (the exact `remaining_tokens` depends on how much wall-clock time elapsed between calls, since tokens refill continuously):
+
+```text
+request 0: allowed=True
+request 1: allowed=True
+request 2: allowed=True
+request 3: allowed=True
+request 4: allowed=True
+RATE LIMITED: user=user42, remaining_tokens=0.0
+request 5: allowed=False
+RATE LIMITED: user=user42, remaining_tokens=0.0
+request 6: allowed=False
+RATE LIMITED: user=user42, remaining_tokens=0.0
+request 7: allowed=False
+```
+
+**How to read this output:** The first five requests drain the bucket's initial `capacity=5` tokens and are allowed. The sixth request finds the bucket empty (`remaining_tokens=0.0`) and is rejected. This is the defining property of token bucket: it permits a *burst* up to `capacity`, then throttles down to the steady `refill_rate`. If you paused for one second after the burst, exactly one token would refill and exactly one more request would succeed. In an interview, this is the answer to "how do you allow occasional bursts but enforce a long-run average?" -- the bucket size sets the burst, the refill rate sets the average.
+
+> **Common pitfall:** The Redis Lua script runs atomically, but `now = time.time()` is computed on the *application* server before the call. If your app servers' clocks drift, two servers can compute different refill amounts for the same bucket, producing slightly inconsistent decisions. Pass a single authoritative timestamp (or use Redis's own `TIME` command inside the script) when clock skew matters.
+
 **Multi-Tier Rate Limiting** combines a fast local (in-memory) rate limiter on each application server with a globally accurate Redis-based limiter. The local limiter handles the common case (clearly under or over the limit) without any network call. Only borderline cases consult Redis. This reduces Redis load significantly under high traffic.
+
+> **Key Takeaway:** The three algorithms trade memory for accuracy: fixed window is cheapest (one counter) but allows 2x bursts at window boundaries; sliding window log is exact but stores every timestamp; token bucket sits in between and is the usual default because it cleanly separates burst size from sustained rate. Whichever you pick, make the increment-and-check atomic (a Redis Lua script or pipeline) so concurrent requests across servers cannot both slip through on the same remaining slot.
 
 ### Chat System
 
@@ -404,6 +436,8 @@ PRESENCE TRACKING:
 - **Typing Indicators**: Ephemeral events that are broadcast to other participants in a conversation but never persisted to the database. They flow through the WebSocket/message routing layer just like messages but are discarded after delivery.
 
 **Scaling**: Conversations are partitioned across WebSocket servers. When Alice on Server 1 sends a message to Bob on Server 3, the message is routed through the internal message bus (Kafka or gRPC between servers). The Redis `user_connections` hash enables this routing. Adding more WebSocket servers is straightforward because the routing layer handles cross-server delivery.
+
+> **Key Takeaway:** Real-time chat is a routing problem on top of a storage problem. The hard part is that connections are stateful and pinned to one server, so you keep a `user_id -> server_id` map in Redis and forward across servers via an internal bus -- this decoupling is what lets you scale WebSocket servers horizontally. Persist durable messages, cache the recent tail per conversation, and let ephemeral signals (typing, presence) live only in Redis with a TTL so they self-clean and never bloat your database.
 
 ### Notification System
 

@@ -326,6 +326,31 @@ jobs:
 ```
 {% endraw %}
 
+The post-deployment health check loop at the end is the kind of step whose output you read during an incident. A successful production deploy prints something like this in the Actions log:
+
+```console
+$ kubectl rollout status deployment/myapp -n production --timeout=300s
+Waiting for deployment "myapp" rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deployment "myapp" rollout to finish: 1 old replicas are pending termination...
+deployment "myapp" successfully rolled out
+
+$ sleep 30 && for i in $(seq 1 5); do curl -sf https://api.example.com/health; ...
+{"status":"ok"}
+Health check 1 passed
+{"status":"ok"}
+Health check 2 passed
+{"status":"ok"}
+Health check 3 passed
+{"status":"ok"}
+Health check 4 passed
+{"status":"ok"}
+Health check 5 passed
+```
+
+**How to read this output:** `kubectl rollout status` blocks until every new replica is `Ready` (or the `--timeout` fires), so the job only proceeds once the new pods are actually serving — this is what turns a deploy step into a real gate rather than a fire-and-forget. The `curl -sf` flags matter: `-s` silences the progress meter and `-f` makes curl return a non-zero exit code on any HTTP 4xx/5xx, so a failing health check fails the shell loop and therefore the pipeline. If pod #2 had crash-looped, you would instead see `error: deployment "myapp" exceeded its progress deadline` and the job would go red before any traffic shifted — in an interview, this is the difference between "we deploy and hope" and "the pipeline refuses to mark a deploy successful unless the new version is healthy."
+
+> **Common pitfall:** A passing `/health` endpoint that only checks "the process is up" gives false confidence. If health is shallow (no DB/Redis/downstream check), `rollout status` and these curls can all go green while the app is failing real requests. Make at least one readiness/health check exercise the critical dependencies.
+
 > **Key Takeaway:** A CI/CD pipeline is your automated quality gate. Every commit passes through lint, type check, test, security scan, build, and deploy stages. Use parallelism and caching to keep pipelines fast. Use environments with manual approvals for production deployments. Never store secrets in code; use the CI system's secret management and prefer OIDC federation over long-lived credentials.
 
 ---
@@ -372,6 +397,8 @@ Database schema changes must be coordinated with application deployments because
 3. **Contract:** Once all code uses the new schema, remove the old column/table in a subsequent deployment.
 
 This multi-phase approach avoids downtime but requires careful planning and typically spans multiple deployment cycles.
+
+> **Key Takeaway:** Deployment strategy is about controlling blast radius and rollback speed. Blue-green gives instant, atomic rollback at the cost of double infrastructure; canary limits exposure to a small percentage while you watch metrics; rolling update is the cheap default but forces both versions to coexist. Feature flags go further by decoupling deploy from release, giving you a kill switch independent of code. Whatever you choose, schema changes are the hard part: because old and new code run simultaneously during the transition, migrations must be backwards-compatible — additive-only by default, expand-contract for anything that breaks.
 
 ---
 
@@ -605,6 +632,43 @@ output "rds_endpoint" {
   sensitive = true
 }
 ```
+
+Running `terraform plan` against this configuration (after `terraform init`) produces a diff of what Terraform intends to do. On a fresh environment with nothing yet created, the tail of the output looks something like this (resource counts and addresses vary with your modules):
+
+```console
+$ terraform plan
+Terraform used the selected providers to generate the following execution plan.
+Resource actions are indicated with the following symbols:
+  + create
+
+Terraform will perform the following actions:
+
+  # aws_ecr_repository.app will be created
+  + resource "aws_ecr_repository" "app" {
+      + arn                  = (known after apply)
+      + image_tag_mutability = "IMMUTABLE"
+      + name                 = "myapp"
+      + repository_url       = (known after apply)
+      ...
+    }
+
+  # module.vpc.aws_vpc.this[0] will be created
+  + resource "aws_vpc" "this" {
+      + cidr_block = "10.0.0.0/16"
+      ...
+    }
+
+Plan: 78 to add, 0 to change, 0 to destroy.
+
+Changes to Outputs:
+  + ecr_repository_url    = (known after apply)
+  + eks_cluster_endpoint  = (known after apply)
+  + eks_cluster_name      = "myapp-production"
+```
+
+**How to read this output:** Each line is prefixed by an action symbol — `+` create, `~` change in place, `-` destroy, and `-/+` destroy-and-recreate (the dangerous one). `(known after apply)` means the value depends on something AWS assigns at creation time, so Terraform can't show it yet. The summary line `Plan: 78 to add, 0 to change, 0 to destroy` is the number you actually scrutinize in code review: on a routine change you expect a small, additive plan, so a PR that suddenly shows `0 to change, 14 to destroy` is a red flag that someone removed or renamed a resource. This is exactly why `terraform plan` doubles as drift detection — run it on a schedule against unchanged code and a non-empty plan means reality has diverged from the declared state. Because nothing is applied here, `plan` is safe to run on every PR.
+
+> **Common pitfall:** A `-/+ destroy and then create` on a stateful resource (like the RDS instance or its `db_subnet_group`) can mean Terraform plans to delete your production database to satisfy a config change. Always read the plan, not just the exit code — and protect critical resources with `deletion_protection`, `prevent_destroy` lifecycle blocks, or `ignore_changes` so a careless apply can't wipe data.
 
 #### Pulumi
 

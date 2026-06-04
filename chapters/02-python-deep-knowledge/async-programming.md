@@ -47,6 +47,29 @@ async def good_example():
     await asyncio.sleep(5)  # Non-blocking: event loop runs other tasks
 ```
 
+Running this prints something like (timestamps reflect wall-clock time, so they advance as the program runs):
+
+```text
+[14:02:01] A: starting fetch
+[14:02:02] A: done
+[14:02:02] B: starting fetch
+[14:02:04] B: done
+[14:02:04] C: starting fetch
+[14:02:07] C: done
+Sequential: 6.0s
+[14:02:07] A: starting fetch
+[14:02:07] B: starting fetch
+[14:02:07] C: starting fetch
+[14:02:08] A: done
+[14:02:09] B: done
+[14:02:10] C: done
+Concurrent: 3.0s
+```
+
+**How to read this output:** In the sequential block each `await fetch_data(...)` runs to completion before the next starts, so the timestamps step forward one fetch at a time and the wall-clock total is 1+2+3 = 6s. In the concurrent block all three "starting fetch" lines print at the *same* second because `gather` schedules them together; they then finish in delay order, and the total collapses to `max(1,2,3) = 3s`. This is the entire value proposition of async I/O: the 6s of "work" is mostly idle waiting, and overlapping that idle time is free. The same pattern is why one async worker can hold thousands of slow database or HTTP calls open at once where a thread-per-request server would exhaust memory.
+
+> **Common pitfall:** Replacing `asyncio.sleep` with a blocking call like `time.sleep`, a synchronous `requests.get`, or a CPU-bound loop inside a coroutine freezes the *entire* event loop — every other task stalls until it returns, and the "concurrent" version degrades back to sequential (or worse). If you must call blocking code, push it to a thread with `asyncio.to_thread` (covered below).
+
 ```
   Event Loop Execution Model
   ==========================
@@ -129,6 +152,19 @@ async def main():
 asyncio.run(main())
 ```
 
+The first two `print(results)` calls produce exactly the lists shown in their inline comments. The `wait` and `create_task` sections add this:
+
+```text
+First done: ['B completed in 1s']
+Still pending: 2
+Background done? False
+background completed in 2s
+```
+
+**How to read this output:** `asyncio.wait(..., return_when=FIRST_COMPLETED)` returns the moment any one task finishes — here task `B` (1s delay) wins, so `done` holds just its result and `pending` still has `A` and `C`, which the code then cancels. This is the building block for "race the fastest replica" or "give up on stragglers" patterns. The `create_task` section shows the fire-and-forget shape: at the 1s mark the background task (2s) reports `done() == False`, then `await t` blocks until it actually finishes and yields its result.
+
+> **Common pitfall:** A bare `asyncio.create_task(...)` whose return value you don't store can be garbage-collected mid-flight, silently cancelling the task. Always keep a reference (assign it, or hold it in a set) until the task completes — this is exactly the bug `TaskGroup` is designed to prevent.
+
 #### Async Synchronization Primitives
 
 ```python
@@ -177,6 +213,26 @@ async def main_queue():
 asyncio.run(main_queue())
 ```
 
+`asyncio.run(main_queue())` interleaves the producer and the two workers. The exact ordering varies slightly between runs, but it looks something like:
+
+```text
+Produced: item_0
+  Worker-1 consumed: item_0
+Produced: item_1
+  Worker-2 consumed: item_1
+Produced: item_2
+Produced: item_3
+  Worker-1 consumed: item_2
+  Worker-2 consumed: item_3
+Produced: item_4
+...
+Produced: item_9
+  Worker-1 consumed: item_8
+  Worker-2 consumed: item_9
+```
+
+**How to read this output:** Production and consumption are *interleaved*, not batched — the producer emits an item every 0.1s while each worker takes 0.3s to process, so two workers roughly keep pace with one producer. The two consumer lines never appear truly simultaneously because this is a single thread cooperatively switching at each `await`. In production this is the canonical job-queue shape: a fast ingest path feeding a bounded `Queue(maxsize=5)` that applies backpressure (the producer's `await queue.put(...)` blocks once five items are buffered), with a pool of workers draining it. The semaphore example above caps concurrency the same way — only 3 of the 10 URLs are in-flight at any instant.
+
 #### `asyncio.to_thread()` and `asyncio.run()`
 
 ```python
@@ -205,6 +261,14 @@ async def main():
 # Entry point
 asyncio.run(main())  # Creates event loop, runs main(), closes loop
 ```
+
+After roughly 2 seconds (the blocking sleep, now off the event loop), this prints:
+
+```text
+blocking result
+```
+
+**What's happening:** `blocking_io_operation()` calls `time.sleep(2)`, which would freeze the loop if called directly. `asyncio.to_thread(...)` hands it to a worker thread and `await`s the result, so the event loop stays free to run other coroutines during those 2 seconds. This is the standard escape hatch for legacy synchronous libraries (a sync DB driver, `requests`, file I/O, a CPU-light C extension) inside an otherwise-async service. Note it only helps for *blocking I/O*; CPU-bound work still contends for the GIL and belongs in a process pool instead.
 
 #### Structured Concurrency with TaskGroup (Python 3.11+)
 
@@ -243,6 +307,14 @@ async def main_loose():
 
 asyncio.run(main_taskgroup())
 ```
+
+With the three "good" items, `main_taskgroup()` prints:
+
+```text
+Processed a Processed b Processed c
+```
+
+**What's happening:** All three tasks ran concurrently inside the `async with` block, and the group waited for every one of them before exiting — so calling `.result()` afterward is always safe. The `except*` clause never fires here because nothing failed. Had one task raised (e.g. `process_item("bad")`), the TaskGroup would immediately cancel its siblings and re-raise the failure(s) as an `ExceptionGroup`, which the `except* ValueError as eg` clause unpacks — printing `Caught: Bad item: bad`. That cancel-the-siblings-on-first-error guarantee is why structured concurrency is the interview-correct answer for "how do you fan out work without leaking tasks": no orphaned coroutines, no swallowed exceptions.
 
 > **Key Takeaway:** `asyncio` enables high-concurrency I/O without threads. Never block the event loop. Use `asyncio.gather()` for simple concurrency, `TaskGroup` for structured concurrency with proper error handling, `asyncio.to_thread()` for integrating blocking code, and semaphores for rate limiting.
 
@@ -430,6 +502,15 @@ async def main():
 asyncio.run(main())
 ```
 
+Assuming the `users` table has a couple of active rows, the `print(dict(row))` loop emits something like:
+
+```text
+{'id': 1, 'name': 'Alice', 'active': True}
+{'id': 2, 'name': 'Bob', 'active': True}
+```
+
+**How to read this output:** `conn.fetch(...)` returns a list of `asyncpg.Record` objects; wrapping each in `dict(row)` turns it into a plain mapping so you can see every column. The important detail is invisible in the output but central in production: `pool.acquire()` borrowed an *existing* connection rather than opening a new TCP+TLS+auth handshake (often 20-100ms), and returned it to the pool when the `async with` block exited. Under load this is the difference between reusing 20 warm connections and hammering Postgres with thousands of short-lived ones until it hits `max_connections` and starts refusing clients. The `$1` placeholder also keeps the query parameterized, so it is immune to SQL injection.
+
 #### Backpressure: Preventing Memory Exhaustion
 
 When a producer creates work faster than consumers can process it, memory grows unboundedly. Backpressure mechanisms throttle the producer.
@@ -517,6 +598,23 @@ async def main():
 
 asyncio.run(main())
 ```
+
+Running this prints:
+
+```text
+Task started
+Task timed out!
+Task started
+Task was cancelled -- cleaning up
+Confirmed: task was cancelled
+Task started
+Task was cancelled -- cleaning up
+Timed out via context manager
+```
+
+**How to read this output:** Each of the three sections starts the task ("Task started") but the `await asyncio.sleep(100)` never finishes — the task is always cut short, so "Task completed" never appears. `wait_for` raises `TimeoutError` after 2s; manual `task.cancel()` injects a `CancelledError` into the coroutine, which the `except` block catches, runs cleanup, and re-raises so cancellation propagates correctly; the 3.11 `asyncio.timeout` context manager does the same thing more ergonomically. The load-bearing detail is the `raise` after cleanup: swallowing `CancelledError` instead of re-raising it is a classic bug that leaves a task looking alive after it was cancelled and breaks `TaskGroup`/timeout semantics.
+
+> **Common pitfall:** Cleanup inside an `except asyncio.CancelledError` block must not itself `await` something slow without its own timeout — if the surrounding scope is being torn down (e.g. a shutdown timeout), a long cleanup `await` can be cancelled again or hang the shutdown. Keep cancellation cleanup fast and bounded.
 
 #### Testing Async Code
 

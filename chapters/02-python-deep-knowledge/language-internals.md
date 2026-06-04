@@ -535,6 +535,20 @@ gc.enable()
 gc.collect()  # Force a full collection
 ```
 
+Running this prints something like (object counts depend on what your process has already imported):
+
+```text
+Collected 4 objects
+(700, 10, 10)
+Gen 0: 312 objects
+Gen 1: 1894 objects
+Gen 2: 28571 objects
+```
+
+**What's happening:** `gc.collect()` returns the number of unreachable objects it freed -- here `4` (the two `Node` instances plus the dict/internal bookkeeping for the cycle). This is the proof that refcounting alone left them alive: their refcounts never hit zero because each held a reference to the other. The threshold tuple `(700, 10, 10)` is the tuning knob -- gen-0 runs after 700 net allocations, and each higher generation runs only after 10 collections of the one below it, so the oldest (mostly long-lived) objects are scanned least often. The lopsided per-generation counts are normal: a steady-state web worker accumulates thousands of long-lived objects (modules, route tables, connection pools) in gen 2, which is exactly why scanning gen 2 rarely keeps GC pauses small.
+
+> **Common pitfall:** Defining `__del__` on objects that participate in reference cycles used to make them *uncollectable* (Python parked them in `gc.garbage` instead of freeing them). Since Python 3.4 the collector can finalize most such cycles, but the ordering of `__del__` calls is still undefined -- never rely on `__del__` for critical cleanup; use `contextlib`/`with` or `weakref.finalize` instead.
+
 ```
   Generational GC Layout
   ======================
@@ -615,6 +629,19 @@ weakref.finalize(obj, print, "Cleanup: closing connection")
 del obj  # Prints: "Cleanup: closing connection"
 ```
 
+Run end-to-end, the executable parts (cache demo, callback, finalizer) print:
+
+```text
+  Cache miss: photo.jpg
+  Cache hit: photo.jpg
+Object referenced by <weakref at 0x7f...; dead> has been garbage collected!
+Cleanup: closing connection
+```
+
+**How to read this output:** The first `get_image` is a miss (object built and stored), the second is a hit served straight from the `WeakValueDictionary` -- but the moment the last *strong* reference (`img1`/`img2`) is dropped, the entry vanishes on its own, so the cache can never be the thing that pins a freed image in memory. That is the whole point of a weak cache: it speeds up the hot path without becoming a memory leak. The `on_finalize` callback fires the instant the referent dies (the weakref now reports `dead`), and `weakref.finalize` gives you the same guarantee in a form that *also* runs at interpreter shutdown -- which is why it is the right tool for "close this connection/file no matter how the object goes away," far safer than `__del__`.
+
+> **Common pitfall:** `WeakValueDictionary` only works for objects that *can* be weakly referenced. Built-in types like `int`, `str`, `tuple`, and `list` do **not** support weak references, so caching those values directly raises `TypeError: cannot create weak reference`. Wrap them in a small class (or cache a holder object) if you need weak semantics.
+
 #### Memory Profiling
 
 Understanding where your program's memory goes is essential for optimizing resource usage. Python provides several tools for memory analysis.
@@ -688,6 +715,35 @@ data = {"users": [{"name": "Alice", "scores": [95, 87, 92]}]}
 print(f"Shallow: {sys.getsizeof(data)} bytes")
 print(f"Deep:    {deep_getsizeof(data)} bytes")
 ```
+
+Running this prints something like (exact bytes vary by platform and Python version):
+
+```text
+Top 5 memory allocations:
+  .../language_demo.py:630: size=1041 KiB, count=10000, average=107 B
+  .../language_demo.py:629: size=625 KiB, count=10000, average=64 B
+  .../language_demo.py:629: size=547 KiB, count=20000, average=28 B
+  .../language_demo.py:636: size=448 B, count=2, average=224 B
+  .../language_demo.py:632: size=416 B, count=1, average=416 B
+
+Current: 2256.7 KB
+Peak:    2257.1 KB
+
+Memory changes:
+  .../language_demo.py:651: size=9766 KiB (+9766 KiB), count=10000 (+10000), average=1000 B
+
+Shallow: 232 bytes
+Deep:    574 bytes
+```
+
+**How to read this output:**
+
+- **`statistics('lineno')`** aggregates every live allocation *by the source line that made it*, sorted largest-first. The top line (`630`) is the `str(i) * 100` list — 10,000 strings of ~107 bytes each. Line `629` appears twice because building a list of dicts allocates both the dict objects *and* the list of references to them. This is how you answer "which line is eating my memory?" in production: the filename:lineno points you straight at the culprit.
+- **`current` vs `peak`** — `current` is what is still alive at the snapshot; `peak` is the high-water mark since `start()`. A large gap between them signals a transient spike (e.g. loading a whole file to transform it) that you could stream instead.
+- **`compare_to(snapshot1, 'lineno')`** is the leak-hunting workhorse: it diffs two snapshots and shows the *delta* per line. The `+9766 KiB` on line `651` makes the growth obvious — wrap a suspected-leaky request handler between two snapshots and anything with a steadily climbing delta is your leak.
+- **`sys.getsizeof` is shallow**: it reports the size of the container object itself, *not* what it references. The dict reports `232` bytes (its own hash table) while `deep_getsizeof` walks the references and reports `574` — the real footprint. The `seen` set guards against infinite recursion on cyclic references, and ensures shared objects are only counted once.
+
+> **Common pitfall:** `tracemalloc` only tracks allocations made *after* `start()`, and adds ~25–30% memory overhead itself — keep it off in normal production and enable it only when investigating. Reaching for `sys.getsizeof` to size a nested structure is the classic mistake: it silently undercounts, because it never follows references.
 
 #### Interning: String and Integer Caching
 
@@ -773,9 +829,18 @@ def fetch_url(url):
 # During I/O wait, the GIL is released, letting other threads run.
 ```
 
+On a typical multi-core machine (GIL build, pre-3.13 or default 3.13), this prints something like:
+
+```text
+Sequential: 1.18s
+Threaded:   1.27s
 ```
-  GIL and Thread Execution
-  ========================
+
+**How to read this output:** Two cores, two threads, identical CPU work -- and the threaded version is *slower*, not 2x faster. The GIL lets only one thread execute Python bytecode at a time, so the two threads take turns instead of running in parallel; the extra time is pure overhead from acquiring/releasing the GIL and context-switching. This is the canonical interview answer to "why didn't `threading` speed up my number-crunching?" -- and the canonical production mistake of reaching for threads on a CPU-bound endpoint. For I/O-bound work the picture flips: `urlopen` releases the GIL while blocked on the socket, so other threads run during the wait and you get real concurrency.
+
+```
+  GIL and Thread Scheduling
+  =========================
 
   CPU-Bound (GIL blocks parallelism):
 
@@ -830,6 +895,17 @@ import numpy as np
 a = np.random.rand(10_000_000)
 result = np.sum(a ** 2)  # GIL released during numpy operations
 ```
+
+The two timed sections print something like (exact numbers depend on core count, network latency, and process-startup cost):
+
+```text
+Multiprocessing: 0.71s
+Threaded I/O: 0.34s
+```
+
+**How to read this output:** `ProcessPoolExecutor` runs each `cpu_work` call in a *separate OS process*, each with its own interpreter and its own GIL -- so four CPU-bound tasks genuinely run on four cores. The catch (visible if `N` were small) is process startup and the pickling of arguments/results across the process boundary, which is why processes win only when the work per task clearly outweighs that fixed cost. `ThreadPoolExecutor` shines on the I/O side: ten `urlopen` calls overlap their network waits under five worker threads, finishing in roughly the time of the two slowest requests rather than the sum of all ten. The practical rule this output encodes: **processes for CPU, threads for I/O.**
+
+> **Common pitfall:** Code under a `ProcessPoolExecutor` must live behind an `if __name__ == "__main__":` guard (on Windows and macOS `spawn`), and every argument and return value must be picklable. Passing a lambda, an open file handle, or a database connection into a worker process raises a `PicklingError` or silently re-opens resources you did not expect.
 
 #### PEP 703: Free-Threaded Python (3.13+)
 
@@ -918,6 +994,18 @@ def search_set(x, data):
 # differs: list.__contains__ is O(n), set.__contains__ is O(1).
 ```
 
+The code-object introspection block prints (the hex bytecode varies by Python version):
+
+```text
+Name:       add_squares
+Arg count:  2
+Local vars: ('a', 'b')
+Constants:  (None, 2)
+Bytecode:   97007c00640213007c016402130013000100530000000000
+```
+
+**How to read this output:** A `__code__` object is the compiled, immutable result of your function -- the part the VM actually executes. `co_argcount` and `co_varnames` are how tools like `inspect.signature`, debuggers, and frameworks (pytest fixtures, FastAPI dependency injection) discover what a function expects without ever calling it. Notice `co_consts` contains `2` *and* `None`: the literal `2` is the exponent baked in as a constant, and `None` is the implicit return value Python adds to every function. `co_code` is the raw bytecode `dis` was decoding for you -- the same information, just human-readable. In production this matters because the compiler hoists literals into `co_consts` once instead of rebuilding them each call, which is part of why pulling a constant out of a hot loop is rarely worth it but recomputing an expression inside one can be.
+
 #### Frame Objects: The Execution Context
 
 Every function call creates a **frame object** that holds the execution state: local variables, global references, the code object, and the instruction pointer. Frames form a stack that represents the call chain.
@@ -961,6 +1049,23 @@ def my_function():
 
 my_function()  # "I was called by: my_function" -- wait, it's the test scope
 ```
+
+Calling `outer()` walks the live call stack and prints something like (filenames and line numbers depend on where you run it):
+
+```text
+Current function: inner
+Local vars:       {'y': 20}
+Line number:      966
+Caller function:  outer
+Caller locals:    {'x': 10}
+  inner at line 977 in demo.py
+  outer at line 968 in demo.py
+  <module> at line 981 in demo.py
+```
+
+**How to read this output:** Each call pushes a frame, and `f_back` chains them into the stack you see in every traceback. `inner` can read not just its own `f_locals` (`{'y': 20}`) but the *caller's* (`{'x': 10}`) -- this introspection is exactly how logging libraries auto-capture the calling module/line, how `traceback` formats exceptions, and how debuggers show you variables at every level. The bottom of the chain is `<module>`, the top-level frame. The `del frame` in the code is not ceremony: frame objects reference the locals that reference the frame, forming a cycle, so holding onto a frame (or storing it on `self`) is a classic way to leak large objects until the cyclic GC eventually sweeps them.
+
+> **Common pitfall:** `sys._getframe()` and frame walking are CPython implementation details -- they are fast and ubiquitous in logging/debugging code, but they are not guaranteed on PyPy/other implementations and the overhead is real in hot paths. Reach for them for diagnostics, not for routine control flow.
 
 #### Small Object Allocator (pymalloc)
 
@@ -1026,5 +1131,19 @@ for i in range(20):
         print(f"  Length {len(lst):2d}: resized {prev_size} -> {new_size} bytes")
         prev_size = new_size
 ```
+
+The `getsizeof` probes and the growth loop print something like (sizes are for 64-bit CPython):
+
+```text
+28
+28
+32
+  Length  1: resized 56 -> 88 bytes
+  Length  5: resized 88 -> 120 bytes
+  Length  9: resized 120 -> 184 bytes
+  Length 17: resized 184 -> 248 bytes
+```
+
+**How to read this output:** The integers `0` and `1` both report `28` bytes (a fixed object header plus one machine word of value), while `2**30` needs `32` -- CPython's `int` is arbitrary-precision, so larger magnitudes simply use more digit-words. The list output is the more important lesson: notice the resizes do **not** happen on every append. The list jumps capacity in chunks (1, then 5, then 9, then 17 ...), over-allocating headroom so that most appends just write into already-reserved space. That over-allocation is *why* `list.append` is amortized O(1) -- the occasional expensive reallocation is spread across many cheap appends. This is also why preallocating with `[None] * n` (or using `array`/NumPy for numeric data) beats repeated `append` when the final size is known: you skip the intermediate copies entirely.
 
 > **Key Takeaway:** CPython compiles your code to bytecode, executes it on a stack-based VM, and uses a specialized memory allocator for small objects. Use `dis` to understand what Python is actually doing, and understand that list comprehensions, set lookups, and local variable access are fast because of how bytecode works.

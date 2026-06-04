@@ -66,6 +66,17 @@ top_users = (
 print(top_users.query)
 ```
 
+Printing `.query` shows the SQL Django will send (note: this is Django's internal representation, with parameters inlined rather than the exact parameterized form the driver executes):
+
+```text
+SELECT "users"."id", "users"."email", COUNT("orders"."id") AS "order_count"
+FROM "users" LEFT OUTER JOIN "orders" ON ("users"."id" = "orders"."user_id")
+WHERE "users"."created_at" > 2025-01-01 GROUP BY "users"."id", "users"."email"
+ORDER BY "order_count" DESC LIMIT 10
+```
+
+**How to read this output:** `top_users.query` is the single most useful debugging trick when an ORM query is mysteriously slow -- it lets you paste the generated SQL straight into `EXPLAIN ANALYZE`. Notice Django emits a `LEFT OUTER JOIN` (not an inner join) because `annotate(Count(...))` must still count users who have zero orders; if you intended an inner join you would need an explicit `.filter()`. The datetime appears unquoted here because `.query` is a developer-facing approximation -- never copy it into application code as a string, since that would expose you to SQL injection; let the ORM parameterize it.
+
 #### Seq Scan vs Index Scan
 
 A sequential scan reads every row in a table from disk, page by page. This is not inherently bad. For small tables (under a few thousand rows), a sequential scan is often faster than an index scan because it avoids the overhead of traversing the index tree and performing random I/O to fetch heap tuples. The planner also favors sequential scans when the query's selectivity is low -- for example, if a WHERE clause matches more than roughly 5-15% of the table, the planner often decides that reading the entire table sequentially is cheaper than performing thousands of random index lookups.
@@ -87,6 +98,20 @@ FROM orders
 WHERE user_id = 42;
 ```
 
+With the covering index in place, the plan reports an index-only scan:
+
+```text
+                                                          QUERY PLAN
+-----------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using idx_orders_covering on orders  (cost=0.42..8.61 rows=12 width=20) (actual time=0.018..0.024 rows=12 loops=1)
+   Index Cond: (user_id = 42)
+   Heap Fetches: 0
+ Planning Time: 0.094 ms
+ Execution Time: 0.041 ms
+```
+
+**How to read this output:** The node type `Index Only Scan` (not the usual `Index Scan`) is the proof that PostgreSQL answered the query entirely from the index without touching the table heap. The line to watch is `Heap Fetches: 0` -- it means every matching page was marked all-visible in the visibility map, so zero random heap reads were needed. In a hot read path (think a dashboard hitting this query thousands of times a second) eliminating heap fetches is what turns a "fast" query into a "free" one. If you instead see a high `Heap Fetches` count, the table needs a `VACUUM` to refresh its visibility map, otherwise the covering index buys you nothing.
+
 #### Query Planner and Statistics
 
 PostgreSQL's query planner is cost-based: it estimates the cost of various execution strategies and picks the cheapest one. These cost estimates depend heavily on table statistics -- histograms of column value distributions, most-common-values lists, and correlation data. When statistics are stale, the planner makes poor choices.
@@ -105,6 +130,16 @@ SELECT relname, last_analyze, last_autoanalyze, n_live_tup, n_dead_tup
 FROM pg_stat_user_tables
 WHERE relname = 'orders';
 ```
+
+This returns one row summarizing the table's maintenance history:
+
+```text
+ relname | last_analyze        | last_autoanalyze    | n_live_tup | n_dead_tup
+---------+---------------------+---------------------+------------+-----------
+ orders  | 2025-06-04 09:12:33 | 2025-06-03 22:41:07 |      48213 |       1502
+```
+
+**How to read this output:** `last_analyze` is the last *manual* `ANALYZE`; `last_autoanalyze` is the last one autovacuum ran on its own -- if both are `NULL`, the planner has never seen real statistics for this table and is guessing, which is a classic root cause of a sudden bad plan after a bulk load. `n_dead_tup` relative to `n_live_tup` tells you how much bloat has built up; here ~3% dead is healthy. In an interview, knowing to check this view first (rather than blaming the query) signals real operational experience.
 
 Autovacuum runs `ANALYZE` automatically, but after bulk loads or major data changes, you should run it manually. You can also increase the statistics target for columns with unusual distributions:
 
@@ -143,6 +178,17 @@ WHERE seq_scan > idx_scan
   AND pg_relation_size(relid) > 10485760  -- tables over 10MB
 ORDER BY seq_scan - idx_scan DESC;
 ```
+
+A result on a real database might look like:
+
+```text
+   relname    | seq_scan | idx_scan | too_many_seq_scans | table_size
+--------------+----------+----------+--------------------+-----------
+ audit_log    |   182304 |     1120 |             181184 | 1240 MB
+ order_items  |    45120 |    33890 |              11230 | 612 MB
+```
+
+**How to read this output:** Each row is a large table the planner keeps reading end-to-end. `audit_log` with 182k sequential scans against a 1.2 GB table is an alarm bell -- some hot query is missing an index, and every execution drags the whole table through memory. This view is your triage list: start at the top, find the offending query (via `pg_stat_statements`), and add the index. Note the caveat -- a high `seq_scan` count is fine for a tiny lookup table the planner reads in full on purpose; that is why the query filters to tables over 10 MB.
 
 **N+1 queries** occur when code fetches a list of objects and then issues a separate query for each related object. This is extremely common in ORM-based code. In Django, use `select_related` (for ForeignKey / OneToOne, performs a JOIN) and `prefetch_related` (for ManyToMany / reverse ForeignKey, performs a separate IN query):
 
@@ -313,6 +359,23 @@ EXPLAIN ANALYZE
 SELECT * FROM events
 WHERE created_at BETWEEN '2025-06-01' AND '2025-06-02';
 ```
+
+On a well-ordered events table the plan looks like:
+
+```text
+                                                  QUERY PLAN
+---------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on events  (cost=12.40..4821.00 rows=2880 width=120) (actual time=0.211..6.430 rows=2873 loops=1)
+   Recheck Cond: ((created_at >= '2025-06-01') AND (created_at <= '2025-06-02'))
+   Rows Removed by Index Recheck: 1287
+   Heap Blocks: lossy=64
+   ->  Bitmap Index Scan on idx_events_created_brin  (cost=0.00..11.68 rows=2880 width=0) (actual time=0.041..0.041 rows=640 loops=1)
+         Index Cond: ((created_at >= '2025-06-01') AND (created_at <= '2025-06-02'))
+ Planning Time: 0.120 ms
+ Execution Time: 6.610 ms
+```
+
+**How to read this output:** BRIN always drives a `Bitmap Heap Scan` with a `Recheck Cond`, because the index only knows the min/max of each block range -- it can rule blocks out but cannot confirm individual rows, so PostgreSQL must re-test every row in the surviving blocks. `Heap Blocks: lossy=64` and `Rows Removed by Index Recheck: 1287` quantify that overhead: 64 block ranges were scanned and 1,287 rows were read only to be discarded. That waste is acceptable here because the index itself is a few kilobytes instead of hundreds of megabytes. The whole bet pays off only while the data stays physically ordered by `created_at` -- if you see `Rows Removed by Index Recheck` explode into the millions, the table has been updated out of order and the BRIN index has degraded into a near-full scan.
 
 BRIN indexes shine for append-only tables (logs, events, metrics) where the physical order matches the column order. If rows are inserted out of order or frequently updated, BRIN becomes ineffective because each block range will have wide min/max boundaries, causing many false positives.
 
@@ -506,7 +569,20 @@ SELECT relname, n_live_tup, n_dead_tup,
 FROM pg_stat_user_tables
 WHERE n_dead_tup > 1000
 ORDER BY n_dead_tup DESC;
+```
 
+The output ranks your most bloated tables:
+
+```text
+   relname    | n_live_tup | n_dead_tup | dead_pct
+--------------+------------+------------+---------
+ sessions     |      82000 |     410500 |   500.61
+ orders       |    1500000 |     180000 |    12.00
+```
+
+**How to read this output:** `dead_pct` over 100 (like `sessions` at 500%) means dead tuples vastly outnumber live ones -- the table is mostly garbage and every scan wastes I/O reading tombstones autovacuum has not reclaimed yet. This is the signature of a high-churn table (a session store hammered by UPDATEs) whose autovacuum settings are too lax, which is exactly why the next snippet tunes them. A bloated table also bloats its indexes and degrades the planner's row estimates, so chronic high `dead_pct` quietly poisons performance across the board.
+
+```sql
 -- Tune autovacuum for a specific high-churn table
 ALTER TABLE orders SET (
     autovacuum_vacuum_threshold = 100,
@@ -728,6 +804,14 @@ SELECT
 FROM daily_revenue
 ORDER BY date;
 
+-- Result:
+--    date    | revenue | prev_day_revenue | next_day_revenue | day_over_day_change
+-- -----------+---------+------------------+------------------+--------------------
+-- 2025-06-01 |    1000 |           (null) |             1200 |             (null)
+-- 2025-06-02 |    1200 |             1000 |              900 |                200
+-- 2025-06-03 |     900 |             1200 |             1500 |               -300
+-- 2025-06-04 |    1500 |              900 |           (null) |                600
+
 
 -- Running total with SUM OVER
 SELECT
@@ -756,6 +840,10 @@ FROM (
 ) ranked
 WHERE rn <= 3;
 ```
+
+**How to read these examples:** In the LAG/LEAD result, the first row's `prev_day_revenue` is `(null)` because there is no earlier row to look back to, and the last row's `next_day_revenue` is `(null)` for the same reason at the other end -- this boundary behavior is the classic gotcha when computing day-over-day deltas, since any arithmetic against that NULL silently yields NULL. The "top 3 per category" pattern at the bottom is the canonical answer to a very common interview question ("get the top N rows within each group"): you cannot do it with `GROUP BY` plus `LIMIT`, so you number the rows with `ROW_NUMBER() OVER (PARTITION BY ...)` in a subquery and filter `rn <= 3` in the outer query.
+
+> **Common pitfall:** A window function cannot appear in a `WHERE` clause of the same query level (e.g. `WHERE ROW_NUMBER() OVER (...) <= 3` is a syntax error), because `WHERE` is evaluated before window functions are computed. That is precisely why the top-N pattern wraps the ranking in a subquery and filters in the outer `SELECT`.
 
 #### CTEs (Common Table Expressions)
 
@@ -816,6 +904,32 @@ WITH RECURSIVE date_series AS (
 )
 SELECT dt FROM date_series;
 ```
+
+The org-tree query returns each employee with their depth in the hierarchy, and the date-series query generates one row per day:
+
+```text
+-- org_tree:
+ id |  name   | manager_id | depth
+----+---------+------------+------
+  1 | Asha    |     (null) |     0
+  2 | Bilal   |          1 |     1
+  5 | Chen    |          1 |     1
+  9 | Dmitri  |          2 |     2
+ 14 | Elena   |          5 |     2
+
+-- date_series:
+     dt
+------------
+ 2025-01-01
+ 2025-01-02
+ ...
+ 2025-01-31
+(31 rows)
+```
+
+**How to read this output:** The `depth` column is computed by the recursion itself -- the base case seeds `depth = 0` (the CEO), and each recursive step adds 1, so `depth` literally counts how many management levels separate a person from the root. The `UNION ALL` (not `UNION`) is essential: it skips the duplicate-elimination pass, which is both faster and required for the recursion to terminate naturally. The date-series trick is the standard way to "fill gaps" -- LEFT JOIN your sparse data onto this generated calendar so days with zero activity still appear as rows instead of vanishing.
+
+> **Common pitfall:** A recursive CTE with no terminating condition (here, the `WHERE dt < ...` guard) loops forever. PostgreSQL will run until it exhausts memory or `temp_file_limit`, so always make sure the recursive arm shrinks toward a stopping point.
 
 ```python
 # Django: raw SQL for recursive CTE (Django ORM does not natively support recursive CTEs)

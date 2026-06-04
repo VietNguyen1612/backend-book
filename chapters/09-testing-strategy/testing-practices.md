@@ -119,6 +119,19 @@ class TestBookModel:
         assert book.discount_price(percent=25) == 75.00
 ```
 
+Running these tests with `pytest tests/test_book_model.py -v` prints something like:
+
+```text
+tests/test_book_model.py::TestBookModel::test_book_str_returns_title PASSED      [ 25%]
+tests/test_book_model.py::TestBookModel::test_average_rating_with_multiple_reviews PASSED [ 50%]
+tests/test_book_model.py::TestBookModel::test_average_rating_with_no_reviews PASSED [ 75%]
+tests/test_book_model.py::TestBookModel::test_discount_price PASSED              [100%]
+
+============================== 4 passed in 0.42s ==============================
+```
+
+**How to read this output:** Each test got its own `Book` (and, via `SubFactory`, its own `Author`, `Review`, and `User`) without a single hardcoded fixture row — that is the payoff of factories. Note the `0.42s` total: factory_boy hits the database for every `create()`, so on a real suite these are integration-speed tests, not microsecond unit tests. The `[ 25%]` markers are pytest's progress counter, and the green `PASSED` per line is the Self-Validating principle in action — no log file to eyeball.
+
 Using factories means that when the `Book` model adds a `language` field with a default, you update `BookFactory` once and all existing tests continue to work.
 
 #### Mutation Testing with mutmut
@@ -139,7 +152,23 @@ mutmut results
 mutmut show 42
 ```
 
-Example output:
+After the run finishes, `mutmut results` prints a survival summary that looks something like:
+
+```text
+- Mutation testing finished -
+These are the steps to apply a mutant to your repo:
+1. Apply the mutant: mutmut apply <id>
+2. Check the result.
+
+Survived 🙁 (2)
+
+---- myapp/services/pricing.py (2) ----
+42, 57
+```
+
+**How to read this output:** mutmut grades your tests, not your code. `Survived 🙁 (2)` means two mutated versions of the source still passed the entire suite — concretely, you could ship those two bugs and no test would turn red. The bare IDs `42, 57` are the survivors to investigate with `mutmut show`; everything mutmut killed is silent because a killed mutant is the normal, healthy case. In an interview, this is the crisp answer to "how do you know your tests are any good?" — 90% line coverage with surviving mutants means 90% of lines run but a chunk of behavior is unasserted.
+
+Example output for `mutmut show 42`:
 
 ```
 --- myapp/services/pricing.py (original)
@@ -227,5 +256,28 @@ pact-verifier --provider-base-url=http://localhost:8000 \
     --pact-url=./pacts/bookstorebeb-bookservice.json \
     --provider-states-setup-url=http://localhost:8000/_pact/setup
 ```
+
+A successful verification run prints something like:
+
+```text
+Verifying a pact between BookstoreWeb and BookService
+  Given a book with ISBN 9780132350884 exists
+    a request for book by ISBN
+      with GET /api/books/9780132350884
+        returns a response which
+          has status code 200 (OK)
+          has a matching body (OK)
+  Given no book with ISBN 0000000000000 exists
+    a request for a nonexistent book
+      with GET /api/books/0000000000000
+        returns a response which
+          has status code 404 (OK)
+
+2 interactions, 0 failures
+```
+
+**How to read this output:** The verifier replays each interaction the consumer recorded against the *real* running provider — note that `BookService` was never started by the consumer's test and `BookstoreWeb` is not running now; the Pact file is the only thing that crossed the boundary. `has a matching body (OK)` confirms the provider's actual JSON satisfies the consumer's expectations. The closing `2 interactions, 0 failures` is the deploy gate: green here means the two services are compatible, so each team can release independently without spinning up a shared end-to-end environment. A non-zero failure count typically means the provider renamed a field or changed a status code that a consumer still depends on — the exact class of breakage that otherwise only surfaces in staging.
+
+> **Common pitfall:** The `--provider-states-setup-url` is mandatory whenever your contract uses `given(...)` states. The provider must seed the database (e.g. insert ISBN 9780132350884) before each interaction; if that endpoint is missing or a no-op, the book genuinely will not exist and the `200` interaction fails for the wrong reason — a setup gap masquerading as a contract break.
 
 > **Key Takeaway:** Good test practices go far beyond writing assertions. Use factory_boy to eliminate brittle test data, mutation testing to verify that your tests actually catch bugs, and contract testing to safely decouple microservice deployments. The goal is not just to have tests, but to have tests that you trust -- tests that fail when something is genuinely broken and pass when everything works.

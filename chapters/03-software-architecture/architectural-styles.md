@@ -908,7 +908,33 @@ class NotificationEventHandler:
     def on_order_shipped(self, event: OrderShipped) -> None:
         print(f"[Notifications] Sending tracking info for {event.tracking_number}")
         # Send email/SMS...
+
+
+# A simple in-process dispatcher wires events to their handlers
+billing = BillingEventHandler()
+shipping = ShippingEventHandler()
+notifications = NotificationEventHandler()
+
+billing.on_order_placed(OrderPlaced(order_id="ORD-123", customer_id="CUST-9",
+                                    total_amount=149.0, currency="USD"))
+shipping.on_payment_received(PaymentReceived(payment_id="PAY-1", order_id="ORD-123",
+                                             amount=149.0, method="card"))
+notifications.on_order_shipped(OrderShipped(order_id="ORD-123",
+                                            tracking_number="1Z999", carrier="UPS"))
 ```
+
+Running this prints:
+
+```text
+[Billing] Creating invoice for order ORD-123
+  Amount: 149.0 USD
+[Shipping] Preparing shipment for order ORD-123
+[Notifications] Sending tracking info for 1Z999
+```
+
+**How to read this output:** Each line comes from a *different* bounded context reacting to a fact that already happened, without the publisher knowing or caring who is listening. The Ordering context never imports `BillingEventHandler` or `ShippingEventHandler`; it just emits `OrderPlaced` and moves on. That is the whole point of domain events -- adding a new reaction (say, a `FraudCheckHandler` on `OrderPlaced`) means writing one new handler, with zero edits to the order-placing code. The past-tense names (`OrderPlaced`, not `PlaceOrder`) reinforce that handlers receive *facts*, not commands they could refuse. In a real system this dispatcher is replaced by a message bus, but the decoupling guarantee is identical.
+
+> **Common pitfall:** In-process handlers like these run synchronously inside the same transaction, so a slow or failing handler can stall or roll back the original operation. Once you have more than a couple of consumers, publish to a real bus and let each context process the event in its own transaction.
 
 ---
 

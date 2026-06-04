@@ -235,6 +235,16 @@ async def get_context():
 schema = strawberry.Schema(query=Query)
 ```
 
+When a client runs `{ posts { title author { name } } }` against this schema, the three posts reference only two distinct authors (IDs 1 and 2, since Post A and Post C share author 1). The server log shows a single batched call:
+
+```text
+Batch loading users: [1, 2, 1]
+```
+
+**How to read this output:** The line prints exactly once even though three `author` resolvers fired -- that is the whole point. DataLoader gathers every `.load()` call made during one tick of the event loop, deduplicates and batches the keys, then invokes `batch_load_users` a single time with `[1, 2, 1]` (it passes the keys in request order and lets per-request caching collapse the duplicate fetch for ID 1). Without DataLoader you would instead see three separate "Batch loading users" lines -- the N+1 pattern. In production this is the difference between 1 `SELECT ... WHERE id IN (...)` and 50 round-trips per request; it is also the single most common GraphQL question in system-design interviews.
+
+> **Common pitfall:** A DataLoader caches and batches only within one request, so you must create a fresh loader per request (as `get_context` does here). Sharing one loader instance across requests leaks stale data between users and is a real-world correctness bug, not just an optimization miss.
+
 **Pagination: Relay-Style Connections**
 
 GraphQL has a standardized pagination pattern called Relay connections. It uses cursors for consistent pagination and provides metadata about whether more pages exist:
@@ -545,6 +555,17 @@ if __name__ == "__main__":
     run()
 ```
 
+With the server running, the client prints:
+
+```text
+Created: 1 - Alice
+Fetched: Alice (alice@example.com)
+Event: heartbeat
+Bulk created: 3 users
+```
+
+**How to read this output:** Each line maps to one RPC pattern. `Created`/`Fetched` are unary calls -- a single request and a single response, the gRPC equivalent of `POST` then `GET`. `Event: heartbeat` is one frame pulled from the *server-streaming* `WatchUsers` call; the loop `break`s after one, but the server would keep yielding every two seconds over the same open HTTP/2 stream. `Bulk created: 3 users` is the *client-streaming* result: the client streamed three `CreateUserRequest` messages and the server replied once with the count. Note IDs depend on server state -- because the server holds users in an in-memory dict that resets on restart, a fresh run gives Alice `id=1`; re-running against a still-live server would continue from where it left off, a classic source of "works once, fails on replay" confusion in stateful demos.
+
 **Communication Patterns**
 
 gRPC supports four communication patterns, each suited to different use cases:
@@ -583,6 +604,15 @@ channel = grpc.intercept_channel(
     LoggingInterceptor(),
 )
 ```
+
+Once this channel is used, every unary call emits a timing line before its result is returned to the caller:
+
+```text
+gRPC /userservice.UserService/CreateUser completed in 0.004s
+gRPC /userservice.UserService/GetUser completed in 0.001s
+```
+
+**What's happening:** The method name arrives fully qualified as `/<package>.<Service>/<Method>` -- the same path gRPC puts on the wire as an HTTP/2 `:path` header -- which is exactly the label you want when exporting these timings to Prometheus or a tracing backend. Because the interceptor wraps `continuation`, the cross-cutting concern (timing here, but equally auth tokens or retries) lives in one place instead of being copy-pasted into every stub call. Sub-millisecond latencies like `0.001s` are typical for local unary RPCs and reflect protobuf's compact binary encoding; the exact figures vary by machine and network.
 
 **When to Choose gRPC**
 
@@ -925,7 +955,14 @@ print("Waiting for orders...")
 channel.start_consuming()
 ```
 
-**Kafka**
+With the producer publishing an `order.created` event, the consumer blocks until a message arrives, then prints:
+
+```text
+Waiting for orders...
+Processing order 123
+```
+
+**What's happening:** `start_consuming()` blocks the thread and runs the callback once per delivered message -- there is no output until a message actually lands on the bound queue, which trips up people who expect the consumer to "do something" immediately. Because `auto_ack=False`, the message stays on the queue (invisible to other consumers but not deleted) until `basic_ack` fires; if the worker crashes mid-processing, RabbitMQ redelivers it, giving at-least-once delivery. A raised exception instead hits `basic_nack(requeue=False)`, which routes the poison message to the dead-letter queue rather than looping it forever -- the difference between a graceful retry pipeline and an infinite crash loop in production.
 
 Apache Kafka is a distributed log, fundamentally different from a traditional message queue. Instead of messages being consumed and removed, they are appended to a topic's partitions and retained for a configurable period (or indefinitely). This means consumers can replay events from any point in time.
 
@@ -958,6 +995,18 @@ for i in range(10):
 
 producer.flush()  # Wait for all messages to be delivered
 ```
+
+After `flush()` forces the delivery callbacks to fire, you see one acknowledgement per message (assuming a 3-partition topic):
+
+```text
+Delivered to orders [2] @ 14
+Delivered to orders [0] @ 51
+Delivered to orders [1] @ 9
+Delivered to orders [2] @ 15
+...
+```
+
+**How to read this output:** Each line is a *broker acknowledgement*, not just a local enqueue -- `produce()` only buffers the message; the callback runs later when the broker confirms the write, which is why `flush()` (or the callbacks may never run). The number in brackets is the partition: Kafka hashes the message `key` to pick it, so the same key always lands on the same partition, guaranteeing per-key ordering -- this is how you keep all events for one `order_id` in order while still parallelizing across partitions. The `@ N` is the offset, the message's permanent position in that partition's log; consumers track offsets to know what they have read and to replay from any point. Partition assignment and offsets depend on your topic's partition count and existing data, so exact values will differ.
 
 ```python
 # kafka_consumer.py
@@ -1134,6 +1183,32 @@ celery -A celery_app worker --loglevel=info --concurrency=4
 celery -A celery_app flower --port=5555
 # Visit http://localhost:5555 for real-time task monitoring
 ```
+
+Starting the worker prints a banner confirming the broker, the concurrency level, and the registered tasks:
+
+```console
+$ celery -A celery_app worker --loglevel=info --concurrency=4
+ -------------- celery@host v5.x.x
+--- ***** -----
+-- ******* ---- Linux
+- *** --- * ---
+- ** ---------- [config]
+- ** ---------- .> broker:     redis://localhost:6379/0
+- ** ---------- .> results:    redis://localhost:6379/1
+- ** ---------- .> concurrency: 4 (prefork)
+- *** --- * --- .> task events: OFF
+-- ******* ----
+--- ***** ----- [tasks]
+ -------------- . tasks.generate_report
+                . tasks.notify_completion
+                . tasks.resize_image
+                . tasks.send_email
+
+[INFO] Connected to redis://localhost:6379/0
+[INFO] celery@host ready.
+```
+
+**How to read this output:** The `[tasks]` block is the fast sanity check -- if a task you expected is missing here, the worker never imported it and `.delay()` calls will sit in the queue forever or raise `NotRegistered`; this is the first thing to check when "my Celery task isn't running." `concurrency: 4 (prefork)` means four OS worker processes, so CPU-bound tasks run truly in parallel (unlike threads under the GIL). `celery@host ready.` is the signal that the worker has connected to the broker and is consuming -- until that line appears, queued tasks are buffering in Redis, not executing.
 
 **Webhooks**
 

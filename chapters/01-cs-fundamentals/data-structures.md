@@ -44,6 +44,19 @@ for i in range(1, len(sizes)):
         print(f"At length {i}: size changed from {sizes[i-1]} to {sizes[i]} bytes")
 ```
 
+Running this prints something like (exact byte counts vary by Python version and 32- vs 64-bit build):
+
+```text
+At length 1: size changed from 56 to 88 bytes
+At length 5: size changed from 88 to 120 bytes
+At length 9: size changed from 120 to 184 bytes
+At length 17: size changed from 184 to 248 bytes
+At length 25: size changed from 248 to 312 bytes
+At length 33: size changed from 312 to 376 bytes
+```
+
+**How to read this output:** The size jumps happen in chunks (at length 1, 5, 9, 17, 25...), not on every single `append`. Each jump is the moment Python's internal buffer filled up and was reallocated to a larger one — the growth pattern (roughly 0, 4, 8, 16, 25, 35...) is the amortized over-allocation in action. Between jumps, `append` is touching pre-reserved slots and costs O(1). This is why `list.append` in a hot loop is cheap: you pay the occasional O(n) copy, but it is spread thin across many appends. In production, if you already know the final size, building via a list comprehension or pre-sizing avoids these intermediate reallocations entirely.
+
 **Cache locality** is another critical advantage of arrays. Because elements are stored contiguously, accessing sequential elements loads them into the CPU cache together (a single cache line is typically 64 bytes). This makes iterating over arrays significantly faster in practice than iterating over linked lists, even when the theoretical Big-O is the same.
 
 #### Linked Lists (Node-Based Memory Layout)
@@ -1105,7 +1118,18 @@ def fibonacci(n):
 print(fibonacci(100))  # Instant, thanks to memoization
 print(fibonacci.cache_info())
 # CacheInfo(hits=98, misses=101, maxsize=128, currsize=101)
+```
 
+This prints:
+
+```text
+354224848179261915075
+CacheInfo(hits=98, misses=101, maxsize=128, currsize=101)
+```
+
+**How to read this output:** The first line is the 100th Fibonacci number, returned essentially instantly — without memoization, naive recursion would make ~10^21 calls and never finish. The `CacheInfo` line is the real lesson: `misses=101` means each of the 101 distinct `n` values (0 through 100) was computed exactly once, while `hits=98` counts the calls that found their result already cached. That near-1:1 ratio is the signature of a well-memoized recursion turning exponential work into linear. In production, `cache_info()` is how you confirm a cache is actually earning its keep — a high miss rate with low hits usually means your cache key has too much variation (e.g. caching on a timestamp) and the cache is pure overhead.
+
+```python
 # Manual LRU Cache implementation using OrderedDict
 class LRUCache:
     def __init__(self, capacity: int):
@@ -1140,6 +1164,8 @@ def get_user_profile(user_id):
 ```
 
 **LFU (Least Frequently Used) cache** evicts the entry with the lowest access frequency. It is more complex (requiring a frequency counter + hash maps + doubly-linked lists per frequency) but can be more effective when some items are consistently "hot."
+
+> **Common pitfall:** `@lru_cache` holds a strong reference to every cached argument and return value for the life of the process. Decorating an instance method caches `self`, which keeps every instance alive and silently leaks memory; using `maxsize=None` on a function with unbounded inputs grows without limit. Set an explicit `maxsize`, and prefer caching module-level functions over methods.
 
 #### Disjoint Set / Union-Find
 

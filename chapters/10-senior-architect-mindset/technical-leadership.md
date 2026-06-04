@@ -128,6 +128,8 @@ separate database), which defeats the purpose.
 - [ ] Revisit this decision in 6 months to evaluate operational experience (Owner: Tech Lead, Due: May 2026)
 ```
 
+> **Common pitfall:** Never edit or delete an accepted ADR to reflect a later change of mind. ADRs are append-only. When a decision is reversed, write a *new* ADR (e.g. ADR-0061) that sets the old one's `Status` to `Superseded by ADR-0061` and explains what changed. The historical record of *why you once chose Kafka* is exactly the context that prevents the team from re-walking the same path two years later -- destroying it defeats the entire purpose.
+
 > **Key Takeaway:** ADRs are not bureaucracy -- they are institutional memory. The cost of writing one is 30 minutes. The cost of not having one is repeated meetings, reversed decisions, and frustrated teams. Start writing ADRs today, even for decisions already made. Retroactive ADRs that capture "why we are where we are" are immensely valuable for onboarding and future planning.
 
 ---
@@ -195,6 +197,8 @@ Present a concrete case: "Our payment service has accumulated significant debt. 
 **Debt tax (20% of sprint capacity)** -- Allocate a fixed percentage of every sprint's capacity to debt work. This is often the most sustainable approach because it provides consistent, predictable investment without requiring special approval. Engineers pick items from the tech debt backlog each sprint. The 20% figure is a starting point; adjust based on how much debt you carry.
 
 **Tech debt backlog** -- Maintain a separate, prioritized backlog of debt items. Each item should describe the debt, its impact (using the quantification metrics above), the proposed fix, and the estimated effort. Review this backlog monthly and ensure the highest-impact items are being addressed.
+
+> **Common pitfall:** The 20% debt tax and the dedicated debt sprint both quietly collapse under deadline pressure -- the first feature emergency "borrows" the debt capacity, and it never comes back. If debt work isn't a tracked, sized item on the *same* board as feature work (with the same definition of done), it is invisible to planning and will always lose the prioritization fight. Protect the allocation by making it explicit and reporting on it, not by relying on goodwill.
 
 #### When to Rewrite vs. Refactor
 

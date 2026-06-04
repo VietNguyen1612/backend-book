@@ -130,6 +130,20 @@ server {
 }
 ```
 
+Before nginx loads a config, validate it with `nginx -t`. On a healthy config you will see:
+
+```console
+$ sudo nginx -t
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+```
+
+**How to read this output:** `nginx -t` parses the file and checks that referenced certificates and upstreams are well-formed without actually reloading the running process -- always run it before `nginx -s reload` in production, because reloading a broken config can drop the listener and take the site down. The two-line "syntax is ok" / "test is successful" pair is what your deploy pipeline should grep for; any other output (a `[emerg]` line pointing at a file and line number) means the reload must be aborted.
+
+> **Common pitfall:** A `backup` server (line 59) only receives traffic when *every* primary is down, so it stays cold and its caches/connection pools never warm up -- when the primaries fail and traffic suddenly lands on it, the first requests are slow. Treat backup servers as a last resort, not as capacity.
+
+> **Key Takeaway:** Layer 4 is fast and protocol-agnostic but blind to content; Layer 7 can route on paths, headers, and cookies and terminate TLS at the cost of CPU. Pick the algorithm to match the workload -- round-robin for uniform requests, least-connections for highly variable request durations, and consistent hashing when you are load-balancing a cache tier and want to preserve hit rates as nodes come and go.
+
 ### Caching
 
 Caching stores frequently accessed data in a faster storage layer (usually memory) to reduce latency and load on the primary data store. The choice of caching pattern has profound implications for consistency, latency, and failure modes.
@@ -299,6 +313,31 @@ class StampedeProtectedCache:
             return db_loader(*args)
 ```
 
+These are class definitions, so importing the module prints nothing. The behavior becomes visible once you drive a repository through a read/write/read sequence with logging enabled:
+
+```python
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+repo = CacheAsideRepository(db_connection)
+
+repo.get_user("42")              # first read -- cache is empty
+repo.get_user("42")              # second read -- now cached
+repo.update_user("42", {"name": "Ann", "email": "ann@x.io"})
+repo.get_user("42")              # read after write
+```
+
+Running that prints (timestamps omitted via the format string):
+
+```text
+Cache MISS for cache:user:42
+Cache HIT for cache:user:42
+Cache INVALIDATED for cache:user:42
+Cache MISS for cache:user:42
+```
+
+**How to read this output:** The first `get_user` is a MISS -- the cache is cold, so the code falls through to `db.execute` and then `setex` populates Redis; this is the latency cost every key pays exactly once per TTL window. The second call is a HIT served entirely from memory, which is the whole point of the cache. The `update_user` logs INVALIDATED because cache-aside *deletes* rather than rewrites the key (line 207) -- so the very next read is again a MISS that repopulates from the database. In an interview, the key insight to articulate is the deliberate delete-don't-update choice: deleting guarantees the next reader sees fresh data straight from the source of truth, whereas writing a computed value into the cache risks caching a value that never matched the row (e.g. if the UPDATE and the cache write race). Swap in `WriteThroughRepository` and that third line would instead read `Cache UPDATED (write-through)` with no following MISS, because the new value is written into Redis inline -- trading a slightly slower write for a guaranteed-warm cache.
+
+> **Common pitfall:** In `CacheAsideRepository.get_user`, a database row that genuinely does not exist returns `None` and is *not* cached, so every request for a missing key becomes a database query -- a classic cache-penetration vector an attacker can exploit by requesting random non-existent IDs. The fix is to cache a short-TTL negative sentinel (e.g. an empty marker) for misses.
+
 **Cache Invalidation Strategies** are notoriously difficult. As Phil Karlton famously said, "There are only two hard things in computer science: cache invalidation and naming things."
 
 - **TTL (Time-To-Live)**: Set an expiry on every cached key. After the TTL elapses, the key is automatically deleted. This is the simplest approach and provides a guaranteed upper bound on staleness. A TTL of 5 minutes means data is at most 5 minutes stale.
@@ -316,6 +355,8 @@ class StampedeProtectedCache:
 - **L3 (CDN/Edge)**: Closest to the user geographically. Best for static or slowly-changing content.
 
 A request flows through these layers: check L1, if miss check L2, if miss check L3 (for applicable content), if miss query the database.
+
+> **Key Takeaway:** Every caching pattern trades consistency against latency and durability -- cache-aside is simple but can serve stale data, write-through stays consistent at the cost of write latency, write-behind is fastest but can lose data on a crash. The hardest part is never the lookup; it is invalidation and the failure modes (stampede on expiry, penetration on missing keys). Choose TTLs and patterns by asking how much staleness the business can tolerate, not by defaulting to "cache everything."
 
 ### CAP Theorem & Consistency
 

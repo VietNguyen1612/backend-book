@@ -100,6 +100,15 @@ net.core.somaxconn = 65535         # Increase listen backlog
 net.ipv4.ip_local_port_range = 1024 65535  # More ephemeral ports
 ```
 
+On a busy server the count command makes the problem visible:
+
+```text
+$ ss -ant state time-wait | wc -l
+28734
+```
+
+**How to read this output:** Nearly 29,000 sockets stuck in TIME_WAIT. Each one pins the local (IP, port) tuple for ~60 seconds, and with only ~28,000 usable ephemeral ports per destination, you are on the edge of running out — at which point *new outbound* connections fail with "cannot assign requested address" even though CPU and memory are idle. This is the classic failure mode of a service that opens a fresh connection per request to an upstream (database, internal API) instead of pooling. The real fix is connection pooling and keep-alive; `tcp_tw_reuse` is a mitigation that lets the kernel safely reuse TIME_WAIT sockets for new *outgoing* connections, but it does not help inbound TIME_WAIT.
+
 **Keep-alive** sends periodic probes to detect dead connections:
 
 ```python
@@ -130,6 +139,17 @@ sysctl net.ipv4.tcp_wmem  # min, default, max send buffer
 sysctl -w net.ipv4.tcp_rmem="4096 87380 16777216"
 sysctl -w net.ipv4.tcp_wmem="4096 87380 16777216"
 ```
+
+Reading the current values prints three numbers (min, default, max in bytes):
+
+```console
+$ sysctl net.ipv4.tcp_rmem
+net.ipv4.tcp_rmem = 4096	131072	6291456
+```
+
+**How to read this output:** The kernel auto-tunes each connection's receive buffer between `min` and `max`, starting near `default`. The default `max` of ~6 MB here is fine for typical RTTs, but for the 1 Gbps / 50ms link above (BDP = 6.25 MB) it is right at the edge — bump `max` to 16 MB so the buffer can grow large enough to keep the pipe full. If `max` is below the BDP, throughput stalls no matter how fast the link is, because the sender runs out of in-flight window and waits for ACKs.
+
+> **Common pitfall:** These `sysctl -w` changes are lost on reboot. Persist them in `/etc/sysctl.conf` (or a file in `/etc/sysctl.d/`) and apply with `sysctl -p`.
 
 #### TCP vs UDP
 
@@ -440,6 +460,17 @@ certbot certonly --nginx -d example.com -d www.example.com
 certbot renew --deploy-hook "systemctl reload nginx"
 ```
 
+A successful issuance prints the certificate paths and expiry:
+
+```text
+Successfully received certificate.
+Certificate is saved at: /etc/letsencrypt/live/example.com/fullchain.pem
+Key is saved at:         /etc/letsencrypt/live/example.com/privkey.pem
+This certificate expires on 2026-09-02.
+```
+
+**How to read this output:** Note `fullchain.pem` — point your server at this, not `cert.pem`, because it bundles the leaf *plus* the intermediate(s). Serving only the leaf is the single most common cause of "certificate verify failed" errors from clients that don't happen to cache the intermediate. The 90-day expiry is deliberate: Let's Encrypt certs are short-lived to force automation, so the `certbot renew` timer (which renews when ~30 days remain) is not optional — a forgotten renewal is a self-inflicted outage. The `--deploy-hook` only fires when a renewal actually happens, so reloading nginx there is safe to run on every timer tick.
+
 #### SNI (Server Name Indication)
 
 **SNI** is a TLS extension where the client includes the requested hostname in the ClientHello message (before encryption). This allows a single IP address to serve multiple TLS-protected domains, each with its own certificate. Without SNI, you would need one IP address per domain. All modern clients support SNI.
@@ -498,6 +529,18 @@ curl -X POST https://api.example.com/users \
      -H "Content-Type: application/json" \
      -d '{"name": "Alice", "email": "alice@example.com"}'
 ```
+
+The `-w` timing template is the highest-value trick here. It prints a cumulative breakdown that pinpoints which phase of a request is slow:
+
+```text
+  DNS:        0.004231s
+  Connect:    0.038122s
+  TLS:        0.119876s
+  TTFB:       0.241509s
+  Total:      0.245013s
+```
+
+**How to read this output:** Each value is the *cumulative* time from the start of the request, so you read the gaps between them, not the absolute numbers. DNS took 4ms; the TCP connect added ~34ms (`Connect - DNS`), the TLS handshake added ~82ms (`TLS - Connect`), and the server then took ~122ms to produce the first byte (`TTFB - TLS`). In a real incident this instantly tells you *where* the latency lives: a large `TLS - Connect` gap means a slow handshake (missing OCSP stapling, far-away server), while a large `TTFB - TLS` gap means the application itself is slow. The tiny gap between `TTFB` and `Total` here means the response body downloaded almost instantly. This is the first command to run when someone reports "the API feels slow."
 
 #### traceroute / mtr
 
@@ -562,6 +605,18 @@ dig example.com TXT
 dig -x 93.184.216.34
 ```
 
+A plain `dig api.example.com A` prints something like:
+
+```text
+;; ANSWER SECTION:
+api.example.com.	276	IN	A	93.184.216.34
+
+;; Query time: 12 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8)
+```
+
+**How to read this output:** The number `276` is the remaining TTL in seconds — it counts *down* on repeated queries as the resolver's cache ages, which is how you confirm a record is being served from cache versus fetched fresh. The `ANSWER SECTION` shows the resolved record type and value, and `SERVER` confirms which resolver answered. When planning a migration, watch that TTL drop toward your lowered value before you cut over; when debugging a stale record, compare the TTL across `dig @8.8.8.8` and `dig @1.1.1.1` to see if one resolver is still caching the old answer. `dig +trace` is the tool of choice when resolution fails entirely — it walks the delegation from the root down so you can see exactly which nameserver returns the wrong (or no) answer.
+
 #### MTU and Fragmentation
 
 The **Maximum Transmission Unit (MTU)** is the largest packet size a network link can carry (typically 1500 bytes for Ethernet). When a packet exceeds the MTU, it must be fragmented (split into smaller pieces) or dropped (if the "Don't Fragment" flag is set).
@@ -574,5 +629,19 @@ ping -s 1472 -M do api.example.com
 # If this fails, try smaller sizes to find the actual path MTU
 ping -s 1400 -M do api.example.com
 ```
+
+When a packet is too big for some link on the path and the "Don't Fragment" bit is set, the failure looks like this:
+
+```text
+$ ping -s 1472 -M do api.example.com
+PING api.example.com (93.184.216.34) 1472(1500) bytes of data.
+ping: local error: message too long, mtu=1492
+--- api.example.com ping statistics ---
+3 packets transmitted, 0 received, 100% packet loss
+```
+
+**How to read this output:** The clue is `mtu=1492` — a classic PPPoE/tunnel link that steals 8 bytes from the usual 1500. A 1472-byte payload (+28 bytes of headers = 1500) cannot pass, so the packet is dropped rather than fragmented. The reason this matters: when ICMP "Fragmentation Needed" messages are firewalled (extremely common), this happens *silently* in real traffic — a TLS ClientHello or a large POST body hangs forever while small requests and pings succeed. That asymmetry ("curl to /health works but real requests stall") is the signature of an MTU black hole. The fix is to lower the path MTU or enable MSS clamping on the gateway.
+
+> **Common pitfall:** The exact byte arithmetic differs by OS. The `-s` size is the ICMP *payload*; macOS/BSD `ping` also needs `-D` instead of `-M do`, and on Windows the flag is `ping -f -l 1472`.
 
 > **Key Takeaway:** Network debugging is an essential skill for backend engineers. Use `curl -w` for HTTP timing analysis, `ss` for connection state inspection, `tcpdump` for packet-level debugging, and `mtr` for path analysis. Most production networking issues come down to: DNS misconfiguration, certificate problems, firewall blocking, connection exhaustion (TIME_WAIT), or MTU issues. Having these tools in your toolkit lets you quickly identify which layer the problem is at.

@@ -338,6 +338,25 @@ curl http://localhost:8000/api/v1/admin/settings \
 # Response: 403 {"detail": "Insufficient permissions"}
 ```
 
+A full session looks something like this (the JWT strings are truncated for readability; real tokens are 300+ characters):
+
+```console
+$ curl http://localhost:8000/api/v1/profile \
+    -H "Authorization: Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIi..."
+{"user_id":"user_123","roles":["user","admin"]}
+
+$ curl http://localhost:8000/api/v1/profile   # no Authorization header
+{"detail":"Not authenticated"}
+
+$ curl http://localhost:8000/api/v1/profile \
+    -H "Authorization: Bearer expired.token.here"
+{"detail":"Token has expired"}
+```
+
+**How to read this output:** the first call succeeds because `verify_token` decoded the signature with the public key and the `iss`/`aud` claims matched. The missing-header case is rejected by `HTTPBearer` before your code runs (FastAPI returns 401 automatically). The expired case is the `jwt.ExpiredSignatureError` branch -- note the verifier checks `exp` for you, so you never compare timestamps by hand. In an interview this is the crux of "stateless auth": each service validates the token independently using only the public key, with no database round-trip and no shared session store.
+
+> **Common pitfall:** never accept `alg: none` and never let the client choose the algorithm. Always pin `algorithms=[ALGORITHM]` on `jwt.decode` as shown -- libraries that honored the token's own `alg` header allowed attackers to forge tokens by swapping RS256 for HS256 and signing with the public key as the HMAC secret.
+
 **Refresh Tokens**
 
 Access tokens should be short-lived (15-60 minutes) to limit the damage window if they are compromised. Refresh tokens are longer-lived (days to weeks) and are used to obtain new access tokens without requiring the user to log in again.
@@ -430,6 +449,20 @@ def get_data(client: dict = Security(verify_api_key)):
 curl http://localhost:8000/api/v1/data \
   -H "X-API-Key: sk_live_abc123def456..."
 ```
+
+With a valid key the request returns the client greeting; an unknown or malformed key is rejected before reaching the handler:
+
+```console
+$ curl http://localhost:8000/api/v1/data -H "X-API-Key: sk_live_abc123def456..."
+{"message":"Hello, Partner App"}
+
+$ curl http://localhost:8000/api/v1/data -H "X-API-Key: wrong_key"
+{"detail":"Invalid API key"}
+```
+
+**How to read this output:** the server never compares the raw key -- it hashes the incoming value and looks up the *hash*, exactly like password verification. That is why a database breach does not leak usable keys. Note the lookup here is a plain SHA-256, which is fine for high-entropy random keys (unlike user passwords, which need a slow hash like bcrypt because they are guessable). In production you would also rate-limit per `client["id"]` so one partner cannot exhaust your capacity.
+
+> **Common pitfall:** comparing the hash with a normal `==` can leak timing information. For secrets compared after hashing this is a minor concern, but when matching a raw token directly, use `secrets.compare_digest()` to avoid timing-attack side channels.
 
 **Session-Based Authentication**
 
@@ -655,6 +688,19 @@ def get_document(doc_id: int):
     return {"id": doc_id, "content": "Secret document"}
 ```
 
+Tracing the request above through the engine makes the OR-semantics concrete. The user is in `engineering` with clearance 3, reading an `engineering` document classified 2:
+
+```text
+same_department_read  -> True   (action=read AND depts match)
+business_hours_write  -> False  (action is "read", not "write")
+clearance_check       -> True   (3 >= 2)
+is_allowed()          -> True   (first matching policy wins)
+```
+
+**How to read this output:** `is_allowed` returns `True` as soon as *any* policy matches -- the loop short-circuits on the first hit, so policies here are additive grants, not a conjunction. That matters: if you instead wanted "all conditions must hold" you would have to invert the structure (default allow, deny on first failing policy). This permit-overrides design is the usual ABAC default, but mixing grant and deny rules in one list is exactly where authorization bugs hide, because rule order and combining logic become load-bearing.
+
+> **Common pitfall:** ABAC's flexibility is also its trap -- a handful of overlapping lambdas quickly becomes impossible to reason about or audit. Once policies interact in non-obvious ways, externalize them to a real policy engine (OPA below) where they can be unit-tested and the combining algorithm is explicit.
+
 **Policy Engines: OPA (Open Policy Agent)**
 
 For complex authorization needs, externalize your policy decisions to a dedicated engine. OPA (Open Policy Agent) uses the Rego language to define policies, which can be tested independently, versioned, and shared across services.
@@ -721,6 +767,16 @@ async def get_document(doc_id: int):
     return {"id": doc_id, "content": "Document content"}
 ```
 
+You can probe the same policy directly against OPA's REST API to see the raw decision it returns:
+
+```console
+$ curl -s http://localhost:8181/v1/data/authz/allow \
+    -d '{"input":{"user":{"id":"user_123","roles":["editor"],"department":"engineering"},"action":"read","resource":{"id":1,"owner":"user_456","department":"engineering"}}}'
+{"result":false}
+```
+
+**How to read this output:** OPA evaluates every `allow` rule and returns `true` if any of them holds (Rego rules sharing a name combine as a logical OR). Walk the request: the "read your own data" rule fails because `user_456` owns the resource, not `user_123`; the "editor writes their department" rule fails because the action is `read`, not `write`; the admin rule fails because `editor != admin`. No rule matches, so the result should be the `default allow = false` -- meaning a correct policy returns `{"result":false}` and the user is denied. The lesson for production and interviews: always test the *deny* path, because `default allow = false` is the only thing standing between you and an accidental open door. A bare `{}` response (no `result` key) means the rule was undefined -- treat that as deny, which is exactly why the client code defaults to `False`.
+
 **Row-Level Security (RLS)**
 
 PostgreSQL's Row-Level Security feature allows you to define policies at the database level that restrict which rows a user can see or modify. This is especially powerful for multi-tenant applications, where each tenant should only see their own data.
@@ -773,6 +829,21 @@ user_orders = query_orders(123, "user")
 # Admin -- sees all orders
 all_orders = query_orders(1, "admin")
 ```
+
+The same `SELECT * FROM orders` returns different rows depending on the session context, because Postgres applies the RLS policies transparently:
+
+```text
+>>> query_orders(123, "user")
+[(501, 123, 'shipped'), (502, 123, 'pending')]      # only user 123's rows
+
+>>> query_orders(1, "admin")
+[(501, 123, 'shipped'), (502, 123, 'pending'),
+ (503, 456, 'delivered'), (504, 789, 'cancelled')]   # every row
+```
+
+**How to read this output:** the application code never adds a `WHERE user_id = ...` clause -- the filtering lives in the database. That is the entire point of RLS: even a buggy query or a compromised ORM call cannot leak another tenant's rows, because the policy is enforced below the query. The admin sees everything because `admin_all_orders` uses `FOR ALL` with a role check. This is why RLS is the multi-tenant safety net: it turns "did every developer remember the tenant filter?" into a database invariant.
+
+> **Common pitfall:** the `SET app.current_user_id = '{user_id}'` f-string interpolates straight into SQL. Here the value is a typed `int`, but if it ever came from user input this is an injection hole that could let a caller set themselves as admin. Use `SET LOCAL` with a bound parameter (`SET LOCAL app.current_user_id = :uid`) and scope it to the transaction so the context cannot leak across pooled connections.
 
 **Principle of Least Privilege**
 

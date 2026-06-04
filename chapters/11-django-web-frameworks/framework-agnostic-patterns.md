@@ -252,6 +252,20 @@ class ReviewCreateView(generics.CreateAPIView):
         return context
 ```
 
+When a client POSTs data that violates these rules, the serializer's `.is_valid()` returns `False` and DRF turns the collected errors into a `400 Bad Request` with a structured body. Posting a review with a too-short text and an out-of-range rating returns:
+
+```text
+HTTP/1.1 400 Bad Request
+Content-Type: application/json
+
+{
+    "rating": ["Rating must be between 1 and 5."],
+    "text": ["Review text must be at least 20 characters long."]
+}
+```
+
+**How to read this output:** Errors come back keyed by field name, with a list of messages per field -- this is the contract a frontend relies on to highlight the offending inputs, and it is why you raise `ValidationError` rather than returning a plain string. Note both a field-level error (`validate_rating`) and an object-level error (`validate`, raised as a dict) appear together: DRF accumulates every validation failure in one pass instead of stopping at the first, so the user fixes everything in a single round-trip. The 400 status (not 500) signals "the client sent bad data," keeping invalid input from ever reaching your business logic or database.
+
 **FastAPI equivalent for comparison:**
 
 ```python
@@ -455,6 +469,17 @@ def sync_book_to_search_index(self, book_id):
     logger.info("Indexed book %s in search", book_id)
 ```
 
+When `generate_daily_report` runs (whether triggered by Celery Beat or invoked manually), the worker logs the assembled report. In your worker's stdout you would see something like:
+
+```text
+[2026-06-04 07:00:00,142: INFO/ForkPoolWorker-1] Daily Report for 2026-06-03
+New books: 12
+New reviews: 47
+Average rating: 4.3
+```
+
+**What's happening:** The task runs inside the worker process, not the web process, so this output lands in the worker's logs, not your request logs -- a common source of confusion when developers go looking for task output in the wrong place. Note that `avg_rating` will be `None` (and the `:.1f` format string will raise) on a day with zero reviews; production tasks should guard aggregates with a default (e.g. `review_stats['avg_rating'] or 0`) before formatting.
+
 **Calling tasks:**
 
 ```python
@@ -485,6 +510,22 @@ group(
     for book_id in [1, 2, 3, 4, 5]
 )()
 ```
+
+Each of these enqueue calls returns immediately -- it does not wait for the work to finish. At a shell or REPL you can see what comes back:
+
+```text
+>>> result = send_review_notification.delay(book_id=42, reviewer_username="alice", rating=5)
+>>> result
+<AsyncResult: 3f2a9c7e-1b4d-4e8a-9c2f-6d0e7a1b3c5d>
+>>> result.id
+'3f2a9c7e-1b4d-4e8a-9c2f-6d0e7a1b3c5d'
+>>> result.status        # right after enqueue, before a worker picks it up
+'PENDING'
+```
+
+**How to read this output:** `.delay()` returns an `AsyncResult` whose UUID is the task's handle in the result backend -- this is the value you persist if you later need to poll status or fetch the return value. The status is `PENDING` immediately because the producer only wrote a message to the broker; an actual worker has to consume and run it before the status flips to `STARTED` then `SUCCESS`. In an interview this is the key point about background tasks: the HTTP request returns in microseconds regardless of how slow the task is, which is the entire reason the pattern exists.
+
+> **Common pitfall:** `PENDING` is also the status Celery reports for a task ID it has never heard of -- there is no separate "unknown" state. So `result.status == "PENDING"` does not prove the task is genuinely queued; it can equally mean a typo'd ID or a worker connected to a different broker.
 
 **Periodic tasks with Celery Beat:**
 
@@ -567,6 +608,8 @@ class CachedBookListView(ListView):
 
 Per-view caching works by keying on the full URL (including query parameters). A request to `/api/v1/books/?page=1` and `/api/v1/books/?page=2` produce separate cache entries.
 
+> **Common pitfall:** `cache_page` keys on the URL, not on the user. Applying it to a view that renders per-user content (a cart, a dashboard, anything behind login) will serve one user's cached response to everyone who hits the same URL -- a serious data-leak bug. Only cache responses that are genuinely identical for all callers, or vary the cache key with `Vary: Cookie`/`Authorization` headers.
+
 #### Low-Level Cache API
 
 For fine-grained control, use the low-level cache API directly. This lets you cache specific computations, database queries, or external API responses.
@@ -644,6 +687,20 @@ cache.set_many({"k1": "v1", "k2": "v2"})  # batch set
 cache.get_many(["k1", "k2"])               # batch get
 cache.delete_many(["k1", "k2"])            # batch delete
 ```
+
+The payoff of `get_book_detail` is the gap between the first call (cache miss, hits the database) and every subsequent call (cache hit, served from Redis). Timing two calls in a shell makes it concrete:
+
+```text
+>>> import time
+>>> t = time.perf_counter(); get_book_detail(42); (time.perf_counter() - t) * 1000
+{'id': 42, 'title': 'Dune', 'author': 'Frank Herbert', ...}
+18.7   # first call: SELECT + JOIN + two aggregates against Postgres
+>>> t = time.perf_counter(); get_book_detail(42); (time.perf_counter() - t) * 1000
+{'id': 42, 'title': 'Dune', 'author': 'Frank Herbert', ...}
+0.4    # second call: single Redis GET, no DB round-trip
+```
+
+**How to read this output:** The exact milliseconds vary by hardware and network, but the ratio is the point -- the cached path is typically one to two orders of magnitude faster because it replaces a multi-table aggregate query with a single key lookup. This is why caching is the highest-leverage fix for a read-heavy endpoint under load: it removes work from the database, which is almost always the scarcest resource in a backend system.
 
 #### Cache Invalidation
 

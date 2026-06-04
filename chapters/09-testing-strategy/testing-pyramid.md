@@ -75,6 +75,17 @@ def test_valid_coupon_applies_discount():
     order_repo.save.assert_called_once_with(order)
 ```
 
+Running these two tests with `pytest -v test_order_service.py` prints something like:
+
+```text
+test_order_service.py::test_expired_coupon_raises_validation_error PASSED [ 50%]
+test_order_service.py::test_valid_coupon_applies_discount PASSED          [100%]
+
+============================== 2 passed in 0.03s ===============================
+```
+
+**How to read this output:** The `0.03s` total is the whole point of the pyramid's base -- because both `MagicMock` repos run in memory with no database or network, the suite finishes in milliseconds, so you can run thousands of these on every save. The `[ 50%]` / `[100%]` markers are pytest's progress through the collected tests, and each `PASSED` line names the exact test, so a failure here reads like a sentence telling you precisely which business rule broke. In an interview, the takeaway to articulate is that the speed and the pinpoint failure messages are what make unit tests the cheapest place to catch a bug.
+
 #### Arrange-Act-Assert (AAA) Pattern
 
 Every unit test should follow the AAA pattern: **Arrange** the preconditions and inputs, **Act** by calling the code under test, and **Assert** that the outcome matches expectations. This three-phase structure makes tests immediately readable -- a developer can scan any test and know what is being set up, what is being exercised, and what is being verified. Keep each test focused on one assertion concept (though you may use multiple `assert` statements if they verify different facets of the same logical outcome). Name your tests descriptively so that a failure message reads like a sentence: `test_expired_coupon_raises_validation_error` tells you exactly what went wrong without opening the file.
@@ -172,6 +183,26 @@ def test_shipping_rejects_non_positive_weight(invalid_weight):
         calculate_shipping(invalid_weight)
 ```
 
+Running `pytest -v` expands each parameter set into its own reportable test:
+
+```text
+test_shipping.py::test_shipping_cost_tiers[lightest] PASSED
+test_shipping.py::test_shipping_cost_tiers[boundary-1kg] PASSED
+test_shipping.py::test_shipping_cost_tiers[over-1kg] PASSED
+test_shipping.py::test_shipping_cost_tiers[boundary-5kg] PASSED
+test_shipping.py::test_shipping_cost_tiers[over-5kg] PASSED
+test_shipping.py::test_shipping_cost_tiers[boundary-20kg] PASSED
+test_shipping.py::test_shipping_cost_tiers[over-20kg] PASSED
+test_shipping.py::test_shipping_cost_tiers[very-heavy] PASSED
+test_shipping.py::test_shipping_rejects_non_positive_weight[0] PASSED
+test_shipping.py::test_shipping_rejects_non_positive_weight[-1] PASSED
+test_shipping.py::test_shipping_rejects_non_positive_weight[-0.01] PASSED
+
+============================== 11 passed in 0.02s ==============================
+```
+
+**How to read this output:** The `ids=[...]` labels appear in brackets after the test name, which is exactly why naming your cases pays off -- if `[boundary-5kg]` had failed, the report would name the failing boundary directly instead of leaving you to count anonymous `[3]`-style indices. Note that one parametrized function produced eleven independently-reported results: a single off-by-one in the `<=` comparisons would fail only the relevant boundary case while the rest stayed green, isolating the defect for you.
+
 #### Edge Cases
 
 Thorough unit tests go beyond the "happy path." You must deliberately test empty inputs (empty strings, empty lists, zero-length collections), null or `None` values where the type system permits them, boundary values at the exact transitions of conditional logic, very large inputs that might trigger timeouts or memory issues, special characters and Unicode strings that could break parsing or serialization, and concurrent access patterns if the code is expected to be thread-safe. Each of these categories represents a class of real bugs that will eventually surface in production if left untested.
@@ -248,6 +279,18 @@ def test_encode_length_is_reasonable(text):
     assert len(encoded) >= 2  # at minimum one char + one digit
 ```
 
+When the roundtrip property holds, Hypothesis runs all 500 generated examples silently and the test simply passes. Its real value shows up on failure -- if `decode`/`encode` had a bug, the report looks like:
+
+```text
+Falsifying example: test_encode_decode_roundtrip(
+    text='AA',
+)
+...
+AssertionError: assert 'A2' == 'AA'
+```
+
+**How to read this output:** The `Falsifying example` is the minimal input Hypothesis arrived at after *shrinking* -- it may have first failed on a 40-character random string, then repeatedly simplified it down to the two-character `'AA'` that still triggers the bug. That shrinking is the feature that makes property-based testing worth the setup: instead of a noisy 40-char counterexample, you get the smallest reproduction, which is what you would paste into a regression test or a bug report. In practice this is how teams catch the Unicode and boundary cases nobody thought to enumerate by hand.
+
 > **Key Takeaway:** The testing pyramid puts unit tests at the foundation because they are fast, cheap, and precise. Use the AAA pattern for clarity, parametrize for breadth, fixtures and `conftest.py` for reuse, and Hypothesis for discovering the edge cases you did not think of. Aim for high coverage of business logic first; infrastructure wiring gets covered by integration tests.
 
 ---
@@ -319,6 +362,23 @@ def test_unique_isbn_constraint(postgres_engine):
                 {"t": "Duplicate", "i": "9780201485677", "p": 9.99},
             )
 ```
+
+Running `pytest -v test_integration_db.py` produces something like (container pull/start time varies):
+
+```text
+Pulling image postgres:16-alpine
+Container started: 7f3a9c1b2d4e
+Waiting for database to be ready...
+
+test_integration_db.py::test_insert_and_query_book PASSED   [ 50%]
+test_integration_db.py::test_unique_isbn_constraint PASSED  [100%]
+
+============================== 2 passed in 4.81s ==============================
+```
+
+**How to read this output:** Note the `4.81s` versus the milliseconds the unit suite took -- almost all of it is spinning up a real Postgres container, which is exactly why integration tests sit higher and thinner on the pyramid. Because the fixture is `scope="module"`, that container starts once and both tests share it; if it were function-scoped you would pay the startup cost per test. The payoff is that `test_unique_isbn_constraint` exercises the *real* `UNIQUE` constraint raising a genuine `IntegrityError` -- a class of bug a `MagicMock` repo can never catch, since a mock will happily "accept" a duplicate insert.
+
+> **Common pitfall:** testcontainers requires a running Docker daemon. In CI this means the job needs Docker-in-Docker or a mounted Docker socket, and the first run is slow because the image must be pulled -- cache the image in CI so every build does not re-download it.
 
 #### API Tests
 
@@ -527,6 +587,25 @@ locust -f locustfile.py --host=http://localhost:8000 \
     --csv=results/load_test
 ```
 
+In headless mode Locust prints a periodic stats table and a final aggregate summary that looks like (numbers depend entirely on your system under test):
+
+```console
+Type     Name                              # reqs    # fails |   Avg   Min   Max  Med | req/s failures/s
+--------|---------------------------------|--------|---------|------|-----|-----|----|------|----------
+GET      /api/books/ [list]                 18204     0(0.00%) |    42    11   310   38 | 121.4    0.00
+GET      /api/books/:id [detail]             9102     0(0.00%) |    35     9   288   31 |  60.7    0.00
+GET      /api/books/?search= [search]        5461    12(0.22%) |   118    21   940   95 |  36.4    0.08
+POST     /api/cart/items/ [add]              1820     3(0.16%) |    66    18   512   58 |  12.1    0.02
+--------|---------------------------------|--------|---------|------|-----|-----|----|------|----------
+         Aggregated                         34587    15(0.04%) |    52     9   940   40 | 230.6    0.10
+
+Response time percentiles (approximated)
+Type     Name                              50%   75%   90%   95%   99%  100%
+GET      /api/books/ [list]                 38    55    88   120   240   310
+```
+
+**How to read this output:** The `name=` labels you set in the locustfile are what group these rows -- without them, `/api/books/42/` and `/api/books/43/` would each be a separate line and the stats would be useless, so grouping by route template is essential. The `@task` weights show up in the request counts: `browse_books` (weight 10) drove ~18k requests while `add_to_cart` (weight 1) drove ~1.8k, roughly the 10:1 ratio you configured. The number that matters most for an SLA is the `95%`/`99%` percentile column, not `Avg` -- here the `search` endpoint's p99 of 940 ms is the tail latency a meaningful slice of real users actually feel, even though the average looks healthy. The `--csv` flag writes the same data to files so CI can diff it against a baseline.
+
 #### Types of Performance Tests
 
 There are four distinct types of performance tests, each answering a different question. **Load testing** simulates expected traffic levels to verify that the system meets its SLA under normal conditions. **Stress testing** pushes traffic beyond the system's designed capacity to find the breaking point -- at what concurrency level do error rates spike or response times become unacceptable? **Soak testing** (also called endurance testing) runs a sustained moderate load for hours or days to detect slow resource leaks: memory that grows monotonically, database connections that are never returned to the pool, or disk usage that creeps up. **Spike testing** sends a sudden burst of traffic (for example, simulating a flash sale) to verify that auto-scaling, rate limiting, and circuit breakers respond correctly.
@@ -555,5 +634,17 @@ def test_fibonacci_benchmark(benchmark):
     result = benchmark(fibonacci, 100)
     assert result == 354224848179261915075
 ```
+
+`pytest-benchmark` runs the target many times and prints a statistics table (exact timings vary by machine):
+
+```text
+------------------------------- benchmark: 1 tests -------------------------------
+Name (time in us)        Min      Max     Mean   StdDev   Median     OPS  Rounds
+----------------------------------------------------------------------------------
+test_fibonacci_benchmark 4.21    18.93     4.58    0.91     4.39  218.1K   42153
+----------------------------------------------------------------------------------
+```
+
+**How to read this output:** Unlike a normal `pytest` run, the `benchmark` fixture calls `fibonacci(100)` thousands of times (`Rounds=42153`) so the statistics are stable rather than a single noisy timing. Focus on `Median` and `Min`, not `Max` -- `Max` is usually an outlier caused by the OS scheduler or GC pausing the process, whereas the median reflects steady-state cost. The reason to commit these numbers is regression detection: `pytest-benchmark` can save this run as a baseline (`--benchmark-autosave`) and fail CI if a later commit makes the median regress beyond a threshold, catching the slow change at the exact commit that introduced it.
 
 > **Key Takeaway:** Performance testing is not optional for production systems. Use Locust for realistic load simulation, measure percentile latencies (not just averages), and automate regression detection in CI so you never ship a slow change unknowingly.

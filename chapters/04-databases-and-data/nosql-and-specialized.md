@@ -246,6 +246,16 @@ for message in pubsub.listen():
         print(f"Notification: {data}")
 ```
 
+When the publisher fires, the subscriber's loop wakes and prints something like:
+
+```text
+Notification: {'type': 'new_message', 'from': 'alice', 'preview': 'Hey, are you available?'}
+```
+
+**How to read this output:** `pubsub.listen()` is a blocking generator that yields control-frame messages too (the `subscribe` confirmation arrives first with `type == 'subscribe'`), which is why the `if message['type'] == 'message'` guard matters -- without it you would try to `json.loads` the subscription acknowledgement and crash. The key production caveat: Redis Pub/Sub is fire-and-forget. If no subscriber is connected at publish time, the message is dropped -- there is no replay. When you need durable delivery and consumer groups, reach for Streams instead. This distinction is a common interview probe.
+
+> **Common pitfall:** A connection sitting in `pubsub.listen()` cannot issue other commands on that same connection. Run subscribers on a dedicated connection (or thread/process), not the one your application uses for normal reads and writes.
+
 #### Persistence
 
 **RDB (Redis Database)** snapshots save the entire dataset to a binary file at configured intervals. The snapshot is a compact, point-in-time representation. It is fast to load on startup but you can lose data since the last snapshot.
@@ -404,6 +414,20 @@ db.articles.find({ $text: { $search: "database optimization" } })
 db.orders.find({ status: "pending" }).sort({ created_at: -1 }).explain("executionStats")
 ```
 
+The `explain("executionStats")` call returns a large JSON document; the fields that matter are buried in `executionStats` and `winningPlan`:
+
+```text
+"winningPlan": { "stage": "IXSCAN", "indexName": "status_1_created_at_-1" }
+"executionStats": {
+    "nReturned": 37,
+    "totalKeysExamined": 37,
+    "totalDocsExamined": 37,
+    "executionTimeMillis": 2
+}
+```
+
+**How to read this output:** The goal is `totalKeysExamined` and `totalDocsExamined` being close to `nReturned` -- here all three are 37, meaning the compound index `{ status: 1, created_at: -1 }` satisfied both the filter and the sort, so MongoDB walked exactly the rows it returned. If you saw `"stage": "COLLSCAN"` or `totalDocsExamined` in the thousands while `nReturned` was 37, the query is scanning the whole collection and the index is not being used (often because the sort direction does not match the index). A second red flag is a `SORT` stage in the plan: it means MongoDB had to sort in memory rather than reading rows in index order, which fails outright once the result exceeds the 100 MB sort limit. This is the MongoDB equivalent of reading a PostgreSQL `EXPLAIN ANALYZE`, and interviewers expect you to name the keys-examined-vs-returned ratio as the headline metric.
+
 #### Aggregation Pipeline
 
 The aggregation pipeline is MongoDB's framework for data transformation and analysis. Each stage transforms the documents as they pass through:
@@ -433,6 +457,16 @@ db.orders.aggregate([
     }}
 ])
 ```
+
+A typical result set looks like this (one document per year/month/category group):
+
+```text
+{ "year": 2025, "month": 5, "category": "Electronics", "revenue": 184230.5, "order_count": 412 }
+{ "year": 2025, "month": 5, "category": "Accessories", "revenue": 21899.4,  "order_count": 880 }
+{ "year": 2025, "month": 6, "category": "Electronics", "revenue": 203117.0, "order_count": 451 }
+```
+
+**How to read this output:** Each stage reshaped the stream that flowed into it. `$unwind: "$items"` was the pivotal step -- it exploded each order into one document per line item, so an order with three items became three documents before the `$group`. That is why `order_count` counts line items in a category, not distinct orders; a frequent bug is reading this number as "orders placed." `$round` exists because `$multiply` on floating-point prices accumulates noise (1059.9700000000001), so you round at the projection stage rather than trusting raw float sums. In an interview, the expected insight is that ordering `$match` before `$unwind` lets MongoDB use an index to discard non-shipped orders early, keeping the expensive unwind off the full collection.
 
 #### Replication and Sharding
 
@@ -588,6 +622,19 @@ ALTER TABLE metrics SET (
 );
 SELECT add_compression_policy('metrics', INTERVAL '7 days');
 ```
+
+The `time_bucket` aggregation query in the middle of that block returns rows grouped into fixed one-hour windows:
+
+```text
+         hour          | device_id | avg_temp | max_temp | min_temp
+-----------------------+-----------+----------+----------+----------
+ 2025-06-04 14:00:00+00 | sensor-01 |    22.48 |     23.1 |     21.9
+ 2025-06-04 14:00:00+00 | sensor-02 |    19.73 |     20.4 |     19.0
+ 2025-06-04 13:00:00+00 | sensor-01 |    22.51 |     23.0 |     22.0
+(3 rows)
+```
+
+**How to read this output:** `time_bucket('1 hour', time)` is the time-series analog of `GROUP BY` on a rounded timestamp -- it snaps every raw reading to the start of its hour, so thousands of per-second samples collapse into one row per sensor per hour. Note the timestamps land exactly on the hour (`14:00:00`, `13:00:00`), which is what makes the buckets comparable across devices and joinable to other hourly series. In production this query is cheap because TimescaleDB only touches the chunks covering the last 24 hours rather than the whole table; the `CREATE MATERIALIZED VIEW ... timescaledb.continuous` defined just below pre-computes exactly this rollup so dashboards read from `hourly_metrics` instead of recomputing the average on every page load.
 
 Other notable time-series databases include **InfluxDB** (purpose-built for metrics with its own query language, Flux), **Prometheus** (pull-based monitoring system with PromQL), and **ClickHouse** (column-oriented analytics database with exceptional query speed on large datasets).
 

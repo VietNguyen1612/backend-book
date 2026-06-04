@@ -67,6 +67,16 @@ notifier = create_notification("sms")
 notifier.send("+1234567890", "Your order has shipped!")
 ```
 
+Running this prints:
+
+```text
+Sending SMS to +1234567890: Your order has shipped!
+```
+
+**How to read this output:** The caller never wrote `SMSNotification()` directly -- it passed the string `"sms"` and got back the right concrete class. That indirection is the whole point: in production, the channel usually comes from config, a database column, or the request body, so the calling code stays the same whether the system adds Slack, webhook, or in-app channels later. Swapping the `factories` dict (or loading it from an entry-point registry) extends behavior without touching `notifier.send(...)`.
+
+> **Common pitfall:** A factory that grows a long `if/elif channel == ...` ladder instead of a lookup table is a classic code smell -- every new type forces an edit to the same function, violating open/closed. The dict-dispatch form above sidesteps that, and raising `ValueError` on an unknown key surfaces typos loudly instead of silently returning `None`.
+
 In a Django project, the Factory Method appears when creating serializers based on request type, instantiating different storage backends based on settings, or building different queryset filters dynamically.
 
 ---
@@ -402,6 +412,15 @@ process_order(stripe_processor, 99.99)
 process_order(paypal_processor, 99.99)
 ```
 
+Running this prints:
+
+```text
+Stripe: charging 9999 usd
+PayPal: paying 99.99 USD
+```
+
+**How to read this output:** Notice the two SDKs disagree on everything -- Stripe wants integer cents (`9999`) and a lowercase currency, PayPal wants a formatted string (`99.99`) and uppercase. The adapter absorbs those differences so `process_order` only ever calls `charge(total, "USD")`. This is exactly why adapters matter in production: when you switch payment providers, add a fallback processor, or run an A/B split between gateways, the business logic that calls `charge(...)` never changes -- only which adapter you inject does. The normalized return shape (`{"provider", "transaction_id", "status"}`) is what lets downstream code log and reconcile transactions uniformly.
+
 In a Django project, adapters are used when integrating multiple email providers (SendGrid, Mailgun, SES), storage backends (S3, GCS, local filesystem), or authentication providers (OAuth2, SAML, LDAP).
 
 ---
@@ -486,6 +505,17 @@ fetcher = LoggingDecorator(fetcher)
 result = fetcher.fetch("user:42")
 ```
 
+The decorators use the `logging` module, so you only see output if logging is configured (e.g. `logging.basicConfig(level=logging.INFO)`). With logging enabled, the first call to `fetch("user:42")` prints something like:
+
+```text
+INFO:__main__:Fetching key=user:42
+INFO:__main__:Fetched key=user:42 in 0.103s
+```
+
+**How to read this output:** The log lines come from the outermost wrapper (`LoggingDecorator`) -- the request enters at the top of the stack and falls through `Retry -> Caching -> Database`, then unwinds back up. The `0.103s` reflects the real `time.sleep(0.1)` in `DatabaseFetcher`. Call `fetch("user:42")` a second time and the timing drops to near zero because `CachingDecorator` short-circuits before the database layer ever runs (and emits `Cache hit for user:42`). The order in which you wrap matters: putting caching *inside* logging means cache hits are still logged; flipping them would log only genuine misses.
+
+> **Common pitfall:** Decorator order is a real source of production bugs. If you wrap retry *outside* logging, each retry attempt gets logged separately; if you wrap caching *outside* retry, a cached failure can mask a now-recovered backend. Always reason about which responsibility should run first.
+
 This is a powerful technique because you can add, remove, or reorder behaviors without modifying the base class.
 
 ---
@@ -567,6 +597,19 @@ facade = OrderFacade()
 tracking = facade.place_order("PROD-1", 2, 59.99, "tok_abc", "123 Main St", "a@b.com")
 ```
 
+Running this prints:
+
+```text
+Checking stock for PROD-1
+Reserved 2 of PROD-1
+Authorized $59.99
+Captured auth_123
+Shipment created for PROD-1 to 123 Main St
+Confirmation sent to a@b.com for SHIP_456
+```
+
+**How to read this output:** Each line comes from a different subsystem, but the client issued exactly one call. That is the facade's value -- it collapses a six-step orchestration (inventory, payment, shipping, notification) into `place_order(...)`, so a view or API handler never has to know the correct ordering or which services to wire together. The sequence also encodes the business rule: stock is reserved *before* payment, and the customer is notified only after a tracking number exists. In real systems this is where service-layer classes live; keeping orchestration here (not in the view) is what keeps controllers thin and the workflow testable in isolation.
+
 In a Django project, service classes often act as facades that coordinate models, external APIs, and notifications behind a single method that views can call.
 
 ---
@@ -633,6 +676,16 @@ db = LazyDatabaseProxy("postgresql://localhost/mydb")  # No connection yet
 print("Proxy created, no connection established yet")
 result = db.query("SELECT * FROM users")  # NOW it connects
 ```
+
+Running this prints:
+
+```text
+Proxy created, no connection established yet
+Connecting to postgresql://localhost/mydb...
+Executing: SELECT * FROM users
+```
+
+**How to read this output:** The key signal is *ordering*. Constructing the proxy prints nothing about connecting -- the `Connecting to...` line (and its one-second delay from `time.sleep(1)`) appears only when `query()` runs and triggers `_get_db()`. That deferral is the whole purpose of a virtual proxy: in a web request that may short-circuit early (a cache hit, a 403, a validation error), you never pay the expensive connection cost unless you actually need the resource. Query the proxy a second time and `Connecting to...` does *not* reprint, because `_real_db` is now cached. This is precisely how Django's `SimpleLazyObject` defers loading `request.user` until a view actually touches it.
 
 In Python, `__getattr__` provides a concise way to implement proxies by delegating attribute access to the wrapped object. Django's `SimpleLazyObject` is a real-world example of a virtual proxy.
 
@@ -861,6 +914,27 @@ cart = ShoppingCart(SeasonalPricing(multiplier=1.5))
 print(f"  Total: ${cart.checkout(items):.2f}")
 ```
 
+Running this prints:
+
+```text
+Regular pricing:
+  Widget: $1998.00
+  Gadget: $124.95
+  Total: $2122.95
+
+Bulk pricing:
+  Widget: $1798.20
+  Gadget: $124.95
+  Total: $1923.15
+
+Holiday pricing (1.5x):
+  Widget: $2997.00
+  Gadget: $187.42
+  Total: $3184.42
+```
+
+**How to read this output:** Same cart, same items, three totals -- only the injected strategy changed. The `Widget` line tells the story: 200 units at $9.99 is $1998.00 under regular pricing, but $1798.20 under bulk (the 10% discount kicks in because quantity > 100), and $2997.00 under the 1.5x seasonal multiplier. `Gadget` (5 units) gets no bulk discount because it is under the 100-unit threshold, which is why its price only changes under seasonal pricing. This is the production payoff of Strategy: pricing rules, A/B experiments, and promotional campaigns become a runtime choice rather than branching logic baked into `checkout()` -- you can pull the active strategy from a feature flag or a customer's plan tier without rewriting the cart.
+
 Strategy is one of the most commonly used patterns in backend development. In a Django project, you might use it for: different serialization formats (JSON, CSV, XML), different authentication methods, different search backends, or different caching strategies.
 
 ---
@@ -1064,6 +1138,19 @@ req = Request(
 )
 result = auth.handle(req)
 ```
+
+Running this prints:
+
+```text
+[Auth] Authenticated as user_for_Bearer abc123
+[RateLimit] user_for_Bearer abc123: 1/10
+[Log] GET /api/orders by user_for_Bearer abc123
+[Log] Response: 200
+```
+
+**How to read this output:** Read the lines top to bottom as the request travelling *into* the chain (`Auth -> RateLimit -> Log`) and then the last `[Log] Response: 200` as it unwinds back *out*. Each handler did its one job and called `pass_to_next(request)` to continue. The decisive feature is short-circuiting: if the `Authorization` header had been missing, `AuthenticationMiddleware` would have set `response_code = 401` and returned immediately -- you would see only the auth line, and rate-limiting and logging would never run. That early-exit-on-failure is exactly what you want in a real request pipeline, and it is how Django's `settings.MIDDLEWARE` list behaves: order determines which checks gate the others.
+
+> **Common pitfall:** Middleware ordering is load-bearing. Put rate limiting *before* authentication and you let unauthenticated traffic consume your rate-limit budget; put logging at the very end and a handler that short-circuits earlier produces no log line at all. The chain's order is a design decision, not an implementation detail.
 
 This is exactly how Django middleware and ASGI/WSGI middleware stacks work. Each middleware in `settings.MIDDLEWARE` forms a link in the chain, processing the request on the way in and the response on the way out.
 

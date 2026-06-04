@@ -189,6 +189,19 @@ ruff format --check .           # Check without modifying
 # Configuration in pyproject.toml:
 ```
 
+Running `ruff check .` on a project with issues prints something like:
+
+```console
+$ ruff check .
+app/handlers.py:12:1: F401 [*] `os` imported but unused
+app/handlers.py:45:5: B006 Do not use mutable data structures for argument defaults
+app/models.py:8:1: I001 [*] Import block is un-sorted or un-formatted
+Found 3 errors.
+[*] 2 fixable with the `--fix` option.
+```
+
+**What's happening:** Each line is `file:line:col: RULE message`. The `[*]` marker means ruff can auto-fix it (`ruff check --fix .` would rewrite those two). Codes map to the rule families you enabled in `select` -- `F401` is pyflakes (dead import), `B006` is bugbear (the mutable-default bug), `I001` is isort. In CI this command's non-zero exit code is what fails the build, which is exactly why you wire it into pre-commit and your pipeline rather than relying on developers to run it.
+
 ```toml
 [tool.ruff]
 target-version = "py311"
@@ -301,6 +314,25 @@ pre-commit install
 pre-commit run --all-files
 ```
 
+A `pre-commit run --all-files` invocation prints one line per hook:
+
+```console
+$ pre-commit run --all-files
+ruff.....................................................................Passed
+ruff-format..............................................................Passed
+mypy.....................................................................Failed
+- hook id: mypy
+- exit code: 1
+
+app/service.py:23: error: Argument 1 to "save" has incompatible type "str"; expected "int"  [arg-type]
+Found 1 error in 1 file (checked 12 source files)
+
+trailing-whitespace......................................................Passed
+detect-private-key.......................................................Passed
+```
+
+**How to read this output:** Each hook reports `Passed`, `Failed`, or `Skipped`. A single `Failed` hook aborts the whole run with a non-zero exit, which is what blocks the `git commit`. Note that hooks like `ruff --fix` and `trailing-whitespace` *modify your files* when they fail -- you then `git add` the fixes and re-commit. This is the production value of pre-commit: bad code never reaches the shared branch, so reviewers spend time on logic rather than on formatting nits.
+
 #### pytest: Testing Framework
 
 ```python
@@ -388,6 +420,30 @@ def client(app):
 # $ open htmlcov/index.html
 ```
 
+A `pytest --cov` run with `term-missing` ends with a per-file table:
+
+```console
+$ pytest --cov=mypackage --cov-report=term-missing
+======================== test session starts ========================
+collected 14 items
+
+tests/test_users.py ........                                   [ 57%]
+tests/test_api.py ......                                        [100%]
+
+---------- coverage: platform linux, python 3.11.6 -----------
+Name                      Stmts   Miss  Cover   Missing
+-------------------------------------------------------
+mypackage/__init__.py         2      0   100%
+mypackage/api.py             48      5    90%   31-34, 67
+mypackage/users.py           36      0   100%
+-------------------------------------------------------
+TOTAL                        86      5    94%
+
+========================= 14 passed in 0.42s =========================
+```
+
+**How to read this output:** `Stmts` is executable statements, `Miss` is how many were never run by any test, and `Missing` lists the exact line numbers -- so `api.py` lines 31-34 and 67 are untested. The `Missing` column is the actionable part: it tells you *which branches* to write tests for, far more useful than a single percentage. A common interview point: high coverage proves lines were *executed*, not that behavior was *asserted* -- you can hit 100% with tests that assert nothing, so treat coverage as a floor, not a quality guarantee.
+
 > **Key Takeaway:** Use `ruff` for linting and formatting (replaces multiple tools), `pre-commit` to enforce quality on every commit, and `pytest` with fixtures, parametrize, and coverage for thorough testing. Automate everything -- quality checks that require manual effort do not get done consistently.
 
 ---
@@ -461,6 +517,23 @@ with profile_section("data processing"):
     data = [i ** 2 for i in range(1_000_000)]
     filtered = [x for x in data if x % 2 == 0]
 ```
+
+Running the `profile_section` context manager prints something like (exact times vary by machine):
+
+```text
+--- Profile: data processing ---
+         4 function calls in 0.118 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.071    0.071    0.118    0.118 <stdin>:1(<module>)
+        1    0.047    0.047    0.047    0.047 <stdin>:2(<listcomp>)
+```
+
+**How to read this output:** `tottime` is time spent *inside* a function excluding sub-calls; `cumtime` includes everything it calls. You sort by `cumulative` to find which top-level call dominates, then by `tottime` to find where the CPU is actually burned. In a real service, this is how you isolate "the request handler is slow" down to "the JSON serialization inside it is slow" -- the `cumtime`/`tottime` split is the whole point. The context-manager pattern matters in practice because it lets you profile one suspicious block of a long-running process without restarting it under `-m cProfile`.
+
+> **Common pitfall:** `cProfile` adds per-call overhead (it instruments every function call), so absolute times are inflated and call-heavy code looks disproportionately worse. Use it for *relative* comparison to find hot spots, not for reporting real-world latency -- for that, use a sampling profiler like `py-spy`.
 
 #### line_profiler: Line-by-Line Analysis
 

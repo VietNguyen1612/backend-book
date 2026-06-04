@@ -208,6 +208,19 @@ PASSWORD_HASHERS = [
 ]
 ```
 
+Inspecting what these functions actually store is instructive. If you call `bcrypt.hashpw(b"hunter2", bcrypt.gensalt(rounds=12))` and `ph.hash("hunter2")` at a REPL, you get something like (the random salt changes every run, so hashing the same password twice yields different strings):
+
+```text
+>>> bcrypt.hashpw(b"hunter2", bcrypt.gensalt(rounds=12))
+b'$2b$12$Nf3qOe0u4Yk1bQ5h2wJ8r.eA7sKpZ9XvLmTcDwG6yH0iN4kQ2pSe'
+>>> ph.hash("hunter2")
+'$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQ$RdescudvJCsgt3ub+b+dWRWJTmaQR8FW5g'
+```
+
+**How to read this output:** the hash string is self-describing. For bcrypt, `$2b$` is the algorithm version, `12` is the cost factor (2^12 = 4096 key-expansion rounds), and the next 22 characters are the base64-encoded salt — all stored inline, which is why you never need a separate salt column. Argon2 similarly encodes `m=65536,t=3,p=4` (memory, iterations, parallelism) plus the salt. Because the cost parameters travel with the hash, `verify()` reads them back automatically, and you can raise the cost factor for new users without breaking existing logins. In an interview, the key point is: a fast hash like MD5 produces a fixed 32-hex-char digest with no salt and no tunable cost, so attackers crack billions per second — bcrypt/Argon2 deliberately make each guess expensive.
+
+> **Common pitfall:** because the salt is random, the same password hashes to a different string every time, so you must verify with `checkpw`/`verify` (constant-time comparison) — never compare hash strings with `==`, and never try to "look up" a user by their password hash.
+
 **SECURE code -- Account lockout with progressive delay:**
 
 ```python
@@ -656,6 +669,24 @@ def load_user_preferences(request):
     return preferences
 ```
 
+To make the danger concrete, build that payload at a REPL and watch `pickle.loads` run code just by being called — no method invocation on your part is needed:
+
+```text
+>>> import pickle, os, base64
+>>> class Exploit:
+...     def __reduce__(self):
+...         return (os.system, ('echo PWNED',))
+...
+>>> payload = base64.b64encode(pickle.dumps(Exploit()))
+>>> payload
+b'gASVKАAAAAAAAACMBXBvc2l4lIwGc3lzdGVtlJOUjAplY2hvIFBXTkVElIWUUpQu'
+>>> pickle.loads(base64.b64decode(payload))   # deserializing alone triggers it
+PWNED
+0
+```
+
+**How to read this output:** the `0` at the end is the return value of `os.system` (the shell exit code), and `PWNED` is printed because the shell command ran *during* `pickle.loads` — the attacker never needs the server to call any method on the object. `__reduce__` tells pickle "to reconstruct me, call `os.system('echo PWNED')`," and pickle obediently does so. This is why pickle is equivalent to remote code execution whenever the input is attacker-controlled: a malicious cookie, cache entry, or message-queue payload is enough. In production this is exactly how attackers turn a "we just cache some user preferences" feature into a full server takeover, so the rule is absolute: never `pickle.loads` anything that crossed a trust boundary.
+
 **SECURE code -- Using JSON (safe format):**
 
 ```python
@@ -1063,6 +1094,20 @@ def handle_upload(request):
     file_url = f"https://cdn.example.com/uploads/{safe_filename}"
     return JsonResponse({"url": file_url})
 ```
+
+The reason step 2 reads the bytes instead of trusting the filename is best seen directly. If an attacker renames a PHP web shell to `cat.png` and uploads it, `magic` inspects the actual content (the "magic bytes" at the start of the file) and is not fooled:
+
+```text
+>>> import magic
+>>> magic.from_buffer(open("cat.png", "rb").read(2048), mime=True)
+'text/x-php'
+>>> magic.from_buffer(open("real_photo.jpg", "rb").read(2048), mime=True)
+'image/jpeg'
+```
+
+**How to read this output:** even though the file is named `cat.png`, libmagic reports `text/x-php`, so the `detected_type not in ALLOWED_MIME_TYPES` check rejects it. A naive check on the `.png` extension would have accepted the web shell, and if it landed in a directory the web server executes, the attacker now runs arbitrary code on your host. This is why the comment insists on validating by magic bytes rather than extension — extension and the browser-supplied `Content-Type` are both attacker-controlled and prove nothing.
+
+> **Common pitfall:** validating content type is necessary but not sufficient. Always also store uploads outside the webroot with a randomized filename (as steps 3-5 do) and serve them from a separate domain — even a genuine image can carry an embedded script that browsers may execute if the file is served from your application's origin.
 
 #### Rate Limiting
 

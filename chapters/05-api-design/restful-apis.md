@@ -233,6 +233,8 @@ HATEOAS is the constraint that responses should include hyperlinks to related re
 
 While HATEOAS is part of the formal REST definition (as described by Roy Fielding), it is rarely implemented fully in practice. Most real-world APIs settle for "pragmatic REST" -- well-designed URIs and HTTP methods without full hypermedia controls. If you do implement it, consider established formats like HAL (Hypertext Application Language) or JSON:API.
 
+> **Key Takeaway:** The core of REST is a clean division of labor: the URI names the *resource* (a noun) and the HTTP method names the *action*, while the status code reports the *outcome*. Get those three right -- nouns in paths, correct method semantics including idempotency, and accurate status codes -- and you have a predictable API even without full HATEOAS, which most teams skip.
+
 ### API Design Best Practices
 
 **Versioning**
@@ -328,6 +330,20 @@ curl "http://localhost:8000/api/v1/users?after_id=100&limit=20"
 
 The corresponding SQL: `SELECT * FROM users WHERE id > 100 ORDER BY id LIMIT 20;`
 
+Running that query against a populated table returns something like:
+
+```text
+ id  | name      | created_at
+-----+-----------+---------------------
+ 101 | User 101  | 2025-01-02 09:14:00
+ 102 | User 102  | 2025-01-02 09:15:31
+ ...
+ 120 | User 120  | 2025-01-02 10:02:11
+(20 rows)
+```
+
+**How to read this output:** Notice there is no `OFFSET` — the `WHERE id > 100` predicate jumps straight to the right slice using the primary-key index, so the database reads ~20 rows instead of scanning the 100 it would skip with `OFFSET 100`. That difference is invisible at this scale but becomes the gap between a 5ms and a multi-second query at page 50,000, which is exactly the "deep pagination" failure interviewers probe and that takes down production list endpoints on large tables.
+
 FastAPI implementation of cursor-based pagination:
 
 ```python
@@ -372,6 +388,26 @@ def list_users(
         },
     }
 ```
+
+Calling the endpoint with no cursor (`GET /api/v1/users?limit=3`) returns:
+
+```text
+{
+  "data": [
+    {"id": 1, "name": "User 1"},
+    {"id": 2, "name": "User 2"},
+    {"id": 3, "name": "User 3"}
+  ],
+  "pagination": {
+    "next_cursor": "eyJpZCI6IDN9",
+    "has_more": true
+  }
+}
+```
+
+**How to read this output:** The handler deliberately asks the database for `limit + 1` rows; if it gets back more than `limit`, it knows there is at least one more page, sets `has_more: true`, and trims the extra row before responding. That is why you get a `next_cursor` here — it is the base64 encoding of `{"id": 3}`, the id of the last row actually returned. The client treats it as opaque and simply echoes it back on the next call (`?cursor=eyJpZCI6IDN9`); it should never decode or fabricate it. This "fetch one extra to detect more" trick avoids a second `COUNT(*)` query just to compute `has_more`, which matters because `COUNT(*)` on a large table is itself a slow scan.
+
+> **Common pitfall:** Cursor pagination assumes a stable, unique sort key. If you paginate on a non-unique column (e.g. `created_at` with duplicate timestamps), rows sharing the boundary value get skipped or repeated across pages. Always include a tiebreaker like `(created_at, id)` in both the `ORDER BY` and the cursor.
 
 **Filtering and Sorting**
 
@@ -430,6 +466,20 @@ def list_users(
 
     return {"data": results}
 ```
+
+For the request `GET /api/v1/users?status=active&sort=-created_at&fields=id,name`, the response is the filtered, field-trimmed projection:
+
+```text
+{
+  "data": [
+    {"id": 1, "name": "Alice"}
+  ]
+}
+```
+
+**How to read this output:** Only `id` and `name` survive because `fields=id,name` drove the sparse-fieldset filter — `email`, `status`, and `created_at` were dropped during serialization even though the row carries them. The detail that matters for production and interviews is the `allowed = {"created_at", "name", "email"}` allowlist guarding the `ORDER BY`: because `column` is interpolated directly into the SQL string (it cannot be a bound parameter — you cannot parameterize a column name), an attacker passing `sort=-(SELECT ...)` would otherwise inject. Checking the column against a fixed set before f-stringing it is what makes this safe.
+
+> **Common pitfall:** Filter and sort values can usually be bound as query parameters, but identifiers (column and table names) cannot. Reviewers should treat any f-string or concatenation that places user input into a SQL identifier position as a SQL-injection finding unless it is gated by an allowlist exactly like the one above.
 
 **Error Format**
 
@@ -728,6 +778,29 @@ def create_user(user: UserCreate):
 # Visit http://localhost:8000/redoc for ReDoc
 # GET  http://localhost:8000/openapi.json for the raw spec
 ```
+
+Fetching `GET /openapi.json` returns the machine-readable contract FastAPI derived from those type hints (abridged):
+
+```text
+{
+  "openapi": "3.1.0",
+  "info": {"title": "User Service", "description": "Manages user accounts", "version": "1.0.0"},
+  "servers": [{"url": "https://api.example.com", "description": "Production"}],
+  "paths": {
+    "/users": {
+      "post": {
+        "summary": "Create a user",
+        "tags": ["Users"],
+        "responses": {"201": {"description": "Successful Response", ...}},
+        "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserCreate"}}}}
+      }
+    }
+  },
+  "components": {"schemas": {"UserCreate": {"properties": {"name": {"type": "string"}, "email": {"type": "string", "format": "email"}}, "required": ["name", "email"]}}}
+}
+```
+
+**How to read this output:** Nothing here was hand-written — the `summary`, `tags`, and `201` came from the decorator arguments, while the `UserCreate` schema (including `format: "email"` and the `required` list) was reflected out of the Pydantic model and `EmailStr` type. This is why FastAPI's docs cannot drift from the code: the spec *is* the code, re-derived on every boot. The same `$ref`-based schema is what client-SDK generators and contract-testing tools consume, so accurate type annotations directly buy you accurate generated clients.
 
 **Design-First Approach**
 

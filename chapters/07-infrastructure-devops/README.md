@@ -21,3 +21,11 @@ Automating the path from code commit to production with quality gates, deploymen
 Gaining visibility into system behavior through the three pillars of observability: logs, metrics, and traces.
 - Logging: structured logging with structlog, log levels, correlation IDs, log aggregation (ELK, Loki), sampling
 - Metrics & Monitoring: Prometheus, Grafana & PromQL, RED method, USE method, Four Golden Signals, alerting best practices
+
+---
+
+## Homework
+
+Hands-on exercises for this chapter -- see [homework/questions.md](homework/questions.md). Skeleton files (`hw_*.py`) live alongside the questions in the [`homework/`](homework/) folder.
+
+[Back to Book Index](../../README.md)

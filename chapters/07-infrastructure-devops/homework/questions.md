@@ -1,1 +1,16 @@
-# Comprehensive Homework: 07-infrastructure-devops\n\n## Docker: Multi-stage Builder\nWrite a script that validates if a provided text resembles a valid multi-stage Dockerfile.\n**Implement in**: `hw_docker.py`\n\n## CI/CD: Blue/Green Simulator\nSimulate shifting traffic between blue and green environments.\n**Implement in**: `hw_cicd.py`\n\n## Observability: Tracing Span\nImplement a Context Manager that acts as a tracing 'Span' to record execution time.\n**Implement in**: `hw_observability.py`\n
+# Comprehensive Homework: 07-infrastructure-devops
+
+[Back to Chapter](../README.md) | [Back to Book Index](../../../README.md)
+
+
+## Docker: Multi-stage Builder
+Write a script that validates if a provided text resembles a valid multi-stage Dockerfile.
+**Implement in**: `hw_docker.py`
+
+## CI/CD: Blue/Green Simulator
+Simulate shifting traffic between blue and green environments.
+**Implement in**: `hw_cicd.py`
+
+## Observability: Tracing Span
+Implement a Context Manager that acts as a tracing 'Span' to record execution time.
+**Implement in**: `hw_observability.py`

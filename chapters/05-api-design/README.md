@@ -21,4 +21,8 @@ Securing your APIs. Covers authentication mechanisms (OAuth 2.0 flows, JWT with 
 
 ---
 
+## Homework
+
+Hands-on exercises for this chapter -- see [homework/questions.md](homework/questions.md). Skeleton files (`hw_*.py`) live alongside the questions in the [`homework/`](homework/) folder.
+
 [Back to Book Index](../../README.md)

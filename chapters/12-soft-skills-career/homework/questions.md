@@ -1,1 +1,12 @@
-# Comprehensive Homework: 12-soft-skills-career\n\n## Communication: Review Bot\nWrite a script to flag unconstructive language in a code review string.\n**Implement in**: `hw_communication.py`\n\n## Career: Promotion Parser\nWrite a script that parses a Markdown document describing achievements and validates if it meets 'Senior' criteria.\n**Implement in**: `hw_career.py`\n
+# Comprehensive Homework: 12-soft-skills-career
+
+[Back to Chapter](../README.md) | [Back to Book Index](../../../README.md)
+
+
+## Communication: Review Bot
+Write a script to flag unconstructive language in a code review string.
+**Implement in**: `hw_communication.py`
+
+## Career: Promotion Parser
+Write a script that parses a Markdown document describing achievements and validates if it meets 'Senior' criteria.
+**Implement in**: `hw_career.py`

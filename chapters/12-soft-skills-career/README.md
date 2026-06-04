@@ -7,4 +7,10 @@ This chapter covers the non-technical skills that determine whether your technic
 1. [12.1 Communication](communication.md) -- Technical writing (RFCs, READMEs, runbooks, ADRs) and stakeholder communication (translating technical concepts, honest estimation, saying no constructively).
 2. [12.2 Career Progression](career-progression.md) -- Skills matrix across levels, the mid-to-senior transition (ownership, systematic debugging, mentoring), and the senior-to-architect transition (systems thinking, technology choices, influence, technical vision).
 
+---
+
+## Homework
+
+Hands-on exercises for this chapter -- see [homework/questions.md](homework/questions.md). Skeleton files (`hw_*.py`) live alongside the questions in the [`homework/`](homework/) folder.
+
 [Back to Book Index](../../README.md)

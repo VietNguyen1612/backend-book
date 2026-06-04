@@ -38,3 +38,11 @@ Quantitative reasoning to guide architecture decisions before writing code.
 - Walkthrough: URL Shortener scale estimation
 - Walkthrough: Chat System scale estimation
 - Walkthrough: Notification System scale estimation
+
+---
+
+## Homework
+
+Hands-on exercises for this chapter -- see [homework/questions.md](homework/questions.md). Skeleton files (`hw_*.py`) live alongside the questions in the [`homework/`](homework/) folder.
+
+[Back to Book Index](../../README.md)

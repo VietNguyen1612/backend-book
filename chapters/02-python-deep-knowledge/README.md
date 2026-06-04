@@ -17,3 +17,11 @@ Key design patterns and language features for writing expressive Python. Covers 
 
 ### [2.4 Packaging & Tooling](packaging-and-tooling.md)
 Modern Python project setup and development workflow. Covers dependency management (`pyproject.toml`, Poetry, pip-tools, uv, virtual environments), code quality (Ruff linter/formatter, pre-commit hooks, pytest testing framework), and profiling and optimization (cProfile, line_profiler, py-spy, practical optimization strategies).
+
+---
+
+## Homework
+
+Hands-on exercises for this chapter -- see [homework/questions.md](homework/questions.md). Skeleton files (`hw_*.py`) live alongside the questions in the [`homework/`](homework/) folder.
+
+[Back to Book Index](../../README.md)

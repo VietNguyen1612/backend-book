@@ -148,4 +148,25 @@ The multiplier skills. Technical writing (RFCs, runbooks, ADRs), stakeholder com
 
 ---
 
+## Homework
+
+Each chapter ships with hands-on exercises and skeleton files (`hw_*.py`) to implement. Pick a chapter and start building.
+
+| Chapter | Exercises |
+|---|---|
+| 1. CS Fundamentals | [questions.md](chapters/01-cs-fundamentals/homework/questions.md) |
+| 2. Python Deep Knowledge | [questions.md](chapters/02-python-deep-knowledge/homework/questions.md) |
+| 3. Software Architecture | [questions.md](chapters/03-software-architecture/homework/questions.md) |
+| 4. Databases & Data | [questions.md](chapters/04-databases-and-data/homework/questions.md) |
+| 5. API Design & Integration | [questions.md](chapters/05-api-design/homework/questions.md) |
+| 6. System Design | [questions.md](chapters/06-system-design/homework/questions.md) |
+| 7. Infrastructure & DevOps | [questions.md](chapters/07-infrastructure-devops/homework/questions.md) |
+| 8. Security | [questions.md](chapters/08-security/homework/questions.md) |
+| 9. Testing Strategy | [questions.md](chapters/09-testing-strategy/homework/questions.md) |
+| 10. Senior / Architect Mindset | [questions.md](chapters/10-senior-architect-mindset/homework/questions.md) |
+| 11. Django & Web Frameworks | [questions.md](chapters/11-django-web-frameworks/homework/questions.md) |
+| 12. Soft Skills & Career | [questions.md](chapters/12-soft-skills-career/homework/questions.md) |
+
+---
+
 *This is a living document. Depth in any single topic could fill a book -- use this as a map of what to learn, not a substitute for deep study. Focus on principles over specific tools; frameworks change, fundamentals don't.*

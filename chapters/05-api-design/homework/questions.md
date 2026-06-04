@@ -1,1 +1,16 @@
-# Comprehensive Homework: 05-api-design\n\n## RESTful APIs: Rate Limiter\nImplement a Token Bucket rate limiter for an API endpoint.\n**Implement in**: `hw_rate_limit.py`\n\n## Beyond REST: Simple GraphQL Resolver\nWrite a mock GraphQL resolver that handles resolving nested entity data without N+1 issues.\n**Implement in**: `hw_graphql.py`\n\n## Auth: JWT Minting\nCreate functions to mint and verify HMAC-based JSON Web Tokens (without using third-party JWT libraries).\n**Implement in**: `hw_auth.py`\n
+# Comprehensive Homework: 05-api-design
+
+[Back to Chapter](../README.md) | [Back to Book Index](../../../README.md)
+
+
+## RESTful APIs: Rate Limiter
+Implement a Token Bucket rate limiter for an API endpoint.
+**Implement in**: `hw_rate_limit.py`
+
+## Beyond REST: Simple GraphQL Resolver
+Write a mock GraphQL resolver that handles resolving nested entity data without N+1 issues.
+**Implement in**: `hw_graphql.py`
+
+## Auth: JWT Minting
+Create functions to mint and verify HMAC-based JSON Web Tokens (without using third-party JWT libraries).
+**Implement in**: `hw_auth.py`

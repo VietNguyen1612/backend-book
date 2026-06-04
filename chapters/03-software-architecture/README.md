@@ -32,3 +32,11 @@ High-level strategies for organizing entire systems, with implications for deplo
 - **Microservices** -- Characteristics, data ownership, communication patterns, Saga pattern, Strangler Fig migration
 - **Event-Driven Architecture** -- Event Sourcing, event types, event bus options (Kafka, RabbitMQ, EventBridge), idempotency
 - **Domain-Driven Design (DDD)** -- Bounded Context, Aggregates, Value Objects, Domain Events, Anti-Corruption Layer, Context Mapping
+
+---
+
+## Homework
+
+Hands-on exercises for this chapter -- see [homework/questions.md](homework/questions.md). Skeleton files (`hw_*.py`) live alongside the questions in the [`homework/`](homework/) folder.
+
+[Back to Book Index](../../README.md)

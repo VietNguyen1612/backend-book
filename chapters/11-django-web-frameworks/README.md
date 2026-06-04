@@ -7,4 +7,10 @@ This chapter explores web framework concepts through the lens of Django while em
 1. [11.1 Django Specifics (Transferable Concepts)](django-specifics.md) -- Request/response lifecycle, ORM and database layer, signals and events, admin and rapid development.
 2. [11.2 Web Framework-Agnostic Patterns](framework-agnostic-patterns.md) -- Middleware/interceptors, request validation, background task processing, caching layer, and template/rendering layer.
 
+---
+
+## Homework
+
+Hands-on exercises for this chapter -- see [homework/questions.md](homework/questions.md). Skeleton files (`hw_*.py`) live alongside the questions in the [`homework/`](homework/) folder.
+
 [Back to Book Index](../../README.md)

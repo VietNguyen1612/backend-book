@@ -7,4 +7,10 @@ This chapter covers the mindset, skills, and frameworks that distinguish senior 
 1. [10.1 Technical Leadership](technical-leadership.md) -- Architecture Decision Records, technical debt management, and code review excellence.
 2. [10.2 System Thinking](system-thinking.md) -- Trade-off analysis, back-of-envelope estimation, incident management, and technology evaluation.
 
+---
+
+## Homework
+
+Hands-on exercises for this chapter -- see [homework/questions.md](homework/questions.md). Skeleton files (`hw_*.py`) live alongside the questions in the [`homework/`](homework/) folder.
+
 [Back to Book Index](../../README.md)

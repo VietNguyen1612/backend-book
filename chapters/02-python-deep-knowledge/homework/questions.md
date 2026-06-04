@@ -1,1 +1,20 @@
-# Comprehensive Homework: 02-python-deep-knowledge\n\n## Internals: Custom Metaclass\nWrite a metaclass that automatically adds logging to every method of the classes that use it.\n**Implement in**: `hw_internals.py`\n\n## Async: Custom Event Loop\nUse generators to simulate a miniature async event loop that schedules and runs coroutines.\n**Implement in**: `hw_async.py`\n\n## Patterns: Exponential Backoff\nCreate a retry decorator that implements exponential backoff and jitter for transient network failures.\n**Implement in**: `hw_patterns.py`\n\n## Tooling: Mock pyproject.toml Setup\nWrite a Python script that generates a valid `pyproject.toml` file dynamically given a dictionary of dependencies.\n**Implement in**: `hw_packaging.py`\n
+# Comprehensive Homework: 02-python-deep-knowledge
+
+[Back to Chapter](../README.md) | [Back to Book Index](../../../README.md)
+
+
+## Internals: Custom Metaclass
+Write a metaclass that automatically adds logging to every method of the classes that use it.
+**Implement in**: `hw_internals.py`
+
+## Async: Custom Event Loop
+Use generators to simulate a miniature async event loop that schedules and runs coroutines.
+**Implement in**: `hw_async.py`
+
+## Patterns: Exponential Backoff
+Create a retry decorator that implements exponential backoff and jitter for transient network failures.
+**Implement in**: `hw_patterns.py`
+
+## Tooling: Mock pyproject.toml Setup
+Write a Python script that generates a valid `pyproject.toml` file dynamically given a dictionary of dependencies.
+**Implement in**: `hw_packaging.py`

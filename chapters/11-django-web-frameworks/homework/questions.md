@@ -1,0 +1,1 @@
+# Comprehensive Homework: 11-django-web-frameworks\n\n## Django: N+1 Optimizer\nSimulate solving the N+1 problem by bulk fetching foreign keys in memory.\n**Implement in**: `hw_django.py`\n\n## Agnostic: Middleware Chain\nImplement a simple web middleware chain (Pipeline pattern).\n**Implement in**: `hw_framework.py`\n

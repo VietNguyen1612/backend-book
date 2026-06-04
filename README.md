@@ -1,0 +1,151 @@
+# Backend Developer Knowledge Base
+
+**Mid → Senior → Architect Level · Python/Django Flavored · Framework-Agnostic Principles**
+
+---
+
+## Table of Contents
+
+### [1. Computer Science Fundamentals](chapters/01-cs-fundamentals/README.md)
+
+The bedrock of everything else. Data structures (arrays, hash tables, trees, graphs, bloom filters, skip lists), algorithm complexity analysis, sorting, dynamic programming, and string algorithms. Operating system internals: processes, threads, memory management, I/O models, file systems, and Linux fundamentals (cgroups, namespaces, systemd). Networking deep dive: TCP/IP, HTTP/1.1 → HTTP/2 → HTTP/3, DNS, TLS/SSL, and network debugging tools.
+
+| Section | Deep Dive |
+|---|---|
+| 1.1 Data Structures | [data-structures.md](chapters/01-cs-fundamentals/data-structures.md) |
+| 1.2 Algorithms & Complexity | [algorithms-and-complexity.md](chapters/01-cs-fundamentals/algorithms-and-complexity.md) |
+| 1.3 Operating Systems | [operating-systems.md](chapters/01-cs-fundamentals/operating-systems.md) |
+| 1.4 Networking | [networking.md](chapters/01-cs-fundamentals/networking.md) |
+
+---
+
+### [2. Python Deep Knowledge](chapters/02-python-deep-knowledge/README.md)
+
+Beyond syntax into how Python actually works. Language internals (data model, GIL, CPython bytecode, memory management), async programming (asyncio, event loop, structured concurrency), advanced patterns (decorators, generators, type hints, concurrency), and the modern Python tooling ecosystem.
+
+| Section | Deep Dive |
+|---|---|
+| 2.1 Language Internals | [language-internals.md](chapters/02-python-deep-knowledge/language-internals.md) |
+| 2.2 Async Programming | [async-programming.md](chapters/02-python-deep-knowledge/async-programming.md) |
+| 2.3 Advanced Patterns | [advanced-patterns.md](chapters/02-python-deep-knowledge/advanced-patterns.md) |
+| 2.4 Packaging & Tooling | [packaging-and-tooling.md](chapters/02-python-deep-knowledge/packaging-and-tooling.md) |
+
+---
+
+### [3. Software Architecture](chapters/03-software-architecture/README.md)
+
+Principles and patterns that stand the test of time. SOLID, Clean Architecture, Hexagonal Architecture, and when to apply (or not apply) them. Creational, structural, and behavioral design patterns with practical Python context. Architectural styles: monolith, microservices, event-driven, and Domain-Driven Design.
+
+| Section | Deep Dive |
+|---|---|
+| 3.1 Design Principles | [design-principles.md](chapters/03-software-architecture/design-principles.md) |
+| 3.2 Design Patterns | [design-patterns.md](chapters/03-software-architecture/design-patterns.md) |
+| 3.3 Architectural Styles | [architectural-styles.md](chapters/03-software-architecture/architectural-styles.md) |
+
+---
+
+### [4. Databases & Data](chapters/04-databases-and-data/README.md)
+
+Everything about storing and querying data. PostgreSQL deep dive: query optimization, indexing strategies, transactions, MVCC, partitioning, window functions, JSONB, full-text search. NoSQL: Redis data structures, MongoDB document model, Elasticsearch. Data management: migrations, soft deletes, audit trails, multi-tenancy, ETL/CDC pipelines.
+
+| Section | Deep Dive |
+|---|---|
+| 4.1 Relational Databases (PostgreSQL) | [relational-databases.md](chapters/04-databases-and-data/relational-databases.md) |
+| 4.2 NoSQL & Specialized | [nosql-and-specialized.md](chapters/04-databases-and-data/nosql-and-specialized.md) |
+| 4.3 Data Management | [data-management.md](chapters/04-databases-and-data/data-management.md) |
+
+---
+
+### [5. API Design & Integration](chapters/05-api-design/README.md)
+
+Building and consuming APIs the right way. RESTful API design (versioning, pagination, error handling, idempotency), GraphQL, gRPC, WebSocket/SSE, message queues (RabbitMQ, Kafka, Celery). Authentication (OAuth 2.0, JWT, sessions) and authorization (RBAC, ABAC, policy engines).
+
+| Section | Deep Dive |
+|---|---|
+| 5.1 RESTful APIs | [restful-apis.md](chapters/05-api-design/restful-apis.md) |
+| 5.2 Beyond REST | [beyond-rest.md](chapters/05-api-design/beyond-rest.md) |
+| 5.3 Authentication & Authorization | [authentication-and-authorization.md](chapters/05-api-design/authentication-and-authorization.md) |
+
+---
+
+### [6. System Design](chapters/06-system-design/README.md)
+
+Thinking at scale. Horizontal/vertical scaling, load balancing algorithms, caching strategies (cache-aside, write-through, stampede prevention), CAP theorem, and consistency models. Distributed systems: consensus (Raft), service communication patterns, circuit breakers. Real-world designs: URL shortener, rate limiter, chat system, notification system.
+
+| Section | Deep Dive |
+|---|---|
+| 6.1 Scalability | [scalability.md](chapters/06-system-design/scalability.md) |
+| 6.2 Distributed Systems | [distributed-systems.md](chapters/06-system-design/distributed-systems.md) |
+| 6.3 Real-World Examples | [real-world-examples.md](chapters/06-system-design/real-world-examples.md) |
+| 6.4 Back-of-Envelope Estimation | [back-of-envelope.md](chapters/06-system-design/back-of-envelope.md) |
+
+---
+
+### [7. Infrastructure & DevOps](chapters/07-infrastructure-devops/README.md)
+
+Running code in production. Docker (multi-stage builds, security, layer caching) and Kubernetes (pods, deployments, services, HPA, RBAC). CI/CD pipelines, deployment strategies (blue-green, canary, feature flags), Infrastructure as Code (Terraform, Pulumi). Observability: structured logging, Prometheus metrics, distributed tracing.
+
+| Section | Deep Dive |
+|---|---|
+| 7.1 Containerization | [containerization.md](chapters/07-infrastructure-devops/containerization.md) |
+| 7.2 CI/CD & Deployment | [cicd-and-deployment.md](chapters/07-infrastructure-devops/cicd-and-deployment.md) |
+| 7.3 Observability | [observability.md](chapters/07-infrastructure-devops/observability.md) |
+
+---
+
+### [8. Security](chapters/08-security/README.md)
+
+Protecting your systems and data. OWASP Top 10 (injection, XSS, CSRF, broken auth), input validation, security headers, CORS. Infrastructure security: secrets management (Vault, AWS Secrets Manager), encryption, GDPR compliance, dependency scanning, zero-trust architecture.
+
+| Section | Deep Dive |
+|---|---|
+| 8.1 Application Security | [application-security.md](chapters/08-security/application-security.md) |
+| 8.2 Infrastructure Security | [infrastructure-security.md](chapters/08-security/infrastructure-security.md) |
+
+---
+
+### [9. Testing Strategy](chapters/09-testing-strategy/README.md)
+
+Writing tests that actually catch bugs. The testing pyramid: unit tests (AAA pattern, property-based testing), integration tests (testcontainers, test doubles), performance testing (load, stress, soak). Testing practices: F.I.R.S.T. principles, mutation testing, contract testing, test data factories.
+
+| Section | Deep Dive |
+|---|---|
+| 9.1 Testing Pyramid | [testing-pyramid.md](chapters/09-testing-strategy/testing-pyramid.md) |
+| 9.2 Testing Practices | [testing-practices.md](chapters/09-testing-strategy/testing-practices.md) |
+
+---
+
+### [10. Senior / Architect Mindset](chapters/10-senior-architect-mindset/README.md)
+
+How to think, not just what to know. Architecture Decision Records (ADRs), technical debt management, code review excellence. System thinking: trade-off analysis, back-of-envelope estimation, incident management, and technology evaluation frameworks.
+
+| Section | Deep Dive |
+|---|---|
+| 10.1 Technical Leadership | [technical-leadership.md](chapters/10-senior-architect-mindset/technical-leadership.md) |
+| 10.2 System Thinking | [system-thinking.md](chapters/10-senior-architect-mindset/system-thinking.md) |
+
+---
+
+### [11. Django & Web Framework Knowledge](chapters/11-django-web-frameworks/README.md)
+
+Framework-aware, principle-focused. Django specifics that transfer everywhere: request lifecycle, ORM patterns (Active Record vs Data Mapper), migrations, signals. Framework-agnostic patterns: middleware, request validation, background tasks, caching layers, rendering.
+
+| Section | Deep Dive |
+|---|---|
+| 11.1 Django Specifics | [django-specifics.md](chapters/11-django-web-frameworks/django-specifics.md) |
+| 11.2 Agnostic Patterns | [framework-agnostic-patterns.md](chapters/11-django-web-frameworks/framework-agnostic-patterns.md) |
+
+---
+
+### [12. Soft Skills & Career Growth](chapters/12-soft-skills-career/README.md)
+
+The multiplier skills. Technical writing (RFCs, runbooks, ADRs), stakeholder communication, translating tech to business impact. Career progression: what differentiates Mid from Senior from Architect.
+
+| Section | Deep Dive |
+|---|---|
+| 12.1 Communication | [communication.md](chapters/12-soft-skills-career/communication.md) |
+| 12.2 Career Progression | [career-progression.md](chapters/12-soft-skills-career/career-progression.md) |
+
+---
+
+*This is a living document. Depth in any single topic could fill a book -- use this as a map of what to learn, not a substitute for deep study. Focus on principles over specific tools; frameworks change, fundamentals don't.*

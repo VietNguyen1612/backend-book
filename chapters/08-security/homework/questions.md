@@ -1,0 +1,1 @@
+# Comprehensive Homework: 08-security\n\n## App Sec: Sanitizer\nWrite a function that sanitizes HTML input to prevent basic XSS attacks.\n**Implement in**: `hw_app_sec.py`\n\n## Infra Sec: Secret Rotation\nSimulate a secret rotation strategy by updating a mock Vault and invalidating old sessions.\n**Implement in**: `hw_infra_sec.py`\n

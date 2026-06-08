@@ -2,6 +2,72 @@
 
 # 1.4 Networking
 
+### The Layered Model & Lower Layers
+
+Before the TCP and HTTP details, it helps to see where each protocol sits. Networking is built in **layers**, each one adding its own header around the data from the layer above (**encapsulation**) and stripping it on the way back up.
+
+#### OSI vs TCP/IP and Encapsulation
+
+The 7-layer OSI model is the academic reference; the 4-layer **TCP/IP model** is what the internet actually runs on. The mapping that matters in practice:
+
+```
+TCP/IP layer      Example protocols      Address / unit
+--------------    -----------------      --------------------------
+Application       HTTP, DNS, gRPC, TLS   data / message
+Transport         TCP, UDP, QUIC         port (e.g. :443)  -> segment
+Internet          IP, ICMP               IP address        -> packet
+Link              Ethernet, Wi-Fi, ARP   MAC address       -> frame
+
+Encapsulation — sending "GET /" wraps the data at each layer down:
+
+  [ Ethernet hdr | IP hdr | TCP hdr | HTTP "GET /" | Ethernet trailer ]
+   \___________/  \_____/  \______/  \___________/
+     link layer    internet transport  application
+
+Each layer reads ONLY its own header and hands the payload up/down.
+A router rewrites the link header per hop but leaves the IP packet intact.
+```
+
+The discipline of layering is why you can debug at one level without the others: a `tcpdump` shows you IP/TCP headers; `curl -v` shows you the application layer; an MTU problem (link layer) manifests as application hangs precisely because the layers are normally independent.
+
+#### IP Addressing
+
+- **IPv4:** 32-bit, written as a dotted quad (`93.184.216.34`) — ~4.3 billion addresses, long since exhausted (the reason NAT exists).
+- **IPv6:** 128-bit, written in hex groups (`2606:2800:220:1::34`) — effectively unlimited; restores end-to-end addressability.
+- **Private ranges** (RFC 1918, not routable on the public internet, reused inside every network): `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`. Your VPC subnets live here.
+- **Loopback:** `127.0.0.1` (`::1` in IPv6) — the host talking to itself, never leaves the machine.
+- **Link-local:** `169.254.0.0/16` (IPv6 `fe80::/10`) — auto-assigned, valid only on the local segment. The address `169.254.169.254` is the well-known **cloud metadata endpoint** (AWS/GCP/Azure), which is why SSRF protections specifically block it.
+
+#### CIDR and Subnetting
+
+CIDR notation (`10.0.1.0/24`) says how many leading bits are the **network** portion; the rest identify hosts. The prefix length is the whole game:
+
+```
+/24  -> 256 addresses (254 usable: .0 = network, .255 = broadcast)
+/16  -> 65,536 addresses
+/8   -> 16,777,216 addresses
+Smaller number after the slash = BIGGER network (more host bits).
+
+10.0.1.0/24 contains 10.0.1.0 .. 10.0.1.255
+10.0.0.0/16 contains all of 10.0.0.x .. 10.0.255.x
+```
+
+This is the math behind **VPC/subnet design** and every **security-group / firewall rule** ("allow `10.0.0.0/8` inbound") — sizing a subnet too small (`/28` = 14 hosts) and running out of IPs for pods/instances is a common cloud-networking mistake.
+
+#### ARP, ICMP, NAT
+
+- **ARP (Address Resolution Protocol):** maps an IP address to a MAC address on the **local** segment. Before a host can send a frame to `10.0.1.5`, it broadcasts "who has 10.0.1.5?" and caches the MAC reply.
+- **ICMP:** the network's control/diagnostic channel — `ping` (echo request/reply), `traceroute`, "destination unreachable", and the critical "**fragmentation needed**" message that drives Path MTU Discovery. Blocking ICMP wholesale (a common over-zealous firewall rule) breaks MTU discovery and causes the silent large-payload hangs covered later.
+- **NAT (Network Address Translation):** rewrites private source addresses to a shared public one (with port translation, PAT) so many internal hosts share one public IP. NAT is **why most devices aren't directly reachable from the internet** — connections must be initiated *outbound*. This is the reason inbound webhooks need a public endpoint, and why peer-to-peer apps resort to **hole-punching** through NAT.
+
+#### Routing, BGP, and Anycast
+
+The internet is a mesh of **autonomous systems** (ASes — ISPs, clouds, large networks) that exchange reachability information via **BGP (Border Gateway Protocol)**. BGP decides, hop by AS-hop, how a packet reaches a distant network. **Anycast** layers on top: the *same* IP address is announced from many locations worldwide, and BGP naturally routes each client to the **nearest** one. Anycast is the backbone of **CDNs**, public DNS resolvers (`8.8.8.8`, `1.1.1.1` answer from hundreds of sites under one IP), and **DDoS absorption** (attack traffic is spread across many points of presence instead of one).
+
+> **Key Takeaway:** The layers are independent for a reason — knowing which layer a symptom lives at tells you which tool to reach for. Internalize private ranges and CIDR math (you will design subnets and write firewall rules constantly), remember that NAT makes inbound connections the hard direction, and recognize anycast as the trick that puts `8.8.8.8` or a CDN edge physically near every user.
+
+---
+
 ### TCP/IP Deep Dive
 
 #### The Three-Way Handshake
@@ -285,6 +351,56 @@ Request/Response Headers for Backend Engineers:
 ```
 
 > **Key Takeaway:** HTTP/2 should be your default for web APIs (multiplexing, header compression). HTTP/3 is increasingly adopted for mobile and lossy-network scenarios. Proper caching headers can eliminate 50-90% of backend traffic — they are one of the highest-leverage performance optimizations available.
+
+---
+
+### Proxies, Gateways & Load Balancers
+
+A proxy is an intermediary that sits between client and server and relays requests. The single most important distinction — and a frequent interview question — is *which side* it fronts.
+
+#### Forward Proxy vs Reverse Proxy
+
+```
+Forward proxy (fronts the CLIENTS):
+
+   [clients] -> [forward proxy] -> internet -> [any server]
+   The server sees the PROXY's IP. Clients are hidden.
+   Uses: corporate egress control, content filtering, caching, anonymity.
+
+Reverse proxy (fronts the SERVERS):
+
+   client -> [reverse proxy] -> [backend 1]
+                              -> [backend 2]
+                              -> [backend 3]
+   The client sees the PROXY; backends are hidden behind it.
+   Uses: TLS termination, caching, compression, LOAD BALANCING.
+   Examples: nginx, HAProxy, Envoy, AWS ALB.
+```
+
+A **forward proxy** acts on behalf of the *clients* — it makes outbound requests for them (a corporate egress gateway, a caching proxy). The destination server sees the proxy's IP, not the client's.
+
+A **reverse proxy** acts on behalf of the *servers* — it terminates the client's connection and forwards it to one of several backends. This is where most backend infrastructure lives: it does **TLS termination** (decrypt once at the edge so backends speak plain HTTP), **caching**, **compression**, and **load balancing** across a pool of identical app servers. A **load balancer** is a reverse proxy specialized for distributing traffic (round-robin, least-connections, consistent-hash) with health checks that pull dead backends out of rotation.
+
+#### API Gateway
+
+An **API gateway** is a reverse proxy that is **application-aware**. Beyond routing, it centralizes cross-cutting concerns so individual services don't each reimplement them: **authentication/authorization**, **rate limiting**, request **routing and aggregation** (fan out to several services and combine responses), and **protocol translation** (e.g., REST in front, gRPC behind). It is the single front door to a fleet of microservices (Kong, AWS API Gateway, Envoy-based meshes).
+
+#### Tunneling, CONNECT, and the X-Forwarded-For Trap
+
+Because a forward proxy can't read encrypted HTTPS, browsers use the HTTP **`CONNECT`** method to ask the proxy to open a raw TCP **tunnel** to the destination; the TLS handshake then passes through opaquely. This is how proxies pass HTTPS without decrypting it.
+
+When traffic crosses one or more proxies, the original client IP is otherwise lost (the backend only sees the *last* proxy). To preserve it, proxies append headers — **`X-Forwarded-For`** (the de-facto standard, a comma-separated chain) and the standardized **`Forwarded`** header — or use the lower-level **PROXY protocol** at the TCP layer.
+
+```
+Client 1.2.3.4 -> Proxy A -> Proxy B (reverse proxy) -> app server
+
+  X-Forwarded-For: 1.2.3.4, <Proxy A's IP>
+  -> the app reads the LEFTMOST entry as the "real" client IP
+```
+
+> **Common pitfall:** Trusting `X-Forwarded-For` blindly. The header is just text a client can set — an attacker can send `X-Forwarded-For: 127.0.0.1` (or any IP) to forge their origin, bypassing IP allowlists, rate limits keyed on client IP, or audit logs. **Only honor forwarding headers when the request arrives from a proxy you control.** Configure your framework's trusted-proxy list (Django's `SECURE_PROXY_SSL_HEADER` / `USE_X_FORWARDED_HOST`, or a fixed number of trusted hops) so it strips client-supplied values and reads only the entry your own edge appended. Reading the *leftmost untrusted* value as the client IP is the secure default.
+
+> **Key Takeaway:** "Forward fronts clients, reverse fronts servers" is the mental model to keep. In production you live behind a reverse proxy / load balancer doing TLS termination and health-checked balancing, often with an API gateway adding auth and rate limiting. The recurring security gotcha is the client IP: never trust `X-Forwarded-For` except from proxies you operate, or you hand attackers a way to spoof their address.
 
 ---
 

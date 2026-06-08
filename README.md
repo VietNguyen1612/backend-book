@@ -21,7 +21,7 @@ The bedrock of everything else. Data structures (arrays, hash tables, trees, gra
 
 ### [2. Python Deep Knowledge](chapters/02-python-deep-knowledge/README.md)
 
-Beyond syntax into how Python actually works. Language internals (data model, GIL, CPython bytecode, memory management), async programming (asyncio, event loop, structured concurrency), advanced patterns (decorators, generators, type hints, concurrency), and the modern Python tooling ecosystem.
+Beyond syntax into how Python actually works. Language internals (data model, GIL, CPython bytecode, memory management), async programming (asyncio, event loop, structured concurrency), advanced patterns (decorators, generators, type hints, dataclasses/enums, dates & money, strings & encoding, serialization, pattern matching), and the modern Python tooling ecosystem (logging, subprocess, packaging).
 
 | Section | Deep Dive |
 |---|---|
@@ -34,7 +34,7 @@ Beyond syntax into how Python actually works. Language internals (data model, GI
 
 ### [3. Software Architecture](chapters/03-software-architecture/README.md)
 
-Principles and patterns that stand the test of time. SOLID, Clean Architecture, Hexagonal Architecture, and when to apply (or not apply) them. Creational, structural, and behavioral design patterns with practical Python context. Architectural styles: monolith, microservices, event-driven, and Domain-Driven Design.
+Principles and patterns that stand the test of time. SOLID, the Twelve-Factor App, coupling/cohesion & connascence, Clean and Hexagonal Architecture, and when to apply (or not apply) them. Creational, structural, behavioral, enterprise, and concurrency/reliability patterns (circuit breaker, bulkhead, saga, outbox) with practical Python context. Architectural styles: monolith, microservices, event-driven, serverless, and Domain-Driven Design.
 
 | Section | Deep Dive |
 |---|---|
@@ -46,7 +46,7 @@ Principles and patterns that stand the test of time. SOLID, Clean Architecture, 
 
 ### [4. Databases & Data](chapters/04-databases-and-data/README.md)
 
-Everything about storing and querying data. PostgreSQL deep dive: query optimization, indexing strategies, transactions, MVCC, partitioning, window functions, JSONB, full-text search. NoSQL: Redis data structures, MongoDB document model, Elasticsearch. Data management: migrations, soft deletes, audit trails, multi-tenancy, ETL/CDC pipelines.
+Everything about storing and querying data. PostgreSQL deep dive: storage internals (WAL, buffer pool, MVCC), query optimization, indexing strategies, transactions & isolation anomalies, partitioning, window functions, JSONB, full-text search. NoSQL & specialized: Redis, MongoDB, Cassandra/wide-column, graph and vector databases, Elasticsearch, OLTP vs OLAP/columnar. Data management: migrations, multi-tenancy, storing money & time, connection management, Kafka/CDC pipelines, and dimensional modeling.
 
 | Section | Deep Dive |
 |---|---|
@@ -70,7 +70,7 @@ Building and consuming APIs the right way. RESTful API design (versioning, pagin
 
 ### [6. System Design](chapters/06-system-design/README.md)
 
-Thinking at scale. Horizontal/vertical scaling, load balancing algorithms, caching strategies (cache-aside, write-through, stampede prevention), CAP theorem, and consistency models. Distributed systems: consensus (Raft), service communication patterns, circuit breakers. Real-world designs: URL shortener, rate limiter, chat system, notification system.
+Thinking at scale. Horizontal/vertical scaling, load balancing algorithms, caching strategies (cache-aside, write-through, stampede & hot-key handling), CAP/PACELC, quorums, and consistency models. Distributed systems: consensus (Raft), logical/vector clocks, distributed unique IDs, distributed locking, service communication patterns, circuit breakers. Real-world designs: URL shortener, rate limiter, chat, notifications, news feed, typeahead, geo/proximity, object storage, payments, and a Dynamo-style distributed cache.
 
 | Section | Deep Dive |
 |---|---|
@@ -83,7 +83,7 @@ Thinking at scale. Horizontal/vertical scaling, load balancing algorithms, cachi
 
 ### [7. Infrastructure & DevOps](chapters/07-infrastructure-devops/README.md)
 
-Running code in production. Docker (multi-stage builds, security, layer caching) and Kubernetes (pods, deployments, services, HPA, RBAC). CI/CD pipelines, deployment strategies (blue-green, canary, feature flags), Infrastructure as Code (Terraform, Pulumi). Observability: structured logging, Prometheus metrics, distributed tracing.
+Running code in production. Docker (multi-stage builds, security, layer caching, registries, OCI runtime) and Kubernetes (pods, deployments, services, HPA/VPA/Cluster Autoscaler, scheduling, Helm, Kustomize, Operators, GitOps). CI/CD pipelines, deployment strategies (blue-green, canary, feature flags), Infrastructure as Code (Terraform/OpenTofu, Pulumi, immutable infra). Observability & operations: structured logging, Prometheus metrics, distributed tracing, error tracking/APM, on-call & runbooks, and FinOps.
 
 | Section | Deep Dive |
 |---|---|
@@ -95,7 +95,7 @@ Running code in production. Docker (multi-stage builds, security, layer caching)
 
 ### [8. Security](chapters/08-security/README.md)
 
-Protecting your systems and data. OWASP Top 10 (injection, XSS, CSRF, broken auth), input validation, security headers, CORS. Infrastructure security: secrets management (Vault, AWS Secrets Manager), encryption, GDPR compliance, dependency scanning, zero-trust architecture.
+Protecting your systems and data. OWASP Top 10 (injection, XSS, CSRF, SSRF, broken auth/access control), input validation, security headers, CORS. Cryptography fundamentals (password hashing, symmetric/asymmetric, HMAC, signatures, AEAD, key management). Infrastructure security: secrets management (Vault, AWS/GCP, workload identity), encryption, dependency scanning/SBOM, zero-trust, and compliance & privacy (GDPR/CCPA, PCI-DSS, SOC 2/ISO 27001).
 
 | Section | Deep Dive |
 |---|---|
@@ -106,7 +106,7 @@ Protecting your systems and data. OWASP Top 10 (injection, XSS, CSRF, broken aut
 
 ### [9. Testing Strategy](chapters/09-testing-strategy/README.md)
 
-Writing tests that actually catch bugs. The testing pyramid: unit tests (AAA pattern, property-based testing), integration tests (testcontainers, test doubles), performance testing (load, stress, soak). Testing practices: F.I.R.S.T. principles, mutation testing, contract testing, test data factories.
+Writing tests that actually catch bugs. The testing pyramid (and the trophy view): unit tests (AAA, property-based), integration & contract tests (testcontainers, test doubles, Pact, record-replay), performance testing (load, stress, soak, spike). Testing practices: F.I.R.S.T. principles, determinism (time/randomness), mutation testing, test data factories, and testing in production (canary, feature flags, shadow traffic, chaos engineering).
 
 | Section | Deep Dive |
 |---|---|
@@ -117,7 +117,7 @@ Writing tests that actually catch bugs. The testing pyramid: unit tests (AAA pat
 
 ### [10. Senior / Architect Mindset](chapters/10-senior-architect-mindset/README.md)
 
-How to think, not just what to know. Architecture Decision Records (ADRs), technical debt management, code review excellence. System thinking: trade-off analysis, back-of-envelope estimation, incident management, and technology evaluation frameworks.
+How to think, not just what to know. Decision-making & trade-offs (ADRs, RFCs/design docs, one-way vs two-way doors, boring technology), technical debt management, code review excellence. System thinking: trade-off analysis, constraints-first, back-of-envelope estimation, incident management, and technology evaluation frameworks.
 
 | Section | Deep Dive |
 |---|---|
@@ -139,7 +139,7 @@ Framework-aware, principle-focused. Django specifics that transfer everywhere: r
 
 ### [12. Soft Skills & Career Growth](chapters/12-soft-skills-career/README.md)
 
-The multiplier skills. Technical writing (RFCs, runbooks, ADRs), stakeholder communication, translating tech to business impact. Career progression: what differentiates Mid from Senior from Architect.
+The multiplier skills. Technical writing (RFCs, runbooks, ADRs), stakeholder communication, async written-first habits, collaboration & mentorship (psychological safety, reducing bus-factor). Career progression: influence & ownership, career ladders & scope, continuous learning, and what differentiates Mid from Senior from Architect.
 
 | Section | Deep Dive |
 |---|---|

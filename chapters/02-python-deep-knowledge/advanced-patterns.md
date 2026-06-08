@@ -779,6 +779,389 @@ except ValidationError as e:
 
 ---
 
+### Dataclasses, Enums & Modeling
+
+Pydantic (above) is the right tool at *untrusted boundaries* where you parse-don't-validate. For internal value objects and DTOs that you build in trusted code, the standard library's `@dataclass`, `NamedTuple`, and `enum` are lighter and have zero dependencies.
+
+#### `@dataclass`: Boilerplate-Free Value Objects
+
+`@dataclass` auto-generates `__init__`, `__repr__`, and `__eq__` from annotated fields. The flags control how strict and how cheap the resulting class is.
+
+```python
+from dataclasses import dataclass, field
+
+# -- frozen + slots: an immutable, memory-light value object --
+@dataclass(frozen=True, slots=True, order=True)
+class Point:
+    x: float
+    y: float
+
+p = Point(1.0, 2.0)
+# p.x = 5.0  -> raises FrozenInstanceError (frozen=True)
+print(p)              # repr is auto-generated
+print(p < Point(3, 4))  # order=True generates __lt__/__le__/... (tuple compare)
+print(hash(p))        # frozen=True makes it hashable -> usable as dict key / in a set
+
+# -- field(default_factory=...) for mutable defaults --
+@dataclass
+class Order:
+    id: int
+    items: list[str] = field(default_factory=list)   # NEVER `items: list = []`
+    meta: dict[str, str] = field(default_factory=dict)
+
+# -- kw_only forces call-site clarity; __post_init__ derives/validates --
+@dataclass(kw_only=True)
+class LineItem:
+    unit_price_cents: int
+    quantity: int
+    total_cents: int = field(init=False)   # computed, not passed in
+
+    def __post_init__(self):
+        if self.quantity < 1:
+            raise ValueError("quantity must be >= 1")
+        self.total_cents = self.unit_price_cents * self.quantity
+
+item = LineItem(unit_price_cents=250, quantity=3)
+print(item.total_cents)
+```
+
+```text
+Point(x=1.0, y=2.0)
+True
+3713081631934410656
+750
+```
+
+**How to read this output:** The `repr` and the comparison both come for free — `order=True` makes `Point` sort like the tuple `(x, y)`, which is why `Point(1,2) < Point(3,4)` is `True`. The `hash(...)` line only works because `frozen=True` froze the fields; a normal mutable dataclass is *unhashable* (its `__hash__` is set to `None`) precisely so you can't accidentally use a mutable object as a dict key and then mutate it out from under the hash table. The `750` proves `__post_init__` ran after the generated `__init__` populated the simple fields — the canonical place to compute derived fields and validate invariants. `default_factory` is mandatory for `list`/`dict`/`set` defaults because a bare `[]` would be shared across every instance (the same mutable-default bug as in function arguments).
+
+#### `NamedTuple` vs `dataclass` vs `dict`
+
+```python
+from typing import NamedTuple
+
+class Coord(NamedTuple):
+    lat: float
+    lng: float
+
+c = Coord(40.7, -74.0)
+print(c.lat, c[0])          # attribute OR index access; it IS a tuple
+lat, lng = c               # unpacks like a tuple
+```
+
+Choose by need: a `NamedTuple` is immutable, indexable, tuple-compatible (great for fixed records, dict keys, and code that already iterates tuples), but you cannot add methods/behavior comfortably and every instance is immutable. A `@dataclass` is the default for anything with behavior or mutation, supports `frozen`/`slots`/`order`, and reads as a real class. A plain `dict` has no fixed schema, no attribute access, and no type checking — fine for truly dynamic data, but reaching for a dataclass turns runtime `KeyError`s and typos into static, autocompleted attributes.
+
+#### Enums: Names Instead of Magic Strings
+
+```python
+from enum import Enum, IntEnum, StrEnum, Flag, auto
+
+# -- Basic Enum: identity-based named constants --
+class Status(Enum):
+    PENDING = auto()
+    ACTIVE = auto()
+    CLOSED = auto()
+
+print(Status.ACTIVE, Status.ACTIVE.name, Status.ACTIVE.value)
+print(Status.ACTIVE is Status.ACTIVE)   # identity comparison is the idiom
+
+# -- StrEnum (3.11+): members ARE strings -> JSON/DB-friendly --
+class Role(StrEnum):
+    ADMIN = "admin"
+    USER = "user"
+
+print(Role.ADMIN == "admin")            # True; serializes straight to "admin"
+
+# -- IntEnum: members ARE ints (interop with C APIs, DB int columns) --
+class Priority(IntEnum):
+    LOW = 1
+    HIGH = 3
+
+print(Priority.HIGH > Priority.LOW)     # True; compares as ints
+
+# -- Flag / IntFlag: bitwise-combinable permission sets --
+class Perm(Flag):
+    READ = auto()
+    WRITE = auto()
+    EXECUTE = auto()
+
+access = Perm.READ | Perm.WRITE
+print(Perm.WRITE in access)             # True -- membership test on combined flags
+print(access)
+```
+
+```text
+Status.ACTIVE ACTIVE 2
+True
+True
+True
+True
+Perm.READ|WRITE
+```
+
+**How to read this output:** `Status.ACTIVE.value` is `2` because `auto()` numbers members from 1 in definition order — never persist these auto values to a database, since reordering members silently changes them; use explicit values (or a `StrEnum`) for anything stored. The `Role.ADMIN == "admin"` line is the practical payoff of `StrEnum`: the member behaves as a real string, so it serializes to JSON and round-trips through a database column with no custom encoder, while your code still gets autocompletion and a single source of truth. The `Perm.READ|WRITE` repr shows a `Flag` holding two bits at once — this is how you model permission bitmasks cleanly instead of juggling raw integers and remembering that `4` means EXECUTE. The whole section's lesson: replace scattered magic strings/ints (`if status == "active"`) with enums so typos become `AttributeError`s at import time and the valid set is enumerable and documented.
+
+> **Key Takeaway:** Reach for `@dataclass` (with `slots=True`, and `frozen=True` for value objects) as the default container for trusted internal data, `NamedTuple` when you need a lightweight immutable record that behaves like a tuple, and enums (`StrEnum`/`IntEnum` for serialization, `Flag` for bitmasks) instead of magic constants everywhere.
+
+---
+
+### Dates, Times & Time Zones
+
+Date handling is a perennial source of production incidents. One rule prevents most of them: **store and compute in UTC, convert to local only for display.**
+
+#### Aware vs Naive, and the `utcnow()` Trap
+
+A *naive* `datetime` has no `tzinfo` and is ambiguous — it could mean any zone. An *aware* datetime carries its zone. Always work with aware datetimes for anything real.
+
+```python
+from datetime import datetime, timezone
+
+# WRONG: returns a NAIVE datetime even though the value is in UTC.
+# The object claims no timezone, so later arithmetic/comparison silently misbehaves.
+bad = datetime.utcnow()           # deprecated in 3.12; classic trap
+print(bad.tzinfo)                 # None  <-- naive!
+
+# RIGHT: an AWARE datetime that actually knows it is UTC.
+good = datetime.now(timezone.utc)
+print(good.tzinfo)                # datetime.timezone.utc
+
+# Mixing aware and naive raises -- a feature, not a bug:
+try:
+    good - bad
+except TypeError as e:
+    print(f"TypeError: {e}")
+```
+
+```text
+None
+UTC
+TypeError: can't subtract offset-naive and offset-aware datetimes
+```
+
+**How to read this output:** The `None` is the entire bug in one line — `utcnow()` gives you a value that *is* UTC but doesn't *say* so, so the moment you compare or subtract it against an aware datetime Python refuses (the `TypeError`). That refusal is protective: the alternative would be silently treating a naive value as local time and producing an answer off by your UTC offset. Use `datetime.now(timezone.utc)` everywhere and the whole class of "off by 5 hours in production but not on my laptop" bugs disappears.
+
+#### Zones, DST, and Serialization
+
+```python
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo   # stdlib since 3.9; the modern IANA tz source
+
+utc_now = datetime(2026, 6, 5, 12, 0, tzinfo=timezone.utc)
+
+# Convert UTC -> local for DISPLAY only:
+paris = utc_now.astimezone(ZoneInfo("Europe/Paris"))
+print(paris.isoformat())        # RFC 3339 / ISO 8601 string
+
+# DST fold: a fall-back hour happens twice. `fold` disambiguates.
+ambiguous = datetime(2026, 11, 1, 1, 30, tzinfo=ZoneInfo("America/New_York"))
+print(ambiguous.utcoffset(), datetime(2026, 11, 1, 1, 30, fold=1,
+      tzinfo=ZoneInfo("America/New_York")).utcoffset())
+
+# Round-trip through a string (store/transport ISO 8601):
+s = utc_now.isoformat()
+print(datetime.fromisoformat(s) == utc_now)
+```
+
+```text
+2026-06-05T14:00:00+02:00
+-1 day, 20:00:00 -1 day, 19:00:00
+True
+```
+
+**How to read this output:** The Paris time is `14:00+02:00` — the same instant as `12:00Z`, just rendered in a zone that is currently +2 (summer DST). Always serialize with `.isoformat()` and parse with `.fromisoformat()` so the offset travels with the value; the final `True` proves the round-trip is lossless. The middle line shows the same wall-clock `01:30` resolving to two *different* UTC offsets (`-04:00` vs `-05:00`, shown here as the timedelta from UTC) depending on `fold` — that is the fall-back hour that exists twice. The rule that follows: never do arithmetic in local time across a DST boundary; convert to UTC, do the math, convert back. `zoneinfo` is preferred over the older `pytz`, whose error-prone `localize()` API was a frequent source of off-by-an-hour bugs.
+
+For measuring *durations* (timeouts, latency), use `time.monotonic()` instead of `time.time()`/wall-clock: the monotonic clock never goes backward and is immune to NTP steps, manual clock changes, and DST. Wall-clock time can jump backward, making a naive `end - start` negative.
+
+> **Common pitfall:** Persisting a naive "local" datetime and a separate timezone string, then reconstructing across a DST change, can land you in the non-existent spring-forward gap (e.g. `02:30` on a spring-forward night never happens). If you must store a future local time ("9am in their city, forever"), store the wall time plus the IANA zone *name* and resolve to UTC at use time, not at storage time.
+
+---
+
+### Numbers, Precision & Money
+
+#### Floats Lie; Use Decimal for Money
+
+`float` is IEEE-754 double-precision binary floating point. Many decimal fractions have no exact binary representation, so arithmetic accumulates tiny errors.
+
+```python
+from decimal import Decimal, ROUND_HALF_EVEN
+
+print(0.1 + 0.2)                 # not 0.3
+print(0.1 + 0.2 == 0.3)          # False
+
+# Decimal: exact base-10 arithmetic
+print(Decimal("0.1") + Decimal("0.2"))      # exactly 0.3
+print(Decimal("0.1") + Decimal("0.2") == Decimal("0.3"))
+
+# Banker's rounding (ROUND_HALF_EVEN, the Decimal default) rounds .5 to the
+# nearest EVEN digit, which removes the upward bias of always-round-half-up:
+print(Decimal("2.5").quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))   # 2
+print(Decimal("3.5").quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))   # 4
+```
+
+```text
+0.30000000000000004
+False
+0.3
+True
+2
+4
+```
+
+**How to read this output:** The `0.30000000000000004` is not a Python quirk — it is what every IEEE-754 language prints, and it is exactly why `0.1 + 0.2 == 0.3` is `False`. For money this is unacceptable: summing thousands of float cents drifts and your ledger won't balance. `Decimal` constructed from *strings* (not from floats, which would inherit the binary error) gives exact base-10 results. The `2.5 -> 2` but `3.5 -> 4` lines show banker's rounding picking the nearer even digit; over many roundings this cancels out instead of systematically inflating totals the way round-half-up does — which is why it is the standard for financial reporting.
+
+The common production pattern: store money as **integer minor units** (cents) in an `INTEGER`/`BIGINT` column, or as SQL `NUMERIC`/`DECIMAL` — never `float`/`double`. Always track the **currency** alongside the amount (a small `Money` value object: `(amount_cents, currency)`), because `100` is meaningless without knowing if it's USD or JPY, and define the rounding policy explicitly rather than letting it happen by accident.
+
+```python
+from fractions import Fraction
+print(Fraction(1, 3) + Fraction(1, 3) + Fraction(1, 3))   # exactly 1, no drift
+
+# Python ints are arbitrary-precision (no overflow):
+print(2 ** 200)
+```
+
+`fractions.Fraction` gives exact rational arithmetic when even decimals aren't enough (e.g. repeated thirds). Python's own `int` never overflows, but **NumPy** integer types are fixed-width and overflow *silently* — `np.int64(2**63 - 1) + 1` wraps to a negative number with no error — so validate ranges at any boundary where Python ints meet NumPy, C, or a database column with a width limit.
+
+---
+
+### Strings, Bytes & Encoding
+
+`str` is a sequence of Unicode *code points*; `bytes` is a sequence of raw *octets*. They are different types and mixing them raises `TypeError`. The mantra: **encode `str` to `bytes`, decode `bytes` to text — always with an explicit `utf-8`.**
+
+```python
+text = "café"                       # str: 4 code points
+data = text.encode("utf-8")         # bytes
+print(data)                         # the é becomes two bytes in UTF-8
+print(len(text), len(data))         # code points vs bytes differ
+print(data.decode("utf-8") == text)
+
+# Always pass encoding explicitly; the platform default differs across OSes:
+# open(path, encoding="utf-8")   <- not open(path)
+
+# len() counts code points, NOT user-perceived characters:
+flag = "\U0001F1FA\U0001F1F8"       # the regional-indicator pair for the US flag
+print(len(flag))                    # 2 code points, but renders as ONE glyph
+```
+
+```text
+b'caf\xc3\xa9'
+4 5
+True
+```
+
+**How to read this output:** `café` is 4 code points but 5 bytes — the `é` encodes to the two bytes `\xc3\xa9` in UTF-8, which is why `len(text)` and `len(data)` disagree. This matters anywhere you size or slice text by bytes (database `VARCHAR` limits, network buffers, truncating a tweet): a byte budget is not a character budget. The flag example drives it home — `len(flag) == 2` even though it renders as a single glyph, so naive truncation can split a grapheme and produce mojibake. Decoding only round-trips when you decode with the *same* encoding you encoded with; relying on the platform default (UTF-8 on Linux/macOS, often cp1252 on Windows) is the classic cause of "works on my machine, garbled in prod."
+
+```python
+import unicodedata
+a = "é"                              # precomposed (NFC), 1 code point
+b = "é"                        # 'e' + combining acute (NFD), 2 code points
+print(a == b)                        # False -- same glyph, different bytes!
+print(unicodedata.normalize("NFC", a) == unicodedata.normalize("NFC", b))
+```
+
+The two strings above look identical on screen but compare unequal because one is precomposed (NFC) and one decomposed (NFD). **Normalize** (usually to NFC) before comparing, hashing, or storing usernames and identifiers — otherwise you get duplicate-but-different accounts and openings for homograph spoofing. Finally: `base64` is binary-to-text *encoding*, not encryption — it provides zero confidentiality, so never treat a base64 string as if it were a secret in transit.
+
+---
+
+### Serialization
+
+Turning objects into bytes for storage or transport. The right format depends on who reads it back and whether you trust them.
+
+```python
+import json
+from datetime import datetime
+from decimal import Decimal
+
+# JSON has no native datetime/Decimal/set/bytes -- this RAISES:
+try:
+    json.dumps({"when": datetime.now(), "price": Decimal("9.99")})
+except TypeError as e:
+    print(f"TypeError: {e}")
+
+# Provide a custom default to serialize the unsupported types:
+def encode(obj):
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, Decimal):
+        return str(obj)
+    raise TypeError(f"not serializable: {type(obj)}")
+
+print(json.dumps({"when": "2026-06-05", "price": Decimal("9.99")}, default=encode))
+```
+
+```text
+TypeError: Object of type datetime is not JSON serializable
+```
+
+**How to read this output:** JSON's type system is deliberately tiny (objects, arrays, strings, numbers, booleans, null), so anything richer — `datetime`, `Decimal`, `set`, `bytes` — raises until you supply a `default` encoder. The fix shown serializes `datetime` as an ISO 8601 string and `Decimal` as a string (not a float, to preserve exactness). A related gotcha: JSON numbers are IEEE-754 doubles in JavaScript consumers, so a 64-bit integer ID can lose precision past 2^53 — send large IDs as strings.
+
+`pickle` can serialize almost any Python object, but **it executes arbitrary code on load** — unpickling attacker-controlled data is a remote-code-execution hole, so never unpickle anything you didn't produce yourself, and treat it as an unstable cross-version format unsuitable for long-term storage. For packed binary records (network protocols, file headers) use `struct` with explicit byte order and field widths. For anything crossing a process, service, or language boundary, prefer a schema-driven cross-language format — **Protocol Buffers**, **Avro**, or **MessagePack** — which are compact, versionable, and safe, rather than pickling.
+
+> **Key Takeaway:** JSON for human-readable interchange (with custom encoders for dates/Decimals); never `pickle` untrusted input (RCE); `struct` for fixed binary layouts; Protobuf/Avro/MessagePack for typed, versioned, cross-language messaging.
+
+---
+
+### Pattern Matching (3.10+)
+
+`match`/`case` is structural pattern matching — far more than a `switch`. It *destructures* the subject and can bind variables while it matches, which makes it ideal for parsing variant/tagged data, command dispatch, and walking ASTs.
+
+```python
+def handle(event: dict):
+    match event:
+        # Mapping pattern: matches a dict containing these keys, binds `uid`
+        case {"type": "login", "user_id": uid}:
+            return f"login by {uid}"
+        # Sequence pattern with capture of the rest
+        case {"type": "batch", "items": [first, *rest]}:
+            return f"batch starting with {first}, +{len(rest)} more"
+        # Guard: extra boolean condition with `if`
+        case {"type": "payment", "cents": c} if c > 100_00:
+            return "large payment -> manual review"
+        case {"type": "payment", "cents": c}:
+            return f"payment {c} cents"
+        # Wildcard -- the default
+        case _:
+            return "unknown event"
+
+print(handle({"type": "login", "user_id": 42}))
+print(handle({"type": "batch", "items": [1, 2, 3, 4]}))
+print(handle({"type": "payment", "cents": 50000}))
+print(handle({"type": "noise"}))
+```
+
+```text
+login by 42
+batch starting with 1, +3 more
+large payment -> manual review
+unknown event
+```
+
+**How to read this output:** Each line shows a different *kind* of pattern doing both a test and an extraction in one step. The login case matched the mapping shape and bound `uid=42` simultaneously — no manual `event["user_id"]` with a `KeyError` risk. The batch case used `[first, *rest]` to split a sequence inside the dict. The payment guard (`if c > 100_00`) fired first because cases are tried top-to-bottom and `50000 > 10000`, so the more specific guarded case wins over the plain one below it — ordering matters. `case _` caught the unrecognized event. This reads dramatically cleaner than a chain of `if event.get("type") == ...` with nested index access.
+
+```python
+from enum import Enum
+
+class Color(Enum):
+    RED = 1
+    GREEN = 2
+
+def describe(c, color):
+    GREEN = "captured!"        # a bare name in a pattern is NOT compared to this
+    match c:
+        case color:            # BUG: bare `color` is a CAPTURE, matches anything
+            return f"captured {color}"
+
+# To match a CONSTANT, use a dotted name so it's treated as a value, not a capture:
+def classify(c: Color):
+    match c:
+        case Color.RED:        # dotted -> value pattern (equality check)
+            return "stop"
+        case Color.GREEN:
+            return "go"
+```
+
+> **Common pitfall:** A *bare* name in a `case` (like `case color:` or `case GREEN:`) is a **capture pattern** — it always matches and *binds* the subject to that name, shadowing any same-named variable; it is never an equality test. To compare against a constant you must use a dotted/attribute name (`case Color.RED:`, `case status.ACTIVE:`) or a literal (`case 200:`). This is the single most common pattern-matching bug for newcomers.
+
+---
+
 ### Concurrency Patterns
 
 #### `concurrent.futures`: High-Level Concurrency

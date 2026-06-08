@@ -706,6 +706,147 @@ The benefit is that a new team member can navigate a project without reading ext
 
 ---
 
+#### Tell, Don't Ask
+
+The Tell-Don't-Ask principle says you should **tell objects what to do** rather than **asking them for their data and making decisions on their behalf**. When you pull state out of an object, branch on it, and then mutate the object from the outside, you have scattered that object's behavior across its callers -- the logic that should live *with* the data now lives everywhere the data is used. This is the procedural mindset wearing an object-oriented costume, and it is the root cause of the anemic domain model anti-pattern.
+
+```python
+# Ask (smell): caller reaches in, decides, and mutates from outside
+class Account:
+    def __init__(self, balance: float):
+        self.balance = balance
+
+def withdraw(account: Account, amount: float) -> None:
+    # The withdrawal rule lives HERE, not on the object that owns the data
+    if account.balance >= amount:
+        account.balance -= amount
+    else:
+        raise ValueError("Insufficient funds")
+
+
+# Tell: the object owns its own invariant
+class Account:
+    def __init__(self, balance: float):
+        self._balance = balance
+
+    def withdraw(self, amount: float) -> None:
+        if amount > self._balance:
+            raise ValueError("Insufficient funds")
+        self._balance -= amount
+
+    @property
+    def balance(self) -> float:
+        return self._balance
+
+
+acct = Account(100.0)
+acct.withdraw(30.0)
+print(acct.balance)
+```
+
+```text
+70.0
+```
+
+**How to read this output:** The caller never inspected `_balance` or applied the overdraft rule -- it just *told* the account to withdraw, and the account enforced its own invariant. The payoff is that the "you cannot overdraw" rule now has exactly one home. In the "ask" version, every place that withdraws must remember to re-check the balance first, and the day someone forgets is the day you ship a negative-balance bug. In interviews this is the concrete answer to "why is an anemic domain model bad?" -- behavior and the data it guards belong together.
+
+> **Common pitfall:** Tell-Don't-Ask does not mean "no getters ever." Reporting, serialization, and read-only views legitimately need to read state. The principle targets the case where a caller reads state *in order to make a decision the object should be making itself*. A DTO or read model is allowed to be a bag of data; a domain entity is not.
+
+---
+
+#### The Twelve-Factor App
+
+The Twelve-Factor App is a checklist (from the Heroku team) for building cloud-native, horizontally-scalable, deployable services. It predates Kubernetes but maps almost perfectly onto containers and orchestrators. The twelve factors:
+
+1. **Codebase** -- one codebase tracked in version control, many deploys (dev, staging, prod) from it.
+2. **Dependencies** -- explicitly declare and isolate dependencies (`requirements.txt`/`pyproject.toml` + a virtualenv or image), never rely on system-wide packages.
+3. **Config** -- store config in the *environment*, not in code. Anything that differs between deploys (DB URLs, credentials, feature flags) is an env var.
+4. **Backing services** -- treat databases, caches, queues, and SMTP as attached resources reached by URL/credentials, swappable without code changes.
+5. **Build, release, run** -- strictly separate the build stage (compile/package), the release stage (build + config), and the run stage (execute). Releases are immutable and versioned.
+6. **Processes** -- execute the app as one or more **stateless** processes. Any state that must persist goes to a backing service.
+7. **Port binding** -- export the service via a port; the app is self-contained and does not rely on runtime injection of a web server.
+8. **Concurrency** -- scale out via the process model (run more identical processes), not by making one process bigger.
+9. **Disposability** -- fast startup and graceful shutdown; processes can be started or killed at a moment's notice (essential for autoscaling and rolling deploys).
+10. **Dev/prod parity** -- keep development, staging, and production as similar as possible (same backing services, same OS via containers) to shrink the "works on my machine" gap.
+11. **Logs** -- treat logs as event streams written to stdout; let the platform aggregate and route them. Do not manage log files in the app.
+12. **Admin processes** -- run one-off admin tasks (migrations, shell, backfills) as separate processes against the same release, not as special-cased code paths.
+
+```python
+# Factor III + IV: config from the environment, backing services as URLs
+import os
+
+DATABASE_URL = os.environ["DATABASE_URL"]        # postgres://user:pass@host:5432/db
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
+
+# Same code runs unchanged in every environment -- only the env vars differ.
+print(f"debug={DEBUG} db_host={DATABASE_URL.split('@')[-1]}")
+```
+
+```text
+debug=false db_host=prod-db.internal:5432/db
+```
+
+**How to read this output:** The application code is identical across laptop, CI, staging, and production -- only the injected environment changed, so the same image promoted through the pipeline behaves correctly everywhere (factor V: build once, configure per release). The practical payoff of the whole list is concentrated in factors 3, 6, and 11: **config-from-env + stateless processes + logs-to-stdout** are precisely what make horizontal scaling, container orchestration, and zero-downtime rolling deploys possible. Most "why won't this scale?" or "why does it break behind a load balancer?" incidents trace directly back to a violation -- a session stored in a local dict (breaks factor 6 the moment you add a second replica), a secret baked into the image (factor 3), or a log file the container loses on restart (factor 11).
+
+---
+
+#### Coupling and Cohesion (Deep Cuts)
+
+The earlier sections introduced tight vs. loose coupling and high vs. low cohesion. Two more rigorous vocabularies let you *measure* and *talk precisely* about coupling, which matters when you have to justify a refactor or draw a service boundary.
+
+**Afferent and efferent coupling.** For a given module or package:
+
+- **Afferent coupling (Ca)** -- the number of other components that depend *on* this one ("incoming"). High Ca means many things will break if you change this module: it carries high responsibility.
+- **Efferent coupling (Ce)** -- the number of other components this one depends *on* ("outgoing"). High Ce means this module is fragile: it breaks when any of its many dependencies change.
+- **Instability `I = Ce / (Ca + Ce)`** -- a number from 0 to 1. `I = 0` is maximally *stable* (lots of things depend on it, it depends on nothing); `I = 1` is maximally *unstable* (depends on everything, nothing depends on it). The guiding rule (the Stable Abstractions Principle): stable packages should be *abstract* (so they can be extended without modification), and unstable packages are where concrete, frequently-changing detail belongs. A concrete class that everything depends on is a refactoring trap.
+
+**Connascence** is a finer-grained vocabulary than "coupling" for *how* two pieces of code are connected. Two elements are connascent if changing one requires changing the other to keep the system correct. The forms, roughly from weakest to strongest:
+
+- **Connascence of Name** -- agreement on a name (a method called `save`). Weakest; rename tools handle it.
+- **Connascence of Type** -- agreement on a type (a parameter must be an `int`).
+- **Connascence of Meaning** -- agreement on the meaning of a value (a magic `1` means "active"). Fix with named constants/enums.
+- **Connascence of Position** -- agreement on order of arguments (`func(lat, lon)` vs `func(lon, lat)`). Fix with keyword arguments.
+- **Connascence of Algorithm** -- both sides must use the same algorithm (e.g., the same checksum or hashing on each end).
+- **Connascence of Execution (order)** -- things must happen in a specific order (`init()` before `run()`).
+- **Connascence of Timing** -- correctness depends on timing (a race condition, a sleep-based wait).
+- **Connascence of Value** -- several values must change together (the four corners of a rectangle, a min/max pair).
+- **Connascence of Identity** -- two references must point to the *same* object instance.
+
+Two axes matter more than memorizing the list. **Static connascence** (visible in the source: name, type, position) is far cheaper than **dynamic connascence** (only visible at runtime: timing, execution order, identity, value), because the compiler and your editor can help with static forms but cannot see dynamic ones. And connascence that is **local** (inside one module/function) is tolerable even at high strength, while connascence that is **distant** (spanning modules, services, or repos) should be kept as weak as possible -- ideally just connascence of name via a published interface. The refactoring heuristic: *as the distance between two elements grows, reduce the strength of their connascence.* A magic number shared across two microservices (distant connascence of meaning) is a far worse smell than the same magic number used twice inside one function.
+
+```python
+# Connascence of Position (fragile): caller must remember argument order
+def make_point(x, y, z): ...
+make_point(1, 2, 3)   # which is which? Swap two and it silently misbehaves.
+
+# Connascence of Name (stronger contract, weaker coupling): keyword-only
+def make_point(*, x: int, y: int, z: int): ...
+make_point(z=3, x=1, y=2)   # order-independent; the names carry the contract
+```
+
+**Package by feature vs. package by layer.** *Package by layer* groups code by technical role -- all models in `models/`, all views in `views/`, all services in `services/`. A single feature is then smeared across every directory, so a change to "orders" touches `models/order.py`, `views/order_view.py`, and `services/order_service.py`, and the high coupling between those files is hidden by the directory structure. *Package by feature* groups by business capability -- an `orders/` package containing its own models, views, and services. This raises cohesion (everything about orders is in one place), localizes coupling (the tangle is inside one package where it is honest), and -- not coincidentally -- makes the package a ready-made seam if you later extract it into a service. Feature packaging is the structural expression of high cohesion plus the bounded-context idea from DDD.
+
+> **Key Takeaway:** "Reduce coupling" is too vague to act on. Instability (`Ce/(Ca+Ce)`) tells you *which* modules are risky to change and which should be abstract; connascence tells you *what kind* of coupling you have and -- via the distance/strength rule -- which instances to attack first. Package by feature so that the coupling you cannot remove is at least localized and visible.
+
+---
+
+#### Common Anti-Patterns
+
+Knowing the named anti-patterns gives you a shared vocabulary for code review and design discussions -- "this is turning into a god object" lands faster than a paragraph of explanation.
+
+- **God object / blob** -- one class (or module) that knows and does everything: it has dozens of methods, reaches into every part of the system, and has a sky-high afferent coupling. Every change risks it; nobody fully understands it. Fix by splitting along responsibilities (SRP) and pushing behavior to the objects that own the relevant data.
+- **Anemic domain model** -- domain objects are bare bags of getters and setters, with all the actual business logic sitting in "service" or "manager" procedures. It is object-oriented in name only and is the direct violation of Tell-Don't-Ask. Push behavior and invariants back onto the entities and value objects. (Note: an anemic *DTO* at a boundary is fine -- the smell is specifically an anemic *domain* model.)
+- **Spaghetti vs. lasagna** -- spaghetti code has tangled, unstructured control flow where everything jumps to everything; lasagna (or "ravioli/baklava") code is the opposite failure mode -- so many thin pass-through layers that a simple call traverses six files of ceremony adding no value. Both hurt. Aim for the *right number* of meaningful boundaries, not zero and not infinity.
+- **Big ball of mud** -- a system with no discernible architecture, where every part depends on every other part and structure has eroded into entropy. It is, empirically, the most common architecture in the wild. The point is not that you will never have one, but that fighting its entropy must be a *deliberate, continuous* effort, not a one-time cleanup.
+- **Premature optimization / premature abstraction** -- adding complexity (a cache, a generic framework, an extra layer of indirection) before there is evidence it is needed. It pairs with YAGNI: you pay the cost of the abstraction now and often discover later that you abstracted along the wrong axis. Optimize against measurements, abstract against the Rule of Three.
+- **Magic / hidden coupling** -- behavior that "just happens" through Django signals, monkeypatching, import side effects, or global mutable state, so that reading the call site tells you nothing about what will actually run. It makes debugging archaeology. Prefer explicit calls; reserve magic for genuine framework-level cross-cutting concerns.
+- **Distributed monolith** -- the worst-of-both-worlds outcome of a bad microservices split: services that are so chatty and tightly coupled that they must be deployed together and a change to one forces changes to several. You pay the full operational tax of distribution (network, partial failure, deployment complexity) while getting none of the independence that justifies it. It is usually caused by drawing service boundaries that do not align with bounded contexts. (Covered further in the Architectural Styles chapter.)
+
+> **Common pitfall:** Anti-pattern labels are diagnostic tools, not insults to throw in review. The useful move is to name the *force* that produced the anti-pattern (deadline pressure, unclear ownership, a wrong early abstraction) and propose the specific refactor (extract class, push behavior down, collapse a pointless layer), rather than just declaring code "bad."
+
+---
+
 ### Clean Architecture / Hexagonal Architecture
 
 Clean Architecture (Robert C. Martin) and Hexagonal Architecture (Alistair Cockburn) share the same core insight: **dependencies should point inward**, toward the domain. The core business logic should have zero knowledge of frameworks, databases, or external services. Those are details that belong in outer layers.

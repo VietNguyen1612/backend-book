@@ -670,6 +670,62 @@ Changes to Outputs:
 
 > **Common pitfall:** A `-/+ destroy and then create` on a stateful resource (like the RDS instance or its `db_subnet_group`) can mean Terraform plans to delete your production database to satisfy a config change. Always read the plan, not just the exit code — and protect critical resources with `deletion_protection`, `prevent_destroy` lifecycle blocks, or `ignore_changes` so a careless apply can't wipe data.
 
+#### Declarative vs. Imperative Provisioning
+
+The principle underneath every IaC tool worth using is **declarative provisioning**: you describe the *desired end state* ("a VPC, an EKS cluster with 3 nodes, an RDS instance"), and the tool figures out the diff between that and reality and applies only the necessary changes. You do not write the steps. This is what makes IaC reproducible and idempotent — running `apply` twice on unchanged code is a no-op, and a half-failed apply can be re-run to converge. An imperative script (`aws ec2 run-instances ...`) instead encodes the *steps*, which are not idempotent (run it twice and you get two instances) and carry no model of current state. Terraform, CloudFormation, and Kubernetes manifests are all declarative for exactly this reason; Ansible is largely declarative at the task level (each module is idempotent) even though playbooks read top-to-bottom.
+
+#### OpenTofu
+
+OpenTofu is the open-source fork of Terraform, created by the community after HashiCorp relicensed Terraform from the open-source MPL to the source-available BSL in 2023. It is a drop-in replacement: the same HCL, the same provider ecosystem, the same `init`/`plan`/`apply` workflow, and (currently) state-file compatibility. It is now governed by the Linux Foundation. The practical takeaway for an interview: if license terms matter to your organization, OpenTofu lets you keep the entire Terraform workflow on a truly open-source tool, and migrating is typically just swapping the `terraform` binary for `tofu`.
+
+#### CloudFormation and CDK
+
+CloudFormation is AWS's native, declarative IaC service. You describe resources in a YAML/JSON template, and AWS manages them as a **stack** — it handles dependency ordering, and crucially, **automatic rollback**: if any resource in a stack fails to create or update, CloudFormation rolls the entire stack back to its last good state. Because it is a managed AWS service, there is no separate state file to store and lock — AWS tracks stack state for you. The tradeoffs versus Terraform are AWS-only scope and notoriously verbose templates.
+
+The **AWS CDK (Cloud Development Kit)** addresses the verbosity by letting you define infrastructure in TypeScript, Python, Java, or Go; the CDK *synthesizes* (compiles) your code into a CloudFormation template under the hood. So CDK gives you loops, conditionals, and reusable constructs (like Pulumi) while still deploying through CloudFormation's managed stacks and rollback. CDK is to CloudFormation roughly what Pulumi is to Terraform.
+
+#### Immutable Infrastructure
+
+Immutable infrastructure means you **never modify a running server in place** — no SSH-ing in to patch, no config drift accumulating over months. To change anything, you build a brand-new machine image with the change baked in and replace the old instance entirely. This eliminates the "works on that one server" class of mystery, because every instance of a given version is bit-for-bit identical and disposable.
+
+The pattern in practice: use a tool like **Packer** to bake a versioned machine image (an AMI, a VM image, or a container image) containing the OS, runtime, and your application; then have your IaC (Terraform/CloudFormation) launch instances from that image. To deploy a new version, bake a new image and roll the autoscaling group or replace the fleet — the old instances are terminated, not upgraded. Containers are the purest expression of this idea: you never `docker exec` into a production container to fix it; you ship a new image and let the orchestrator replace the Pods.
+
+{% raw %}
+```hcl
+# packer/app.pkr.hcl -- bake an immutable AMI with the app pre-installed
+source "amazon-ebs" "app" {
+  region        = "us-east-1"
+  instance_type = "t3.medium"
+  source_ami_filter {
+    filters = { name = "ubuntu/images/*ubuntu-jammy-22.04-amd64-server-*" }
+    owners  = ["099720109477"]   # Canonical
+    most_recent = true
+  }
+  ami_name = "myapp-${var.app_version}-{{timestamp}}"   # Versioned, immutable
+  ssh_username = "ubuntu"
+}
+
+build {
+  sources = ["source.amazon-ebs.app"]
+  provisioner "shell" {
+    inline = [
+      "sudo apt-get update",
+      "sudo apt-get install -y python3.12",
+      "sudo systemctl enable myapp",   # App baked in; instance is ready on boot
+    ]
+  }
+}
+```
+{% endraw %}
+
+> **Common pitfall:** "Immutable" only holds if your image build is reproducible and your instances are genuinely stateless. If a server quietly accumulates local state (uploaded files, a local SQLite DB) and you replace it, that data is gone. Persist all state in external services (object storage, managed databases) so any instance can be destroyed and recreated freely.
+
+#### Environment Parity and Secrets Injection
+
+**Environment parity** means keeping dev, staging, and production as similar as practical — same OS, same runtime version, same backing services (don't run SQLite in dev and Postgres in prod), same deployment mechanism. Divergence is where "it worked in staging" bugs are born. IaC makes parity achievable: the *same* modules/templates provision every environment, with differences confined to a small set of parameters (instance sizes, replica counts) rather than entirely separate, hand-maintained setups — exactly the pattern in the Terraform example above where `var.environment` toggles `multi_az` and instance classes off one codebase.
+
+**Secrets must never live in IaC state or repos.** This is a frequent and serious mistake: Terraform writes resource attributes — including generated database passwords — into the state file in *plaintext*, so a state file in S3 is as sensitive as the secrets themselves (encrypt it, lock down access, never commit it). The correct pattern is to keep secrets out of code entirely and **inject them at runtime from a dedicated secrets manager** (AWS Secrets Manager, HashiCorp Vault, GCP Secret Manager). IaC provisions the *reference* to the secret (the ARN, the IAM policy granting access); the application fetches the actual value at boot. In Kubernetes, the External Secrets Operator syncs values from the manager into Kubernetes Secrets so manifests reference a name, not a credential.
+
 #### Pulumi
 
 Pulumi solves the same problem as Terraform but lets you write infrastructure definitions in real programming languages: Python, TypeScript, Go, C#, and Java. This means you can use loops, conditionals, functions, classes, unit tests, and your existing IDE tooling. Pulumi is particularly powerful when your infrastructure logic is complex or when your team is more comfortable with application languages than HCL.

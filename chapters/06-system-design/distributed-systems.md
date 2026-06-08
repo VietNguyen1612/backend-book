@@ -111,6 +111,100 @@ Prevention mechanisms include:
 
 > **Key Takeaway**: Consensus is fundamentally about turning a quorum of fallible machines into a single source of truth. The recurring theme -- in Raft's "majority of votes," in quorum writes, and in split-brain prevention -- is that **a majority can never exist on both sides of a partition**, so at most one side ever makes progress. When you reach for etcd, ZooKeeper, or Consul, you are renting that hard-won guarantee instead of building it yourself; the cardinal sin is putting consensus-critical state behind a system that has no quorum and can silently split-brain.
 
+### Time, Clocks & Ordering
+
+In a single process, ordering events is trivial: read the wall clock, or just observe the order statements execute. In a distributed system, *there is no single clock* and no global "now," and this breaks the most natural-seeming assumption engineers make -- that you can order events on different machines by comparing their timestamps. You cannot, and doing so is a classic source of silent data corruption.
+
+**Physical clocks drift.** Every machine has a quartz oscillator that runs slightly fast or slow (typical drift is tens of parts per million -- seconds per day if left alone). NTP (Network Time Protocol) disciplines clocks against time servers, but it only bounds the error; it does not eliminate it. After NTP sync, two machines in the same datacenter may still disagree by single-digit milliseconds, and across the internet by tens of milliseconds or more. Worse, NTP can step the clock *backward* to correct drift, so a single machine's clock is not even guaranteed to be monotonic. The practical rules: never order events on different nodes by comparing wall-clock timestamps; never assume `event_a.timestamp < event_b.timestamp` means A happened first; and for measuring elapsed time on one machine, use a monotonic clock (`time.monotonic()` in Python, `CLOCK_MONOTONIC`) which never goes backward, not the wall clock.
+
+**Logical clocks** sidestep physical time entirely and order events by causality instead.
+
+- **Lamport timestamps** are a single integer counter per node. The rules: increment your counter on every local event; attach it to every message you send; on receiving a message, set your counter to `max(local, received) + 1`. This yields a **total order consistent with causality**: if event A causally precedes event B (A → B), then `L(A) < L(B)`. The catch is the converse does *not* hold -- `L(A) < L(B)` does **not** imply A caused B; they may be concurrent and unrelated. So Lamport clocks give you *an* ordering (useful for tie-breaking and total-order broadcast) but cannot tell you whether two events were truly causally related or merely concurrent.
+
+- **Vector clocks** fix that. Each node keeps a vector of counters, one entry per node in the system. A node increments its own entry on each event and ships the whole vector with messages; on receipt it takes the element-wise max and then increments its own entry. Now you can compare two vectors: if every entry of VC(A) is ≤ VC(B) (and at least one is strictly less), then A → B (A happened before B). If neither dominates the other, the events are **concurrent** -- which is exactly the conflict-detection signal Dynamo-style stores use to know that two writes happened without knowledge of each other and must be reconciled (presented as siblings, merged via a CRDT, or resolved by application logic). The cost is space and message overhead that grows with the number of nodes.
+
+```text
+Lamport vs Vector clock for three nodes (A, B, C):
+
+  Event sequence:  A writes x   --msg-->  B reads & writes x
+                   C writes y (independently, no message exchanged)
+
+  Lamport:   L(A.write)=1   L(B.write)=2   L(C.write)=1
+             -> B.write > A.write (correct: B saw A)
+             -> C.write vs A.write both =1 ... ordering is arbitrary,
+                and we CANNOT tell they were concurrent.
+
+  Vector:    VC(A.write)=[1,0,0]
+             VC(B.write)=[1,1,0]   ([1,0,0] <= [1,1,0]  => A -> B, causal)
+             VC(C.write)=[0,0,1]   (neither <= the other vs A => CONCURRENT)
+```
+
+**How to read this output:** Both clocks correctly capture that B's write came after A's (B saw A's message, so its timestamp dominates). The difference is the C/A pair: Lamport gives them equal values and silently loses the fact that they never communicated, so a system relying on Lamport order would pick a winner and could discard a write. The vector clock shows `[0,0,1]` and `[1,0,0]` are *incomparable*, which is the precise signal "these are conflicting concurrent writes -- do not blindly pick one." In an interview, this is the answer to "how does Dynamo detect a conflict?": vector clocks make concurrency *detectable*, where Lamport timestamps and last-write-wins make it *invisible*.
+
+**Hybrid Logical Clocks (HLC) and TrueTime** bring physical time back in usefully. An HLC packs a physical-time component (so timestamps are close to wall-clock and human-meaningful) together with a logical counter (so causally-related events still order correctly even when physical clocks are slightly off). It gives you timestamps you can compare *and* that respect causality, with bounded divergence from real time -- used by CockroachDB, YugabyteDB, and MongoDB. Google's **TrueTime** (the foundation of Spanner) takes the opposite, hardware-backed approach: GPS receivers and atomic clocks in every datacenter let the API return time as an *interval* `[earliest, latest]` with a guaranteed bound on uncertainty (typically a few milliseconds). To commit a transaction with **external consistency** (linearizability across the globe), Spanner simply *waits out* the uncertainty window before reporting the commit -- it sleeps until it is certain the chosen timestamp is in the past everywhere -- so any later transaction is guaranteed a higher timestamp. Spanner essentially buys global ordering by spending a few milliseconds of commit latency and a lot of money on clock hardware.
+
+> **Key Takeaway:** There is no global clock, so stop ordering distributed events by wall-clock timestamps. Use a monotonic clock for measuring durations on one machine; use logical clocks for ordering across machines -- Lamport when you just need *a* consistent total order, vector clocks when you must *detect* concurrent (conflicting) updates; and reach for HLC/TrueTime only when you need globally meaningful timestamps with bounded uncertainty.
+
+### Distributed Unique IDs
+
+Many systems need to mint unique identifiers -- for rows, messages, orders, events -- and at scale the obvious choice (a database auto-increment column) becomes a bottleneck. Choosing an ID scheme is a small decision with outsized impact on write throughput, index health, and how much your system leaks.
+
+**Why not auto-increment.** A single monotonic sequence requires a single point of coordination: every insert must consult the same counter, so it cannot be generated independently on each shard or service, and it caps your write throughput at whatever that one sequence can serve. It also *leaks information* -- sequential IDs reveal your total volume (a competitor can sign up twice a day and subtract to learn your daily order count) and let attackers enumerate resources (`/invoice/1001`, `/invoice/1002`). And in a sharded database there is no single sequence to draw from anyway.
+
+**UUIDv4** is 128 bits of (mostly) randomness, generated locally with zero coordination and effectively zero collision probability. That solves coordination and enumeration. Its problem is **index locality**: because the values are random, inserts scatter all over a B-tree index, causing random page writes, poor cache behavior, and index fragmentation. On a high-insert table with a UUIDv4 primary key, this measurably hurts write throughput and bloats the index.
+
+**UUIDv7 / ULID** fix exactly that. Both put a millisecond timestamp in the high-order bits and fill the rest with randomness, so newly generated IDs **sort roughly by creation time**. That restores insert locality -- new rows append near the "right edge" of the index like an auto-increment key would -- while keeping the decentralized, no-coordination, non-enumerable properties of UUIDv4. (ULID is a 26-char Base32 string; UUIDv7 is the standardized UUID-format version of the same idea.) For most new systems that need a primary key, a time-ordered UUID is now the best default: you get global uniqueness *and* good index behavior.
+
+**Snowflake IDs** (originated at Twitter; used in spirit by Discord, Instagram, and others) pack a sortable 64-bit integer instead of a 128-bit value, which is attractive because it fits in a `BIGINT` and is compact in indexes and URLs. The layout is:
+
+```text
+Snowflake 64-bit ID layout:
+
+ 0 | 41 bits timestamp (ms since custom epoch) | 10 bits worker | 12 bits sequence
+ ^                                              ^                ^
+ sign bit                                       machine/datacenter   per-ms counter
+ (always 0)
+
+ - 41-bit ms timestamp  -> ~69 years of IDs from a chosen epoch
+ - 10-bit worker id     -> 1024 distinct generators (no coordination at gen time)
+ - 12-bit sequence      -> 4096 IDs per worker per millisecond
+                           => up to ~4.1 million IDs/sec per worker
+```
+
+Each worker generates IDs locally: take the current millisecond, OR in its assigned worker id, and OR in a per-millisecond sequence counter that resets each millisecond. The only coordination needed is one-time assignment of unique worker ids (often handed out by ZooKeeper/etcd or from config). IDs are roughly time-sortable and require no central counter on the hot path. The two operational hazards: you must guarantee worker ids are unique (two workers with the same id can collide), and you depend on clocks not running backward -- if NTP steps the clock back, a naive generator can mint a duplicate, so production implementations refuse to generate (or wait) when they detect the clock moved backward.
+
+**Ticket servers / pre-allocated ranges** are the middle ground when you genuinely want dense, ordered integers (e.g., human-friendly invoice numbers) without per-insert coordination. A central service hands out *blocks* of IDs -- "node A, you own 1–10,000; node B, 10,001–20,000" -- and each node then consumes its block locally with a simple in-memory counter, only returning to the central service when its block runs low. This amortizes the coordination cost across thousands of IDs (one network round trip per block, not per ID) while keeping IDs compact and ordered. Flickr famously used a pair of MySQL ticket servers in exactly this way.
+
+> **Key Takeaway:** The ID scheme encodes a throughput-vs-coordination trade-off. Auto-increment is dense and ordered but a single coordination point that leaks volume; UUIDv4 is fully decentralized but kills index locality; UUIDv7/ULID is the modern default (decentralized *and* time-ordered); Snowflake is the compact 64-bit choice when bytes matter, at the price of managing worker ids and clock monotonicity; ticket servers buy dense ordered integers with amortized coordination.
+
+### Distributed Locking & Coordination Primitives
+
+Sometimes you need to guarantee that *only one* actor does something at a time across many machines -- and a local mutex is useless because the contending processes live on different hosts. Distributed locking provides cross-machine mutual exclusion, but it comes with a correctness caveat that trips up almost everyone, so the most important lesson is often "design so you don't need a strict lock at all."
+
+**Use cases**: ensure a single instance of a scheduled job runs (only one node should perform the nightly compaction / send the daily digest), prevent double-processing of a work item, serialize access to a non-transactional external resource, or elect a leader for a singleton responsibility.
+
+**Implementations**, roughly in increasing order of guarantee:
+
+- **PostgreSQL advisory locks**: `pg_advisory_lock(key)` / `pg_try_advisory_lock(key)` take an application-defined lock that is *not* tied to any row. Session-level advisory locks are automatically released when the connection closes (including on crash), which neatly avoids the "crashed holder deadlocks everyone" problem. Great when you already have Postgres and want a lock without standing up new infrastructure; limited by the throughput of that one database.
+- **Redis lock with token + expiry**: `SET lockkey <random-token> NX PX 30000` -- set the key only if it does not exist (`NX`), with a 30-second expiry (`PX`). The expiry is essential: if the holder crashes, the lock auto-releases after the TTL so the system does not deadlock. Release must be done *only by the owner*: a Lua script checks that the stored token matches the caller's token before deleting, so a process whose lease already expired cannot accidentally delete a lock now held by someone else. (Redlock is the multi-node variant; it is also famously debated -- see the caveat below.)
+- **etcd / ZooKeeper leases**: the strongest option. These are consensus-backed (Raft / ZAB), so the lock state itself is linearizable and survives node failures without split-brain. A client holds a *lease* it must periodically renew (keep-alive); if it stops renewing (crash, partition), the lease expires and the lock is released. This is the right tool when correctness genuinely depends on the lock and you can afford the dependency. **Always set an expiry/lease** on any distributed lock -- a lock with no timeout turns one crashed process into a permanent system-wide deadlock.
+
+**The correctness caveat (and why you may not actually have mutual exclusion).** A lock with a timeout cannot, by itself, guarantee mutual exclusion. Consider: process P1 acquires a 30-second lease, then suffers a stop-the-world GC pause (or a VM live-migration stall, or gets descheduled) for 40 seconds. The lease expires, P2 legitimately acquires the lock and starts writing. Then P1 wakes up -- it still *believes* it holds the lock, because from its perspective no time passed -- and also writes. Now two processes act simultaneously despite the "lock." No timeout value fixes this, because the pause can always exceed it.
+
+```text
+  t=0    P1 acquires lock (lease 30s)               [P1 thinks: I hold the lock]
+  t=5    P1 starts a long GC pause .................. (frozen)
+  t=30   lease EXPIRES
+  t=31   P2 acquires lock (it's free)              [P2 thinks: I hold the lock]
+  t=45   P1 resumes, still believes it holds lock  --> P1 and P2 both write!
+```
+
+The robust fix is **fencing tokens**: each lock grant includes a monotonically increasing number (33, then 34, ...). Every write to the protected resource carries the token, and the resource (database, storage service) *rejects any write whose token is lower than the highest it has already seen*. So when stale P1 wakes up and writes with token 33, the storage rejects it because P2 already wrote with token 34 -- mutual exclusion is enforced at the resource, not by trusting the lock. This requires the downstream resource to support fencing, which not all do.
+
+Because fencing is hard to retrofit, the pragmatic guidance is: **prefer making the operation idempotent** so that occasional double-execution is harmless (an idempotency key dedups the duplicate effect), rather than relying on a lock to guarantee single-execution. Use distributed locks to reduce *contention and wasted work* in the common case; do not bet correctness on them unless they are consensus-backed and the protected resource enforces fencing tokens.
+
+> **Common pitfall:** Treating a Redis (or any timeout-based) lock as a hard mutual-exclusion guarantee. Under a GC pause or network partition the lease can expire while the holder still thinks it owns the lock, so two processes run at once. Either back the lock with fencing tokens the resource validates, or -- better -- make the protected operation idempotent so a double-run cannot corrupt state.
+
 ### Service Communication Patterns
 
 **Synchronous Communication** (HTTP REST, gRPC) follows the request-response pattern. The caller sends a request and blocks until it receives a response. This is simple to reason about and ideal for user-facing requests that need an immediate response (e.g., "show me my profile"). The downsides are temporal coupling (if the downstream service is down, the caller fails), latency accumulation (each hop adds latency), and cascading failure risk (one slow dependency can exhaust the caller's thread pool, causing it to fail, which cascades to its callers).

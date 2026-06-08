@@ -217,6 +217,60 @@ def get_parameter(name: str, region: str = "us-east-1") -> str:
 SECRET_KEY = get_parameter("/prod/myapp/django-secret-key")
 ```
 
+#### GCP Secret Manager
+
+On Google Cloud, Secret Manager is the managed equivalent, with versioned secrets and IAM-based access control. Access is granted to a service account rather than to a distributed key.
+
+```python
+# pip install google-cloud-secret-manager
+from google.cloud import secretmanager
+
+def get_gcp_secret(project_id: str, secret_id: str, version: str = "latest") -> str:
+    client = secretmanager.SecretManagerServiceClient()
+    name = f"projects/{project_id}/secrets/{secret_id}/versions/{version}"
+    response = client.access_secret_version(request={"name": name})
+    return response.payload.data.decode("UTF-8")
+
+# Usage in settings.py:
+SECRET_KEY = get_gcp_secret("my-project", "django-secret-key")
+```
+
+The client authenticates via **Application Default Credentials** -- on GKE or Cloud Run it picks up the workload's bound service account automatically, so no static key file ever lands on disk.
+
+#### Kubernetes: external-secrets and Workload Identity
+
+A raw Kubernetes `Secret` is only base64-encoded (not encrypted) in etcd, and committing it to git defeats the purpose. The **External Secrets Operator (ESO)** solves this: secrets live in a real backend (Vault, AWS/GCP Secret Manager) and ESO syncs them into native `Secret` objects at runtime, so the cluster manifest contains only a *reference*, never the value.
+
+```yaml
+# The ExternalSecret references a value in the cloud provider; no secret is in git.
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: myapp-db
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager   # points at the SecretStore/backend config
+    kind: SecretStore
+  target:
+    name: myapp-db-secret       # the native K8s Secret ESO will create/sync
+  data:
+    - secretKey: DATABASE_PASSWORD
+      remoteRef:
+        key: prod/myapp/database
+        property: password
+```
+
+#### Workload Identity / Cloud IAM Roles vs Static Keys
+
+The most important secrets-management principle for cloud workloads is to **eliminate long-lived static keys entirely**. Instead of baking an access key into the app, bind the workload's identity to a cloud IAM role and let the platform mint short-lived credentials automatically:
+
+- **AWS**: IAM Roles for Service Accounts (IRSA) on EKS, or instance/task roles on EC2/ECS. The SDK obtains temporary credentials (with a TTL) from the metadata service or via OIDC -- no static `AWS_SECRET_ACCESS_KEY`.
+- **GCP**: Workload Identity binds a Kubernetes service account to a GCP service account; ADC issues short-lived tokens.
+- **Azure**: Managed Identities / Workload Identity provide the same.
+
+These credentials are **dynamic and short-lived**: they expire in minutes to hours and rotate transparently, so a leaked token has a tiny exploitation window and there is no static key to steal in the first place. The same logic underpins Vault's dynamic database credentials shown above -- a unique, auto-expiring username/password per workload beats one shared, permanent DB password. Prefer this model over static keys everywhere it is available.
+
 #### Environment Variables and .env Files
 
 The Twelve-Factor App methodology recommends storing configuration in environment variables. For local development, `.env` files provide a convenient way to manage these variables without committing secrets to version control.
@@ -594,6 +648,64 @@ class DataBreachLog(models.Model):
     remediation_steps = models.TextField()
     reported_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
 ```
+
+#### CCPA (California Consumer Privacy Act)
+
+CCPA (as amended by the CPRA) is the U.S. analogue to GDPR for California residents. The technical obligations overlap heavily with GDPR -- right to know what data you hold, right to delete, right to data portability -- so a system built for GDPR erasure and export (above) largely satisfies CCPA. The notable differences:
+
+- **Right to opt out of "sale"/sharing**: you must honor a "Do Not Sell or Share My Personal Information" signal, including the browser-level **Global Privacy Control (GPC)** header.
+- **No prior consent required to collect** (unlike GDPR's lawful-basis-first model); the emphasis is on disclosure and opt-out rather than opt-in.
+
+```python
+# Honor the Global Privacy Control signal (Sec-GPC: 1)
+def respects_gpc(request) -> bool:
+    return request.headers.get("Sec-GPC") == "1"
+
+def track_for_ads(request, user):
+    if respects_gpc(request) or not user.consent.get("ad_personalization"):
+        return  # do not share/sell behavioral data
+    enqueue_ad_event(user)
+```
+
+#### PCI-DSS (Payment Card Data)
+
+If you touch cardholder data, PCI-DSS applies. The single most important architectural decision is **scope reduction**: the less card data flows through your systems, the smaller (and cheaper) your compliance burden.
+
+- **Never store raw PANs (card numbers) or CVVs.** Storing the CVV after authorization is forbidden outright.
+- **Tokenize**: let a payment provider (Stripe, Braintree, Adyen) capture the card directly via their hosted fields/SDK and hand you back an opaque token. Your servers store only the token and charge against it -- the real card number never enters your network, dropping you to the simplest SAQ scope.
+
+```python
+# The browser sends the card straight to Stripe; your server only sees a token.
+import stripe
+
+def charge(request):
+    token = request.POST["stripe_token"]   # opaque, e.g. "tok_visa" -> "pm_..."
+    stripe.PaymentIntent.create(
+        amount=5000, currency="usd",
+        payment_method=token, confirm=True,
+    )
+    # Store only: provider token, last4, brand, expiry. Never the full PAN or CVV.
+    Payment.objects.create(user=request.user, provider_token=token, last4="4242")
+```
+
+#### SOC 2, ISO 27001, and SBOM
+
+- **SOC 2 / ISO 27001** are control *frameworks*, not laws. You demonstrate that you operate a set of controls -- access control, change management, monitoring, incident response, vendor management -- and an independent auditor attests to it (SOC 2 Type II audits the controls *over a period*, typically 6-12 months). For engineering, this mostly means: enforce least-privilege access, log and review changes, run the monitoring/alerting and incident processes you claim to, and keep the evidence (access reviews, ticket history, on-call records).
+- **SBOM (Software Bill of Materials)**: a machine-readable inventory of every component and dependency in your software (formats: CycloneDX, SPDX). When a new CVE drops (think Log4Shell), an SBOM lets you answer "are we affected, and where?" in minutes instead of days, and it is increasingly required by customers and regulators.
+
+```bash
+# Generate a CycloneDX SBOM for a Python project
+pip install cyclonedx-bom
+cyclonedx-py environment -o sbom.json
+
+# Then scan the SBOM against vulnerability databases (e.g., grype, trivy)
+grype sbom:./sbom.json
+```
+
+#### Data Residency and Privacy by Design
+
+- **Data residency / sovereignty**: some jurisdictions require that personal data be stored (and sometimes processed) within specific geographic boundaries. Architect for it by pinning storage to in-region buckets/databases, partitioning data by region, and ensuring backups and logs do not silently cross borders.
+- **Privacy by design**: bake privacy into the architecture rather than bolting it on. In practice this means data minimization (don't collect what you don't need), purpose limitation (use data only for the stated reason), encryption at rest and in transit by default, short retention windows, and pseudonymization/anonymization wherever the raw identity isn't required.
 
 #### Dependency Scanning
 

@@ -1,0 +1,15 @@
+# --- Self-study workflow: local only, never commit ---
+# Personal Obsidian study vault and notes
+self-notes/
+# Obsidian app config + plugins (per-machine study tooling)
+.obsidian/
+.trash/
+
+# --- Jekyll build output ---
+_site/
+.jekyll-cache/
+.jekyll-metadata
+
+# --- OS / editor noise ---
+.DS_Store
+Thumbs.db

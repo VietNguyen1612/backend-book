@@ -1,3 +1,8 @@
 title: Backend Developer Knowledge Base
 description: Mid → Senior → Architect Level · Python/Django Flavored · Framework-Agnostic Principles
 theme: jekyll-theme-cayman
+
+# Keep the private Obsidian vault out of the published site
+exclude:
+  - self-notes/
+  - .obsidian/

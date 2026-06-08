@@ -337,6 +337,42 @@ This Compose file demonstrates several best practices: health check dependencies
 
 > **Key Takeaway:** Containerization is about reproducibility and isolation. A well-written Dockerfile uses multi-stage builds, optimizes layer caching, runs as non-root, and keeps images minimal. Docker Compose ties multiple containers together for local development. In production, graduate to Kubernetes for orchestration, scaling, and self-healing.
 
+#### Image Registries
+
+A registry is the distribution layer for images: you `push` a built image to it from CI and every node `pull`s from it at deploy time. The common choices are Docker Hub (the public default), GitHub Container Registry (`ghcr.io`, convenient when your code already lives on GitHub), AWS ECR, and Google Artifact Registry / GCR. Cloud registries integrate with the cloud's IAM, so nodes authenticate with their instance role rather than a long-lived password.
+
+The single most important practice is **tagging strategy**. Never deploy `latest` to production: it is a mutable pointer, so two `docker pull myapp:latest` a minute apart can return different images, which destroys reproducibility and makes rollback ambiguous. Instead, tag every build with the **immutable git SHA** (e.g., `myapp:abc123f`) so a running container can be traced back to an exact commit, and additionally apply human-friendly **semantic tags** (`myapp:1.4.2`, `myapp:1.4`) for humans and release tooling. Enforce immutability at the registry itself where supported (ECR's `image_tag_mutability = "IMMUTABLE"`) so a tag, once pushed, can never be silently overwritten.
+
+For supply-chain integrity, **sign images** so the cluster can verify an image was built by your pipeline and not tampered with in transit or swapped in the registry. `cosign` (part of the Sigstore project) signs an image by digest and stores the signature alongside it:
+
+```console
+$ cosign sign --key cosign.key ghcr.io/myorg/myapp@sha256:9f3a1c0b2d4e...
+Pushing signature to: ghcr.io/myorg/myapp
+
+$ cosign verify --key cosign.pub ghcr.io/myorg/myapp@sha256:9f3a1c0b2d4e...
+Verification for ghcr.io/myorg/myapp --
+The following checks were performed on each of these signatures:
+  - The cosign claims were validated
+  - The signatures were verified against the specified public key
+```
+
+**How to read this output:** `cosign sign` operates on the image **digest** (`@sha256:...`), not the tag, because the digest is the only truly immutable identifier — signing a tag would be meaningless since tags can move. The `verify` step is what you wire into an admission controller (e.g., Kyverno or Sigstore's policy-controller): a cluster configured to reject unsigned images will block a deploy if `verify` fails, which is how you stop a compromised registry from injecting a malicious image into production. In an interview, the point is that scanning answers "does this image have known CVEs?" while signing answers the orthogonal question "did this image actually come from us, unmodified?"
+
+#### Container Runtime & OCI
+
+A container is not a virtual machine. There is no guest kernel and no hardware emulation — a container is **just an ordinary host process** that the kernel has placed into restricted namespaces (so it sees its own PID tree, network interfaces, mounts, and hostname) and constrained with cgroups (so its CPU and memory are capped). This is why containers start in milliseconds and have near-zero overhead compared to a VM, and also why containers share the host kernel (a kernel vulnerability is a weaker isolation boundary than a hypervisor — the reason security-sensitive multi-tenant platforms sometimes reach for microVMs like Firecracker or gVisor).
+
+The **OCI (Open Container Initiative)** standardizes the pieces so the ecosystem is not locked to Docker. It defines an **image spec** (the layered filesystem + manifest format every registry and runtime understands), a **runtime spec** (how to actually start a container from an unpacked bundle), and a **distribution spec** (the registry push/pull API). Because of these standards, an image built by Docker runs unchanged under Podman, containerd, or CRI-O.
+
+The runtime stack is layered:
+- **`runc`** is the low-level OCI runtime that does the actual `clone()`/`setns()`/cgroup syscalls to spawn the process. It runs one container and exits.
+- **`containerd`** (and the Red Hat alternative **CRI-O**) is the high-level runtime/daemon that manages image pulls, storage, and the lifecycle of many containers, delegating the final spawn to `runc`.
+- **Docker** today is a developer-facing tool that sits on top of `containerd` — when you `docker run`, Docker hands off to containerd, which calls runc. Kubernetes dropped its direct Docker integration ("Dockershim") in v1.24 and now talks to `containerd`/CRI-O directly over the **CRI (Container Runtime Interface)**, which is why "Docker is deprecated in Kubernetes" caused confusion — images still work fine; only the redundant Docker daemon was removed from the node.
+
+Because a container is just a process, the operational rules follow directly: keep it **ephemeral and stateless** (any node can be killed at any time), persist state in volumes or external services, **log to stdout/stderr** (the runtime captures these — don't write log files inside the container), and **handle SIGTERM** for graceful shutdown so in-flight requests drain before the kernel sends the final SIGKILL.
+
+> **Key Takeaway:** Standardize on OCI and you are never locked to one tool — the same image runs under containerd, CRI-O, or Podman. Remember the layering (`docker`/`kubelet` → `containerd`/CRI-O → `runc` → namespaced process) and that the "Docker deprecation in Kubernetes" was about removing the redundant daemon, not about images breaking.
+
 ---
 
 ### Kubernetes
@@ -762,5 +798,192 @@ Network Policies are firewall rules for pod-to-pod traffic. By default, all Pods
 This is critical for security: if one service is compromised, the attacker cannot freely probe all other services in the cluster. You can restrict traffic by namespace, by Pod label, by port, and by IP block.
 
 Note that Network Policies require a CNI plugin that supports them (Calico, Cilium, Weave). The default kubenet does not enforce Network Policies.
+
+#### Scheduling: Affinity, Taints, Topology Spread, and PDBs
+
+The default scheduler will place a Pod on any Node with enough free `requests`. Production workloads usually need finer control over *where* Pods land and *how* they are disrupted.
+
+**Node affinity / nodeSelector** attracts Pods to Nodes with particular labels — for example, scheduling GPU jobs only onto `gpu=true` nodes, or keeping latency-sensitive services on a specific instance type. `nodeSelector` is a hard exact-match; `nodeAffinity` adds soft `preferred` rules and richer operators.
+
+**Pod affinity / anti-affinity** schedules Pods relative to *other Pods*. Anti-affinity is the common case: spread replicas of the same Deployment across different Nodes (or availability zones) so a single Node or AZ failure cannot take out every replica. **Topology spread constraints** are the modern, more declarative way to express the same goal — "keep the skew of my Pods across zones within 1."
+
+**Taints and tolerations** are the inverse of affinity: a taint on a Node *repels* Pods, and only Pods with a matching **toleration** may land there. This reserves Nodes for specific workloads — e.g., spot-instance nodes are tainted so only fault-tolerant batch jobs that tolerate `spot=true:NoSchedule` get scheduled onto cheap, interruptible capacity.
+
+**Pod Disruption Budgets (PDB)** limit *voluntary* disruptions — Node drains for upgrades, autoscaler scale-downs, `kubectl drain`. A PDB declares "at least N (or X%) of these Pods must stay available," and the eviction API refuses to drain a Node if doing so would violate it. PDBs do **not** protect against involuntary disruptions (a Node crashing) — that is what replica count and anti-affinity are for.
+
+```yaml
+# Anti-affinity + topology spread in a Deployment's pod template
+spec:
+  template:
+    spec:
+      tolerations:
+        - key: "spot"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"        # Allowed onto spot-tainted nodes
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: ["amd64"]
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: myapp
+                topologyKey: kubernetes.io/hostname   # Prefer different nodes
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone     # Even across AZs
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: myapp
+---
+# pdb.yaml -- protect availability during voluntary disruptions
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: myapp-pdb
+  namespace: production
+spec:
+  minAvailable: 2          # Or: maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: myapp
+```
+
+A PDB blocking a drain is something you will see during a cluster upgrade:
+
+```console
+$ kubectl drain ip-10-0-1-42.ec2.internal --ignore-daemonsets
+node/ip-10-0-1-42.ec2.internal cordoned
+evicting pod production/myapp-7d9f8c-xk2lp
+error when evicting pods/"myapp-7d9f8c-xk2lp" -n "production" (will retry after 5s):
+Cannot evict pod as it would violate the pod's disruption budget.
+```
+
+**How to read this output:** The Node was `cordoned` (marked unschedulable) immediately, but the eviction is *blocked* because evicting that Pod would drop availability below the PDB's `minAvailable: 2`. The drain doesn't fail — it retries, waiting for a replacement Pod to come up elsewhere first, which is exactly the point: the PDB turns a node upgrade from "rip Pods out and hope" into a controlled, zero-dip rotation. The classic gotcha is a PDB with `minAvailable` equal to the replica count (e.g., `minAvailable: 3` on a 3-replica Deployment): nothing can ever be evicted, and node drains hang forever.
+
+#### Storage: PersistentVolumes, PVCs, and StorageClasses
+
+Pod-local storage is ephemeral — it dies with the Pod. Durable storage in Kubernetes is modeled with three objects that separate *what is asked for* from *what is provided*:
+
+- **PersistentVolume (PV):** a piece of actual storage in the cluster (an EBS volume, a GCE PD, an NFS share). It exists independently of any Pod.
+- **PersistentVolumeClaim (PVC):** a *request* for storage by a workload ("I need 20Gi, ReadWriteOnce"). The Pod references the PVC, not the PV — this decoupling means the app doesn't care which physical disk it gets.
+- **StorageClass:** describes a *kind* of storage (e.g., `gp3` SSD vs. cold HDD) and a **provisioner**. With **dynamic provisioning**, creating a PVC against a StorageClass causes Kubernetes to create the underlying PV (and cloud disk) automatically — no admin has to pre-provision volumes.
+
+Access modes matter: `ReadWriteOnce` (RWO) mounts to a single Node (typical for a block device backing one database Pod), while `ReadWriteMany` (RWX) allows many Nodes to mount it (needs a networked filesystem like EFS/NFS). The `reclaimPolicy` decides what happens when a PVC is deleted — `Retain` keeps the data (safe for databases), `Delete` destroys the underlying disk.
+
+```yaml
+# storageclass.yaml -- dynamic provisioning of gp3 SSDs on AWS
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-ssd
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  iops: "3000"
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer   # Bind in the same AZ as the Pod
+allowVolumeExpansion: true
+---
+# pvc.yaml -- a workload's request; the PV is created automatically
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: production
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 50Gi
+```
+
+`volumeBindingMode: WaitForFirstConsumer` is a subtle but critical setting in multi-AZ clusters: it delays creating the disk until the Pod is scheduled, so the disk is provisioned in the *same* availability zone as the Pod — otherwise a zonal EBS volume can be created in `us-east-1a` while the Pod gets scheduled in `us-east-1b` and can never mount it. StatefulSets use a `volumeClaimTemplates` block to give each Pod (`mydb-0`, `mydb-1`) its own PVC automatically.
+
+#### Vertical and Cluster Autoscaling
+
+HPA (covered above) adds *more Pods*. Two other autoscalers solve different problems:
+
+**Vertical Pod Autoscaler (VPA)** adjusts a Pod's CPU/memory **requests** to match observed usage, instead of changing replica count. It is ideal for workloads that can't scale horizontally (a singleton, a stateful leader). The catch: changing requests requires recreating the Pod, so VPA in `Auto` mode causes restarts — and VPA must not be pointed at the same resource as an HPA scaling on CPU/memory, or they fight. Many teams run VPA in `Off` (recommendation-only) mode and use its suggestions to right-size requests by hand.
+
+**Cluster Autoscaler** operates one level lower: it adds and removes *Nodes*. When Pods are stuck `Pending` because no Node has room, it grows the node group; when Nodes sit underutilized and their Pods can be rescheduled elsewhere (respecting PDBs), it removes them to save money. **Karpenter** is a popular AWS-native alternative that provisions right-sized nodes directly rather than scaling fixed node groups.
+
+The chain in practice: traffic rises → HPA adds Pods → some Pods can't be scheduled → Cluster Autoscaler adds a Node → the new Pods schedule. **KEDA** (mentioned under HPA) plugs in at the top, driving the HPA from event sources like queue depth and enabling scale-to-zero for idle event-driven workloads.
+
+```console
+$ kubectl get pods -n production
+NAME                     READY   STATUS    RESTARTS   AGE
+myapp-7d9f8c-aaaa        1/1     Running   0          6m
+myapp-7d9f8c-bbbb        0/1     Pending   0          12s
+
+$ kubectl describe pod myapp-7d9f8c-bbbb -n production
+Events:
+  Warning  FailedScheduling  9s   default-scheduler  0/4 nodes are available: 4 Insufficient cpu.
+  Normal   TriggeredScaleUp  5s   cluster-autoscaler  pod triggered scale-up: [{eks-spot 4->5}]
+```
+
+**How to read this output:** The `Pending` Pod with `FailedScheduling: Insufficient cpu` is the trigger — there is genuinely no room on the existing 4 Nodes. The Cluster Autoscaler watches for exactly these unschedulable Pods and emits `TriggeredScaleUp`, growing the `eks-spot` node group from 4 to 5. The Pod stays `Pending` for the minute or two it takes the new Node to boot and join, which is the latency interviewers probe for: HPA reacts in seconds, but if no Node has capacity you also pay the Node-provisioning delay, so latency-sensitive services keep some headroom (or over-provision with low-priority "balloon" Pods) rather than scaling Nodes on the critical path.
+
+#### Helm, Kustomize, and Operators
+
+Raw YAML doesn't compose well: deploying the same app to staging and production means duplicating manifests with small differences. Three tools address this.
+
+**Helm** is the package manager for Kubernetes. A **chart** is a versioned bundle of templated manifests; you supply a `values.yaml` to fill in the templates, and `helm install`/`helm upgrade` renders and applies them as a tracked **release** (so `helm rollback` reverts to a prior revision atomically). Helm shines for distributing third-party software (install Prometheus, cert-manager, an ingress controller with one command) and for parameterizing your own app across environments.
+
+**Kustomize** (built into `kubectl` via `kubectl apply -k`) takes the opposite, **template-free** approach: you keep plain YAML as a `base` and apply **overlays** that patch it per environment — bump the replica count in production, change an image tag, add an annotation — without any templating language. It composes cleanly and keeps the base readable as valid Kubernetes YAML.
+
+```yaml
+# kustomize: overlays/production/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base                 # Reuse the shared base manifests
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 10              # Production runs 10 replicas; base has 3
+    target:
+      kind: Deployment
+      name: myapp
+images:
+  - name: myapp
+    newTag: 1.4.2              # Pin the production image tag
+```
+
+The rule of thumb: Helm for packaging/redistribution and complex parameterization; Kustomize for environment overlays of your own manifests. They are often combined (Kustomize patching the output of a Helm chart).
+
+**Operators** encode *operational knowledge* into software. An Operator is a **Custom Resource Definition (CRD)** — a new object type like `kind: PostgresCluster` — plus a **controller** that watches those objects and continuously reconciles reality to match them. Where a Deployment knows how to roll stateless Pods, a database Operator knows how to take backups, fail over a leader, and run a version upgrade safely. This is the same reconciliation pattern Kubernetes itself uses, extended to domain-specific lifecycles (the Prometheus Operator, the Strimzi Kafka Operator, cloud database operators).
+
+#### GitOps (Argo CD / Flux)
+
+GitOps inverts the deployment flow: instead of CI **pushing** `kubectl apply` into the cluster, a controller running *inside* the cluster continuously **pulls** the desired state from Git and reconciles the cluster to match. Git becomes the single source of truth — the live cluster state is whatever the manifests in the repo say it should be.
+
+The benefits are concrete: every change is a reviewed, audited Git commit; rollback is `git revert`; drift (someone running a manual `kubectl edit`) is detected and automatically reverted back to the committed state; and CI no longer needs powerful cluster credentials, shrinking the attack surface. **Argo CD** (with a UI showing sync status and diffs) and **Flux** (CRD-driven, lighter weight) are the two dominant implementations.
+
+```console
+$ argocd app get myapp
+Name:               myapp
+Project:            production
+Sync Status:        OutOfSync from main (a1b2c3d)
+Health Status:      Healthy
+
+GROUP  KIND        NAMESPACE   NAME   STATUS     HEALTH
+apps   Deployment  production  myapp  OutOfSync  Healthy
+```
+
+**How to read this output:** `Sync Status: OutOfSync` means the live cluster no longer matches the manifests at commit `a1b2c3d` on `main` — either someone changed the cluster by hand, or a new commit hasn't been applied yet. With auto-sync enabled, Argo CD will reconcile back to Git within minutes; with manual sync, an engineer reviews the diff and clicks sync. The separation of `Sync Status` (does the cluster match Git?) from `Health Status` (are the Pods actually healthy?) is the key mental model: a deploy can be perfectly *synced* yet *Degraded* if the new image crash-loops, which is precisely the state GitOps surfaces so you can `git revert` to the last known-good commit.
+
+> **Key Takeaway:** Beyond the core objects, production Kubernetes is about controlling placement and disruption (affinity, taints, topology spread, PDBs), durable state (PV/PVC/StorageClass with dynamic provisioning), multi-dimensional autoscaling (HPA for Pods, VPA for requests, Cluster Autoscaler/Karpenter for Nodes, KEDA for events), and managing manifests at scale (Helm/Kustomize, Operators for stateful lifecycles, GitOps for Git-as-source-of-truth reconciliation).
 
 > **Key Takeaway:** Kubernetes provides a declarative, self-healing platform for running containerized applications at scale. The core abstractions -- Pods, Deployments, Services, Ingress -- handle networking, scaling, and rolling updates. ConfigMaps/Secrets externalize configuration, HPA provides autoscaling, and probes ensure traffic only reaches healthy instances. Always set resource requests/limits, always configure probes, and always use RBAC and Network Policies for security.

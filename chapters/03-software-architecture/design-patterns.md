@@ -335,6 +335,65 @@ print(template.environment_vars)       # {'LOG_LEVEL': 'INFO', 'WORKERS': '4'} (
 
 Use `copy.copy()` for shallow copies (nested objects are shared) and `copy.deepcopy()` for deep copies (everything is independent). In a Django context, this is useful for cloning complex queryset filters or duplicating model instances with modifications.
 
+---
+
+#### Object Pool
+
+The Object Pool pattern keeps a set of pre-created, reusable objects ready for use, handing one out on request and taking it back when the caller is done -- instead of constructing and destroying expensive objects repeatedly. It is the pattern behind database connection pools, thread pools, and HTTP client pools: creating a TCP connection or spawning a thread costs milliseconds and OS resources, so you amortize that cost by reusing a bounded set.
+
+```python
+import queue
+import threading
+
+
+class Connection:
+    """Stand-in for an expensive-to-create resource."""
+    _counter = 0
+
+    def __init__(self):
+        Connection._counter += 1
+        self.id = Connection._counter
+        print(f"Opening expensive connection #{self.id}")
+
+    def execute(self, sql: str) -> str:
+        return f"conn#{self.id} ran: {sql}"
+
+
+class ConnectionPool:
+    def __init__(self, size: int = 2):
+        self._pool: queue.Queue[Connection] = queue.Queue(maxsize=size)
+        for _ in range(size):
+            self._pool.put(Connection())  # pre-create up front
+
+    def acquire(self, timeout: float = 5.0) -> Connection:
+        # Blocks if all connections are checked out -- this is backpressure.
+        return self._pool.get(timeout=timeout)
+
+    def release(self, conn: Connection) -> None:
+        self._pool.put(conn)
+
+
+pool = ConnectionPool(size=2)
+print("--- pool ready ---")
+conn = pool.acquire()
+print(conn.execute("SELECT 1"))
+pool.release(conn)
+conn2 = pool.acquire()       # reuses an existing connection, no new "Opening..."
+print(conn2.execute("SELECT 2"))
+```
+
+```text
+Opening expensive connection #1
+Opening expensive connection #2
+--- pool ready ---
+conn#1 ran: SELECT 1
+conn#2 ran: SELECT 2
+```
+
+**How to read this output:** Both "Opening expensive connection" lines appear *before* `--- pool ready ---` -- the cost is paid once at startup, not per query. Crucially, the second `acquire()` prints no new "Opening..." line: it handed back a connection already in the pool. That is the entire value proposition under load -- a web app serving thousands of requests reuses a handful of connections instead of opening one per request (which would exhaust the database's connection limit). The `queue.Queue.get(timeout=...)` also gives you free backpressure: if every connection is checked out, the caller blocks (or times out) rather than overwhelming the backend, which is why SQLAlchemy's `pool_size` + `max_overflow` and PgBouncer exist. The `Queue` is thread-safe, so this pool is safe to share across worker threads without extra locking.
+
+> **Common pitfall:** A pooled object must be *reset* before reuse -- a database connection mid-transaction or an HTTP client with stale headers will leak state into the next caller. Real pools validate/recycle connections (SQLAlchemy's `pool_pre_ping`) and cap object lifetime, because a connection silently dropped by the server will otherwise be handed to an unsuspecting caller as a broken resource.
+
 > **Key Takeaway:** Creational patterns solve the problem of "how do I create objects flexibly?" In Python, many of these patterns are simpler than their Java equivalents because of first-class functions, duck typing, and the `copy` module. Use Factory functions for runtime type selection, Builder for complex construction, and prefer module-level instances or dependency injection over Singleton.
 
 ---
@@ -767,6 +826,65 @@ print(f"Total size: {root.get_size()} bytes")
 ```
 
 In backend development, the Composite pattern is useful for modeling permission hierarchies (roles contain permissions, permission groups contain roles), menu systems, or organizational structures.
+
+---
+
+#### Bridge
+
+The Bridge pattern decouples an **abstraction** from its **implementation** so the two can vary independently. It is the answer to a combinatorial explosion: when you have *M* kinds of "what" and *N* kinds of "how", inheritance forces you to write `M x N` subclasses, while Bridge splits them into two hierarchies you compose at runtime (`M + N` classes). The classic example: notification *types* (alert, report, reminder) crossed with delivery *channels* (email, SMS, Slack). Rather than `EmailAlert`, `SmsAlert`, `SlackAlert`, `EmailReport`... you have a `Notification` abstraction holding a reference to a `Channel` implementor.
+
+```python
+from abc import ABC, abstractmethod
+
+
+# ---- Implementor hierarchy: the "how" (delivery channel) ----
+class Channel(ABC):
+    @abstractmethod
+    def deliver(self, text: str) -> None: ...
+
+
+class EmailChannel(Channel):
+    def deliver(self, text: str) -> None:
+        print(f"[email] {text}")
+
+
+class SmsChannel(Channel):
+    def deliver(self, text: str) -> None:
+        print(f"[sms] {text}")
+
+
+# ---- Abstraction hierarchy: the "what" (message type) ----
+class Notification(ABC):
+    def __init__(self, channel: Channel):
+        self.channel = channel  # the bridge: holds an implementor, not a subclass
+
+    @abstractmethod
+    def send(self, payload: dict) -> None: ...
+
+
+class Alert(Notification):
+    def send(self, payload: dict) -> None:
+        self.channel.deliver(f"ALERT: {payload['message']}")
+
+
+class Reminder(Notification):
+    def send(self, payload: dict) -> None:
+        self.channel.deliver(f"Reminder: {payload['message']} (due {payload['due']})")
+
+
+# Mix and match any abstraction with any implementor at runtime
+Alert(EmailChannel()).send({"message": "CPU at 95%"})
+Alert(SmsChannel()).send({"message": "CPU at 95%"})
+Reminder(SmsChannel()).send({"message": "renew cert", "due": "Friday"})
+```
+
+```text
+[email] ALERT: CPU at 95%
+[sms] ALERT: CPU at 95%
+[sms] Reminder: renew cert (due Friday)
+```
+
+**How to read this output:** The same `Alert` class produced both an email and an SMS line -- the message *type* and the *channel* were chosen independently and composed at the call site. That is the structural win: adding a new channel (say Slack) is one new `Channel` subclass that *every* notification type can immediately use, with zero edits to `Alert` or `Reminder`; adding a new message type is one new `Notification` subclass that works over every existing channel. Without Bridge, each new channel would force you to add one subclass per message type. Bridge and Strategy look similar in Python (both inject a collaborator), but the intent differs: Strategy swaps one *algorithm*, Bridge separates two whole *dimensions of variation* that each have their own hierarchy.
 
 > **Key Takeaway:** Structural patterns help you compose objects into larger structures while keeping things flexible. Adapter bridges incompatible interfaces, Decorator adds behavior without modifying classes, Facade simplifies complex subsystems, Proxy controls access, and Composite handles tree structures. In Python, duck typing and Protocols make these patterns lighter than in statically-typed languages.
 
@@ -1284,6 +1402,208 @@ This is much cleaner than a series of `if/elif` checks on a status string scatte
 
 ---
 
+#### Template Method
+
+The Template Method pattern defines the **skeleton of an algorithm** in a base class, deferring specific steps to subclasses. The overall sequence is fixed; only the variable steps are overridden. This is the inheritance-based cousin of Strategy (which uses composition): use Template Method when the steps are tightly bound to a fixed workflow, and Strategy when you want to swap a whole step at runtime.
+
+```python
+from abc import ABC, abstractmethod
+
+
+class ReportGenerator(ABC):
+    """Defines the fixed algorithm; subclasses fill in the variable steps."""
+
+    def generate(self, source: str) -> str:
+        # --- the template method: the invariant skeleton ---
+        raw = self.fetch(source)
+        rows = self.parse(raw)
+        cleaned = self.transform(rows)   # hook with a default
+        return self.format(cleaned)
+
+    @abstractmethod
+    def fetch(self, source: str) -> str: ...
+
+    @abstractmethod
+    def parse(self, raw: str) -> list[dict]: ...
+
+    @abstractmethod
+    def format(self, rows: list[dict]) -> str: ...
+
+    def transform(self, rows: list[dict]) -> list[dict]:
+        """Hook method: optional override, sensible default."""
+        return rows
+
+
+class CsvSalesReport(ReportGenerator):
+    def fetch(self, source: str) -> str:
+        return "name,amount\nAlice,100\nBob,200"
+
+    def parse(self, raw: str) -> list[dict]:
+        header, *lines = raw.splitlines()
+        keys = header.split(",")
+        return [dict(zip(keys, line.split(","))) for line in lines]
+
+    def transform(self, rows: list[dict]) -> list[dict]:
+        return [r for r in rows if int(r["amount"]) >= 150]  # override the hook
+
+    def format(self, rows: list[dict]) -> str:
+        return "; ".join(f"{r['name']}={r['amount']}" for r in rows)
+
+
+print(CsvSalesReport().generate("sales.csv"))
+```
+
+```text
+Bob=200
+```
+
+**How to read this output:** Only `Bob=200` survived because `CsvSalesReport` overrode the `transform` hook to drop rows under 150, while inheriting the fixed `fetch -> parse -> transform -> format` order from the base class. That fixed order is the point: the base class owns the *workflow*, so every report variant is guaranteed to fetch before parsing and parse before formatting -- a subclass cannot accidentally reorder or skip a step. Django's class-based generic views are this pattern in production: `ListView` defines the request-handling skeleton (`get_queryset -> paginate -> get_context_data -> render`), and you override just `get_queryset()`. The risk is the inverse of its strength: deep template hierarchies create the fragile-base-class problem, which is why composition-based Strategy is often preferred when steps need to vary freely.
+
+---
+
+#### Mediator
+
+The Mediator pattern centralizes communication between a set of objects so they no longer refer to each other directly. Instead of *N* objects each holding references to the others (an `O(N^2)` web of dependencies), every object talks only to the mediator, which routes the interactions. This reduces coupling at the cost of a mediator that can itself grow complex.
+
+```python
+from typing import Protocol
+
+
+class Mediator(Protocol):
+    def notify(self, sender: str, event: str) -> None: ...
+
+
+class AuthDialog:
+    """A 'colleague' -- knows the mediator, not its siblings."""
+    def __init__(self, mediator: Mediator):
+        self._mediator = mediator
+        self.username = ""
+        self.login_enabled = False
+
+    def type_username(self, text: str) -> None:
+        self.username = text
+        self._mediator.notify("username_field", "changed")
+
+
+class DialogMediator:
+    """Owns the interaction rules between widgets."""
+    def __init__(self):
+        self.username_field = AuthDialog(self)
+
+    def notify(self, sender: str, event: str) -> None:
+        if sender == "username_field" and event == "changed":
+            # Coordination logic lives HERE, not smeared across the widgets
+            self.username_field.login_enabled = bool(self.username_field.username.strip())
+            print(f"login button enabled: {self.username_field.login_enabled}")
+
+
+dialog = DialogMediator()
+dialog.username_field.type_username("")
+dialog.username_field.type_username("alice")
+```
+
+```text
+login button enabled: False
+login button enabled: True
+```
+
+**How to read this output:** Typing into the username field never directly touched the login button -- the field only told the mediator "I changed," and the mediator decided to enable the button. That indirection is why the field knows nothing about the button's existence: you can add a password field, a "forgot password" link, or a captcha and only the mediator changes, not the existing widgets. The same pattern scales up in backend systems as the in-process event bus / coordinator: the Observer's `EventBus` shown earlier is essentially a mediator for domain events, and a Saga orchestrator (see Architectural Styles) is a mediator coordinating services. The trade-off is real -- a mediator can decay into a god object if you push *all* logic into it rather than just the cross-object coordination.
+
+---
+
+#### Iterator
+
+The Iterator pattern provides sequential access to the elements of a collection without exposing its underlying representation. In Python this pattern is built into the language: any object implementing `__iter__` (and `__next__`) works in a `for` loop, and **generators** are the idiomatic, lazy way to produce iterators without writing a class. Laziness is the production payoff -- you can iterate a billion-row table or an infinite stream without materializing it in memory.
+
+```python
+from collections.abc import Iterator
+
+
+def paginate(total: int, page_size: int) -> Iterator[list[int]]:
+    """Lazy iterator over pages -- yields one page at a time, never the whole set."""
+    page: list[int] = []
+    for item in range(1, total + 1):
+        page.append(item)
+        if len(page) == page_size:
+            yield page
+            page = []
+    if page:
+        yield page  # final partial page
+
+
+for batch in paginate(total=7, page_size=3):
+    print(batch)
+```
+
+```text
+[1, 2, 3]
+[4, 5, 6]
+[7]
+```
+
+**How to read this output:** The three batches were produced one at a time, on demand -- at no point did `paginate` build a list of all seven items, let alone all seven pages. Swap `total=7` for `total=10_000_000` and the memory footprint is unchanged: only one page exists at a time. This is exactly how you stream large query results (`queryset.iterator()` in Django, server-side cursors in psycopg), process a multi-gigabyte file line by line, or page through an external API without loading every record. The `yield` keyword turns the function into a generator whose execution suspends at each `yield` and resumes on the next iteration, which is what makes the laziness possible. Contrast with returning a fully-built list, which would force every page into memory before the first one could be processed.
+
+---
+
+#### Visitor
+
+The Visitor pattern lets you add new operations to a set of object types **without modifying those types**. You separate the operation (the "visitor") from the structure it operates on, using double dispatch to pick the right behavior for each element type. It shines when the set of types is stable but you keep adding new operations (export, validate, price, render) over them. In Python, `functools.singledispatch` provides type-based dispatch that captures the essence of Visitor without the boilerplate `accept(visitor)` methods of the classic Java form.
+
+```python
+from dataclasses import dataclass
+from functools import singledispatch
+
+
+# Stable data types (e.g. an AST or a shape hierarchy) -- never modified to add ops
+@dataclass
+class Circle:
+    radius: float
+
+
+@dataclass
+class Rectangle:
+    width: float
+    height: float
+
+
+@dataclass
+class Group:
+    children: list
+
+
+# A new operation = a new singledispatch function, no edits to the types above
+@singledispatch
+def area(shape) -> float:
+    raise NotImplementedError(f"No area() for {type(shape).__name__}")
+
+
+@area.register
+def _(shape: Circle) -> float:
+    return 3.14159 * shape.radius ** 2
+
+
+@area.register
+def _(shape: Rectangle) -> float:
+    return shape.width * shape.height
+
+
+@area.register
+def _(shape: Group) -> float:
+    return sum(area(child) for child in shape.children)  # recurses, like a visitor
+
+
+drawing = Group([Circle(1.0), Rectangle(2.0, 3.0), Group([Circle(2.0)])])
+print(round(area(drawing), 2))
+```
+
+```text
+21.71
+```
+
+**How to read this output:** `area` dispatched to a different implementation for each element type -- circle, rectangle, and (recursively) nested group -- summing to `3.14 + 6.0 + 12.57 = 21.71`. The key property is that adding a *new operation* over these shapes (say `perimeter` or `to_svg`) means writing one new `singledispatch` function and zero changes to `Circle`, `Rectangle`, or `Group`. This is the classic use for AST processing -- a compiler keeps a fixed node hierarchy but constantly adds passes (type-check, optimize, emit code) as separate visitors. The trade-off is the dual of the open/closed tension: Visitor makes adding *operations* easy but adding a new *type* hard (you must update every visitor). Reach for it only when types are stable and operations proliferate; if the reverse is true, ordinary polymorphism (a method per type) is the better fit.
+
+---
+
 #### Repository
 
 The Repository pattern mediates between the domain and data mapping layers, providing a collection-like interface for accessing domain objects. It encapsulates the logic needed to access data sources and centralizes query logic so that it is not scattered across the application.
@@ -1570,3 +1890,509 @@ class OrderProjection:
 CQRS adds significant complexity. Use it when read and write patterns differ dramatically (e.g., writes go to a normalized relational database, reads come from Elasticsearch or Redis), when read and write loads need to scale independently, or when paired with Event Sourcing. For most CRUD applications, a single model serves both reads and writes just fine.
 
 > **Key Takeaway:** Behavioral patterns manage complex interactions between objects. Observer decouples event producers from consumers. Strategy makes algorithms interchangeable. Command enables undo/redo and task queuing. Chain of Responsibility builds processing pipelines. State makes state machines explicit. Repository and Unit of Work abstract persistence. CQRS separates read and write concerns. Choose patterns based on the problem you are solving, not for their own sake.
+
+---
+
+### Enterprise Application Patterns
+
+Beyond the GoF catalog, a set of patterns (largely from Martin Fowler's *Patterns of Enterprise Application Architecture*) address the recurring concerns of data-backed business applications: moving data across boundaries, expressing business rules reusably, and choosing how domain objects relate to the database. Repository, Unit of Work, and Service Layer were covered with the behavioral patterns above; the remaining ones round out the toolkit.
+
+---
+
+#### DTO (Data Transfer Object)
+
+A DTO is a flat, serializable object whose only job is to **carry data across a boundary** -- an API request/response, a queue payload, a cache entry. It is deliberately behavior-free and is kept *separate from your domain entities*. The point is decoupling: your wire format (the contract clients depend on) should not be your database schema or your rich domain model, because then any internal refactor becomes a breaking API change, and any internal field accidentally leaks to clients.
+
+```python
+from dataclasses import dataclass
+
+
+# ---- Rich domain entity: behavior + invariants + internal fields ----
+class User:
+    def __init__(self, id: int, email: str, password_hash: str, is_admin: bool):
+        self.id = id
+        self.email = email
+        self.password_hash = password_hash   # MUST NOT leak to clients
+        self.is_admin = is_admin
+
+    def can_moderate(self) -> bool:
+        return self.is_admin
+
+
+# ---- DTO: only the fields the API contract promises ----
+@dataclass(frozen=True)
+class UserResponseDTO:
+    id: int
+    email: str
+    role: str
+
+    @classmethod
+    def from_entity(cls, user: User) -> "UserResponseDTO":
+        return cls(
+            id=user.id,
+            email=user.email,
+            role="admin" if user.is_admin else "member",
+        )
+
+
+user = User(1, "a@b.com", password_hash="$2b$...secret", is_admin=True)
+print(UserResponseDTO.from_entity(user))
+```
+
+```text
+UserResponseDTO(id=1, email='a@b.com', role='admin')
+```
+
+**How to read this output:** The DTO carried `id`, `email`, and a derived `role` -- and crucially, `password_hash` is *absent*. The boundary translation in `from_entity` is what guarantees that an internal field can never be serialized to a client by accident, no matter how the `User` entity grows later. The `is_admin` boolean was also reshaped into a `role` string, so the public contract is expressed in client-facing terms rather than mirroring the internal flag. In a Django/FastAPI app this role is played by DRF serializers and Pydantic models; the discipline they enforce -- explicitly listing output fields rather than dumping the model -- is precisely why "just return the ORM object" is a security and compatibility footgun.
+
+---
+
+#### Specification
+
+The Specification pattern encapsulates a business rule or query predicate as a **composable object**, so the rule can be named, reused, and combined with boolean logic (`and`, `or`, `not`) rather than being duplicated as ad-hoc `if` conditions and `WHERE` clauses scattered across the codebase. The same specification can drive both in-memory validation ("does this object satisfy the rule?") and querying ("fetch all objects satisfying the rule").
+
+```python
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+
+@dataclass
+class Customer:
+    name: str
+    orders_count: int
+    is_active: bool
+
+
+class Specification(ABC):
+    @abstractmethod
+    def is_satisfied_by(self, candidate) -> bool: ...
+
+    def __and__(self, other: "Specification") -> "Specification":
+        return AndSpec(self, other)
+
+    def __invert__(self) -> "Specification":
+        return NotSpec(self)
+
+
+class AndSpec(Specification):
+    def __init__(self, a: Specification, b: Specification):
+        self.a, self.b = a, b
+
+    def is_satisfied_by(self, candidate) -> bool:
+        return self.a.is_satisfied_by(candidate) and self.b.is_satisfied_by(candidate)
+
+
+class NotSpec(Specification):
+    def __init__(self, spec: Specification):
+        self.spec = spec
+
+    def is_satisfied_by(self, candidate) -> bool:
+        return not self.spec.is_satisfied_by(candidate)
+
+
+class IsActive(Specification):
+    def is_satisfied_by(self, c: Customer) -> bool:
+        return c.is_active
+
+
+class IsVip(Specification):
+    def is_satisfied_by(self, c: Customer) -> bool:
+        return c.orders_count >= 10
+
+
+# Compose rules with boolean operators -- each rule has one definition
+active_vip = IsActive() & IsVip()
+churn_risk = ~IsActive() & IsVip()   # was a VIP, now inactive
+
+customers = [
+    Customer("Alice", orders_count=12, is_active=True),
+    Customer("Bob", orders_count=15, is_active=False),
+    Customer("Carol", orders_count=2, is_active=True),
+]
+print([c.name for c in customers if active_vip.is_satisfied_by(c)])
+print([c.name for c in customers if churn_risk.is_satisfied_by(c)])
+```
+
+```text
+['Alice']
+['Bob']
+```
+
+**How to read this output:** The two queries reused the *same* `IsActive` and `IsVip` building blocks, combined differently -- `active_vip` matched only Alice, while `churn_risk` (`~IsActive() & IsVip()`) surfaced Bob, the lapsed high-value customer. The win is single-definition rules: "what makes a VIP" lives in exactly one class, so a marketing query, a validation check, and a report all agree, and changing the threshold from 10 to 20 is a one-line edit instead of a hunt through the codebase. The trade-off is that an in-memory `is_satisfied_by` cannot run in the database; production implementations usually add a second method that translates the specification into a SQLAlchemy/Django `Q` expression so the same rule object can also build an efficient query.
+
+---
+
+#### Data Mapper vs. Active Record
+
+These are the two dominant patterns for connecting domain objects to relational tables, and the choice shapes your whole persistence strategy.
+
+**Active Record** -- the object *is* the table row and knows how to persist itself. The model carries both data and CRUD behavior (`user.save()`, `User.objects.filter(...)`). This is Django's ORM and Rails. It is fast to build, intuitive, and ideal for CRUD-heavy applications. The cost: the domain model is fused to the database, so business logic and persistence concerns mix in the same class, pure unit testing requires a database (or heavy mocking), and the model's shape is dictated by the table's shape.
+
+**Data Mapper** -- a *separate* layer moves data between objects and the database, and the domain object has **no knowledge** that a database exists. SQLAlchemy's classic/imperative mapping and the Repository pattern embody this. The cost is more moving parts; the benefit is a domain model that is pure Python (testable with zero I/O), free to differ from the table structure, and the natural fit for Clean/Hexagonal architecture where the domain must not depend on infrastructure.
+
+```python
+# ---- Active Record (Django) ----
+# The model knows how to persist itself; data + behavior + persistence fused.
+class Order(models.Model):
+    total = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=20, default="draft")
+
+    def place(self):
+        self.status = "placed"
+        self.save()           # the object persists ITSELF
+
+
+# ---- Data Mapper (pure domain + repository) ----
+# The domain object has no idea a database exists.
+@dataclass
+class Order:                  # plain Python, no ORM base class
+    total: float
+    status: str = "draft"
+
+    def place(self) -> None:
+        self.status = "placed"   # pure state change, no I/O
+
+
+class OrderRepository:        # the mapper/repository owns persistence
+    def save(self, order: Order) -> None:
+        ...  # translate the domain object into rows and write them
+```
+
+**How to choose:** reach for Active Record when the app is mostly CRUD, the domain logic is thin, and developer velocity matters most -- which describes the majority of Django projects, and fighting the ORM there is usually a mistake. Reach for Data Mapper when the domain is rich and rules-heavy, when you need the domain model decoupled from the schema, or when fast, database-free unit tests of business logic are a priority. A common pragmatic middle path in Django is to keep thin Active Record models for persistence but push real business logic into service classes and plain domain objects, getting most of the testability benefit without abandoning the ORM.
+
+---
+
+#### Dependency Injection
+
+Dependency Injection (DI) means an object receives its collaborators from the outside -- as constructor arguments or function parameters -- rather than constructing them internally. This is the practical mechanism behind the Dependency Inversion Principle: it is what lets you pass a real adapter in production and a fake in tests through the same code path, and it is visible throughout this chapter (every `__init__(self, repo: Repository)` above is DI). In Python, explicit constructor injection is usually all you need; for larger apps, frameworks help -- FastAPI's `Depends`, or containers like `dependency-injector` that wire object graphs from a central configuration. The anti-pattern to avoid is the Service Locator, where objects reach into a global registry to *fetch* their dependencies, which hides the dependency graph and reintroduces the global-state problems DI was meant to solve.
+
+> **Key Takeaway:** Enterprise patterns deal with the realities of data-backed applications. DTOs keep your API contract decoupled from your schema. Specifications make business rules reusable and composable. The Data Mapper vs. Active Record choice trades developer velocity (Active Record) against domain purity and testability (Data Mapper) -- pick by domain complexity. Dependency Injection ties it all together by making collaborators swappable.
+
+---
+
+### Concurrency & Reliability Patterns
+
+Distributed and concurrent systems fail in ways single-threaded programs do not: dependencies time out, queues fill up, the same message arrives twice, one slow service drags down everything that calls it. The following patterns are the standard toolkit for building systems that degrade gracefully instead of collapsing. (Several appear again in the Architectural Styles chapter in a distributed-systems context; here the focus is the in-process and client-side mechanics.)
+
+---
+
+#### Producer-Consumer
+
+The Producer-Consumer pattern decouples the rate of *producing* work from the rate of *consuming* it by placing a buffer (queue) between them. Producers enqueue items and move on; consumers dequeue and process at their own pace. This smooths bursts, lets you scale producers and consumers independently, and is the foundation of every task queue.
+
+```python
+import queue
+import threading
+import time
+
+work: queue.Queue[int | None] = queue.Queue(maxsize=5)  # bounded buffer
+
+
+def producer() -> None:
+    for i in range(3):
+        work.put(i)               # blocks if the queue is full -> backpressure
+        print(f"produced {i}")
+    work.put(None)                # sentinel signals "no more work"
+
+
+def consumer() -> None:
+    while True:
+        item = work.get()
+        if item is None:
+            break
+        time.sleep(0.05)          # consumer is slower than producer
+        print(f"consumed {item}")
+
+
+t1 = threading.Thread(target=producer)
+t2 = threading.Thread(target=consumer)
+t1.start(); t2.start()
+t1.join(); t2.join()
+```
+
+```text
+produced 0
+produced 1
+produced 2
+consumed 0
+consumed 1
+consumed 2
+```
+
+**How to read this output:** All three items were *produced* before the first was *consumed* -- the queue absorbed the burst because the consumer is slower (`time.sleep`). That buffering is the entire value: a traffic spike fills the queue instead of overwhelming the slow downstream worker, and the producer is not blocked waiting for each item to finish processing. The `maxsize=5` is the safety valve -- once the buffer fills, `work.put()` blocks, applying *backpressure* to the producer rather than letting the queue grow unbounded and exhaust memory. This is exactly how Celery (broker between web workers and task workers), Kafka, and `asyncio.Queue`-based pipelines decouple request handling from background processing.
+
+---
+
+#### Thread Pool / Worker Pool
+
+A worker pool maintains a fixed set of threads (or processes) that pull tasks from a queue, bounding concurrency so you never spawn an unlimited number of workers and exhaust CPU, memory, or downstream connection limits. Python's `concurrent.futures.ThreadPoolExecutor` is the standard implementation.
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+import time
+
+
+def fetch(url: str) -> str:
+    time.sleep(0.1)           # simulate I/O-bound work
+    return f"200 OK {url}"
+
+
+urls = [f"/api/item/{i}" for i in range(6)]
+
+with ThreadPoolExecutor(max_workers=3) as pool:   # at most 3 concurrent fetches
+    results = list(pool.map(fetch, urls))
+
+for r in results:
+    print(r)
+```
+
+```text
+200 OK /api/item/0
+200 OK /api/item/1
+200 OK /api/item/2
+200 OK /api/item/3
+200 OK /api/item/4
+200 OK /api/item/5
+```
+
+**How to read this output:** Six tasks completed but only three ran at any instant -- `max_workers=3` caps concurrency. With six `0.1s` I/O-bound tasks across three workers, total wall time is roughly `2 x 0.1s = 0.2s` (two waves of three) instead of `6 x 0.1s = 0.6s` serial, yet you never opened six simultaneous connections. That bound is the production point: an unbounded "thread per task" approach will, under load, open thousands of connections and take down the very database or API you are calling. Note the GIL caveat -- a thread pool only speeds up *I/O-bound* work (network, disk) because the GIL is released during I/O; for CPU-bound work you need `ProcessPoolExecutor` instead.
+
+---
+
+#### Future / Promise
+
+A Future is a placeholder for a result that does not exist yet -- you receive it immediately when you submit async work, and later read its value (or exception) once the work completes. It lets you launch work, keep doing other things, and collect results when convenient. Python exposes this as `concurrent.futures.Future` (thread/process pools) and `asyncio.Future`/awaitables (async I/O).
+
+```python
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+
+
+def slow_square(n: int) -> int:
+    time.sleep(0.1)
+    return n * n
+
+
+with ThreadPoolExecutor(max_workers=3) as pool:
+    futures = {pool.submit(slow_square, n): n for n in range(4)}
+    # as_completed yields each Future the moment IT finishes, not in submit order
+    for fut in as_completed(futures):
+        print(f"{futures[fut]}^2 = {fut.result()}")
+```
+
+```text
+2^2 = 4
+0^2 = 0
+3^2 = 9
+1^2 = 1
+```
+
+**How to read this output:** The results arrive in *completion* order, not submission order (your exact ordering will vary run to run) -- `submit()` returned a Future instantly and `as_completed` surfaced each one the moment its thread finished. This is the production payoff: you fan out independent calls (query three services, hit several shards) concurrently and process whichever responds first, instead of blocking on them in a fixed sequence. `fut.result()` returns the value or *re-raises* any exception the worker hit, so error handling stays at the collection point rather than being swallowed in the worker thread.
+
+---
+
+#### Circuit Breaker
+
+A Circuit Breaker stops calling a failing dependency so you fail *fast* instead of piling up doomed requests that hold threads and connections while waiting to time out. It models a circuit with three states: **closed** (calls flow normally, failures are counted), **open** (the failure threshold was crossed -- calls are rejected immediately without even trying), and **half-open** (after a cooldown, a trial call is allowed; success closes the circuit, failure re-opens it).
+
+```python
+import time
+
+
+class CircuitBreaker:
+    def __init__(self, failure_threshold: int = 3, reset_timeout: float = 5.0):
+        self.failure_threshold = failure_threshold
+        self.reset_timeout = reset_timeout
+        self.failures = 0
+        self.state = "closed"
+        self.opened_at = 0.0
+
+    def call(self, func, *args):
+        if self.state == "open":
+            if time.monotonic() - self.opened_at >= self.reset_timeout:
+                self.state = "half-open"          # time to test recovery
+            else:
+                raise RuntimeError("Circuit OPEN -- failing fast")
+        try:
+            result = func(*args)
+        except Exception:
+            self._on_failure()
+            raise
+        self._on_success()
+        return result
+
+    def _on_failure(self) -> None:
+        self.failures += 1
+        if self.failures >= self.failure_threshold:
+            self.state = "open"
+            self.opened_at = time.monotonic()
+            print(f"-> circuit OPEN after {self.failures} failures")
+
+    def _on_success(self) -> None:
+        if self.state == "half-open":
+            print("-> circuit CLOSED (recovered)")
+        self.failures = 0
+        self.state = "closed"
+
+
+def flaky() -> str:
+    raise ConnectionError("downstream down")
+
+
+cb = CircuitBreaker(failure_threshold=3)
+for attempt in range(5):
+    try:
+        cb.call(flaky)
+    except Exception as e:
+        print(f"attempt {attempt}: {type(e).__name__}: {e}")
+```
+
+```text
+attempt 0: ConnectionError: downstream down
+attempt 1: ConnectionError: downstream down
+-> circuit OPEN after 3 failures
+attempt 2: ConnectionError: downstream down
+attempt 3: RuntimeError: Circuit OPEN -- failing fast
+attempt 4: RuntimeError: Circuit OPEN -- failing fast
+```
+
+**How to read this output:** The first three attempts actually *called* the failing dependency (`ConnectionError`), but once the third failure tripped the threshold the circuit opened, and attempts 3 and 4 were rejected *instantly* with `Circuit OPEN -- failing fast` -- they never touched the dead backend. That instant rejection is the whole purpose: when a downstream is down, continuing to call it just ties up your threads and connection pool waiting for timeouts, which is how one failing dependency cascades into a full outage of the caller. After `reset_timeout`, the breaker would move to half-open and let one trial call probe whether the dependency recovered. Libraries like `pybreaker` and the retry library `tenacity` provide production-grade versions; pair a breaker with retries so retries stop hammering a dependency the breaker has already declared dead.
+
+---
+
+#### Bulkhead
+
+Named after the watertight compartments that stop a breached ship from flooding entirely, the Bulkhead pattern isolates resources so a failure in one area cannot consume *all* of them. You give each dependency (or tenant, or request class) its own bounded resource pool -- separate thread pools, separate connection pools, separate rate limits -- so that one slow or failing dependency exhausts only its own compartment.
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+
+# Each downstream gets its own bounded pool -- one cannot starve the others.
+pools = {
+    "payments": ThreadPoolExecutor(max_workers=5),
+    "recommendations": ThreadPoolExecutor(max_workers=2),  # non-critical, small
+}
+
+
+def call_dependency(name: str, func, *args):
+    return pools[name].submit(func, *args)
+```
+
+The payoff is failure isolation: if the recommendations service hangs, it can tie up at most its 2 dedicated workers -- the 5 payment workers keep flowing, so checkout still works while recommendations degrade. Without bulkheads, a single hung dependency called from a shared global thread pool will, under load, consume every worker, and *every* feature stalls because one non-critical service is slow. This is why production systems give critical and non-critical dependencies separate pools (and is what a service mesh enforces at the network level).
+
+---
+
+#### Backpressure
+
+Backpressure is the mechanism by which an overwhelmed consumer signals upstream producers to *slow down*, rather than silently dropping work or growing an unbounded buffer until it runs out of memory. The simplest form is a bounded queue: when it fills, `put()` blocks, which naturally throttles the producer (as in the Producer-Consumer example above). At the network level it appears as HTTP `429 Too Many Requests`, TCP flow control, or a queue depth limit that rejects new work. The anti-pattern it prevents is the unbounded queue: an in-memory queue with no size limit will happily accept work faster than it can be processed until the process is OOM-killed -- turning a transient slowdown into a crash. The rule: every buffer between a fast producer and a slow consumer must be bounded, and the system must have a defined behavior (block, shed load, or reject) for when it is full.
+
+---
+
+#### Retry with Backoff and Jitter
+
+Retrying a failed operation is essential for surviving transient faults (a brief network blip, a momentary timeout), but a naive retry loop is dangerous. Three rules make retries safe:
+
+1. **Only retry idempotent operations** -- retrying a non-idempotent write can double-charge a card or create duplicate records. (See Idempotency below.)
+2. **Use exponential backoff with jitter** -- wait progressively longer between attempts (`1s, 2s, 4s...`) so you do not hammer a struggling service, and add randomness so that many clients retrying after a shared outage do not all reconnect in lockstep (the "thundering herd" that re-kills the recovering service).
+3. **Cap retries and enforce a timeout budget** -- a total deadline across all attempts, so a request does not retry forever while the caller (and the user) waits.
+
+```python
+import random
+import time
+
+
+def retry_with_backoff(func, max_attempts: int = 5, base: float = 0.5, cap: float = 8.0):
+    for attempt in range(max_attempts):
+        try:
+            return func()
+        except Exception as e:
+            if attempt == max_attempts - 1:
+                raise
+            # exponential backoff with full jitter
+            delay = min(cap, base * (2 ** attempt))
+            sleep = random.uniform(0, delay)
+            print(f"attempt {attempt} failed ({e}); retrying in {sleep:.2f}s")
+            time.sleep(sleep)
+```
+
+```text
+attempt 0 failed (timeout); retrying in 0.31s
+attempt 1 failed (timeout); retrying in 0.74s
+attempt 2 failed (timeout); retrying in 2.18s
+```
+
+**How to read this output:** Each retry waited longer than the last (the `base * 2**attempt` growth) and each delay was *randomized* within that window (full jitter) -- your exact numbers will differ every run. The growing delay protects a struggling dependency from being pounded while it tries to recover; the jitter is the subtle but critical part, because if a thousand clients all failed at the same instant and retried on the same fixed schedule, they would synchronize into repeated traffic spikes that re-overwhelm the service. AWS's published guidance and libraries like `tenacity` implement exactly this. Combine retries with a circuit breaker (stop retrying a dependency that is comprehensively down) and a timeout budget (so the total retry time stays bounded).
+
+---
+
+#### Idempotency and Deduplication
+
+An operation is idempotent if performing it multiple times has the same effect as performing it once. This is the property that makes retries and at-least-once message delivery *safe* -- if a client retries a payment because the response was lost (but the charge actually succeeded), an idempotent endpoint recognizes the duplicate and returns the original result instead of charging again. The standard mechanism is an **idempotency key**: the client sends a unique key with the request, and the server records it; a second request with the same key returns the stored result rather than re-executing.
+
+```python
+class PaymentService:
+    def __init__(self):
+        self._processed: dict[str, dict] = {}   # idempotency_key -> result
+
+    def charge(self, idempotency_key: str, amount: float) -> dict:
+        if idempotency_key in self._processed:
+            print(f"duplicate {idempotency_key}: returning stored result")
+            return self._processed[idempotency_key]      # no second charge
+        result = {"status": "charged", "amount": amount, "txn": "txn_001"}
+        self._processed[idempotency_key] = result
+        print(f"charged {amount}")
+        return result
+
+
+svc = PaymentService()
+print(svc.charge("key-abc", 50.0))
+print(svc.charge("key-abc", 50.0))   # client retried with the SAME key
+```
+
+```text
+charged 50.0
+{'status': 'charged', 'amount': 50.0, 'txn': 'txn_001'}
+duplicate key-abc: returning stored result
+{'status': 'charged', 'amount': 50.0, 'txn': 'txn_001'}
+```
+
+**How to read this output:** The amount was charged exactly once even though `charge` was called twice with the same key -- the second call short-circuited and returned the *stored* result (same `txn_001`). This is the production-critical guarantee: networks drop responses, so clients *will* retry, and at-least-once message brokers *will* redeliver; without an idempotency check those duplicates become double charges and duplicate orders. Other techniques achieve the same property: natural-key `INSERT ... ON CONFLICT DO NOTHING` upserts, a dedup table of processed message IDs (the inbox pattern in the Architectural Styles chapter), or designing the operation to be naturally idempotent (`SET status = 'shipped'` is idempotent; `balance = balance + 10` is not). In production the `_processed` map is a database table or Redis with a TTL, not an in-memory dict.
+
+---
+
+#### Leader Election / Leases
+
+When you run multiple identical instances of a service for availability, some tasks must be performed by **exactly one** instance -- a scheduled cron job, a log compaction, a queue cleanup. Running them on every replica causes duplicate work or corruption. Leader election ensures one instance is designated the leader and only it performs the singleton task. The common implementation is a **lease** (a time-bounded distributed lock): an instance acquires a lock with a TTL, periodically renews it while it holds leadership, and if it crashes the lease expires and another instance takes over -- avoiding the deadlock of a permanent lock held by a dead node.
+
+```python
+import time
+
+
+class Lease:
+    """Sketch of a lease-based leader election (real version uses Redis/etcd)."""
+    def __init__(self, store: dict, key: str, ttl: float):
+        self.store, self.key, self.ttl = store, key, ttl
+
+    def try_acquire(self, node_id: str) -> bool:
+        now = time.monotonic()
+        holder = self.store.get(self.key)
+        if holder is None or holder["expires"] < now:      # free or expired
+            self.store[self.key] = {"node": node_id, "expires": now + self.ttl}
+            return True
+        return holder["node"] == node_id                   # already mine -> renew
+
+
+store: dict = {}
+lease = Lease(store, "cron-leader", ttl=10.0)
+print("node-A acquires:", lease.try_acquire("node-A"))
+print("node-B acquires:", lease.try_acquire("node-B"))   # A still holds it
+```
+
+```text
+node-A acquires: True
+node-B acquires: False
+```
+
+**How to read this output:** Only `node-A` won the lease; `node-B` was refused because the lock is held and unexpired -- so a cron job guarded by this lease runs on exactly one node even though both are alive. The TTL is the safety mechanism that distinguishes a lease from a plain lock: if node-A crashes without releasing it, the `expires` timestamp lapses and node-B's next `try_acquire` succeeds, so leadership fails over automatically instead of being stuck forever on a dead node. Production systems use the atomic primitives that make this race-free -- Redis `SET NX PX`, etcd/ZooKeeper leases, Kubernetes `Lease` objects, or PostgreSQL advisory locks -- because the naive read-then-write shown here has a check-then-act race that a real distributed lock must close.
+
+> **Key Takeaway:** Reliability patterns assume failure is normal. Bound everything -- worker pools, queues (backpressure), retries (caps + timeout budgets). Fail fast on dead dependencies (circuit breaker) and isolate them (bulkhead) so one failure does not cascade. Make operations idempotent so retries and redeliveries are safe, and use leases when exactly one instance must act. These patterns are what separate a system that degrades gracefully from one that collapses under its first dependency failure.

@@ -219,7 +219,124 @@ When a process calls `fork()`, the child gets a copy of the parent's memory. But
 - **Go goroutines**: preemptive green threads multiplexed onto OS threads (M:N)
 - **Erlang processes**: lightweight, isolated, message-passing green threads
 
+#### Zombie and Orphan Processes
+
+When a child process exits, it does not vanish immediately. The kernel keeps a tiny record (PID, exit status, resource usage) until the **parent** retrieves it with `wait()`/`waitpid()` — an act called **reaping**. A child that has exited but not yet been reaped is a **zombie** (`Z`/`defunct` in `ps`): it holds no memory, just a slot in the process table. A few zombies are harmless; a parent that *never* reaps leaks PID-table entries until the system can no longer fork ("resource temporarily unavailable").
+
+An **orphan** is the opposite timing problem: the *parent* dies first while the child is still running. The kernel **re-parents** the orphan to PID 1 (the init process), which is responsible for reaping it when it eventually exits. So orphans get cleaned up automatically — *as long as PID 1 actually reaps.*
+
+```python
+import os, time
+
+pid = os.fork()
+if pid == 0:                       # child
+    os._exit(0)                    # exits immediately -> becomes a ZOMBIE...
+else:                              # parent
+    time.sleep(2)                  # ...until the parent calls wait()
+    # `ps` here would show the child as <defunct>
+    os.waitpid(pid, 0)             # reap it — zombie disappears
+```
+
+```console
+$ ps -o pid,ppid,stat,comm
+  PID  PPID STAT COMMAND
+ 4120  4001 S    python3
+ 4121  4120 Z    python3 <defunct>   <-- zombie: exited, awaiting reap
+```
+
+**How to read this output:** The `Z` state and `<defunct>` label mark a process that has finished but whose exit status nobody has collected. It consumes a PID slot and nothing else. This becomes a production incident in **containers**, where your application is often PID 1. A normal init (systemd) reaps orphans automatically, but a bare app process running as PID 1 usually does **not** install a `SIGCHLD` handler — so re-parented orphans pile up as zombies, and worse, signals like `SIGTERM` may not be forwarded, breaking graceful shutdown. The fix is a minimal init shim: run `docker run --init` (which injects `tini`), add `tini` as the entrypoint, or use a proper init. This is exactly why Dockerfiles for apps that spawn subprocesses (a shell wrapper, a supervisor, Celery forking workers) need `--init` or `tini`.
+
+> **Common pitfall:** Treating "PID 1 in a container" like any other process. PID 1 has special kernel semantics — it does not get default signal handlers, and it inherits all orphans. An app running as PID 1 without init responsibilities silently accumulates zombies and ignores `SIGTERM`, causing 10-second shutdowns (Docker then `SIGKILL`s it) and PID exhaustion in long-lived containers.
+
 > **Key Takeaway:** Understanding processes, threads, and coroutines is fundamental to building performant backend systems. In Python/Django: use multiprocessing for CPU-bound parallelism, threading for blocking I/O concurrency (database calls, HTTP requests), and asyncio for high-concurrency I/O (WebSockets, many simultaneous API calls). The GIL makes this choice more important in Python than in most other languages.
+
+---
+
+### CPU Architecture & Caches
+
+Asymptotic complexity assumes every memory access costs the same. On real hardware it does not — by orders of magnitude. Understanding the memory hierarchy explains why two algorithms with identical Big-O can differ 10-100x in wall-clock time.
+
+#### The Memory Hierarchy
+
+Memory gets larger and slower at every level. The approximate latencies (the famous "numbers every programmer should know") span seven orders of magnitude:
+
+```
+Level            Latency (approx)    Relative ("if L1 = 1 second")
+-----            ----------------    -----------------------------
+CPU register     < 1 ns              instant
+L1 cache         ~1 ns               1 second
+L2 cache         ~4 ns               4 seconds
+L3 cache         ~10-20 ns           ~15 seconds
+Main memory (RAM)~100 ns             ~2 minutes
+NVMe SSD         ~100 us             ~1 day
+Spinning disk    ~10 ms              ~4 months
+Network (same DC)~0.5 ms             ~6 days
+```
+
+The whole game of performance engineering is **keeping the hot working set in the fast levels**. A cache miss to main memory costs ~100x an L1 hit; a page fault to disk costs ~100,000x. This is *why* algorithms with good locality (arrays, sequential scans) routinely beat "asymptotically equal" pointer-chasing structures (linked lists, scattered trees).
+
+#### Cache Lines and Prefetching
+
+The CPU never fetches a single byte — it fetches a whole **cache line** (typically **64 bytes**). Touch one element of an array and its neighbors come along for free. So **sequential access is nearly free** (each line serves ~8-16 elements, and the hardware **prefetcher** detects the stride and fetches the *next* line before you ask), while **random access thrashes the cache** (every access may pull a fresh line and evict a useful one).
+
+```python
+# Same number of operations, very different cache behavior.
+N = 4096
+matrix = [[0] * N for _ in range(N)]
+
+# Row-major traversal: walks memory sequentially -> cache-friendly
+for i in range(N):
+    for j in range(N):
+        matrix[i][j] += 1
+
+# Column-major traversal: jumps a full row each step -> cache-hostile
+for j in range(N):
+    for i in range(N):
+        matrix[i][j] += 1
+```
+
+```text
+row-major (i, j):  0.62 s
+col-major (j, i):  3.10 s   (~5x slower — identical work, worse locality)
+```
+
+**How to read this output:** Both loops do exactly N² increments, yet the column-major version is several times slower purely because it strides across memory and defeats the prefetcher — each inner step lands on a different cache line. (In a C/NumPy contiguous array the gap is even larger; pure-Python list-of-lists hides some of it behind interpreter overhead.) The lesson for backend work: iterate data in the order it is laid out (row-major for C/NumPy arrays, the index order for database scans), and prefer compact, contiguous structures for hot paths.
+
+#### False Sharing
+
+A subtle multi-threaded trap: two threads modifying **different** variables that happen to land on the **same cache line**. Even though there is no logical sharing, the cache-coherence protocol invalidates the line on every write, ping-ponging it between cores and destroying performance.
+
+```
+Two counters on the SAME 64-byte cache line:
+
+  Core 0 writes counter_a ─┐   invalidates the line on Core 1
+  Core 1 writes counter_b ─┘   invalidates the line on Core 0
+  -> the line bounces between cores; throughput collapses though the
+     two threads never touch the SAME variable.
+
+Fix: pad/align so each hot per-thread variable sits on its own cache line.
+```
+
+This is why high-performance concurrent code **pads** per-thread counters/state to 64 bytes (e.g., Java's `@Contended`, padded structs in C, per-core sharded counters). If a multi-threaded program scales *worse* than single-threaded for no obvious reason, false sharing is a prime suspect.
+
+#### NUMA
+
+On multi-socket servers, memory is **Non-Uniform**: each CPU socket has a local memory bank it reaches quickly, and accessing another socket's memory crosses an interconnect (slower, higher latency). The OS tries to allocate a thread's memory on its local node, but a thread migrated to another socket — or memory allocated before the thread was pinned — pays the cross-node penalty. Latency-sensitive workloads (databases, low-latency services) **pin threads and memory** with `numactl --cpunodebind --membind` or thread affinity to stay local.
+
+#### Branch Prediction & Speculative Execution
+
+Modern CPUs are deeply pipelined: they start executing instructions *after* a branch (`if`) before knowing whether the branch is taken. The **branch predictor** guesses the outcome to keep the pipeline full; a correct guess is free, but a **misprediction** flushes the pipeline and costs ~10-20 cycles. This is the well-known reason that processing **sorted** data can be dramatically faster than unsorted — predictable branches (e.g., `if value > threshold` on sorted input) are almost always guessed right.
+
+```python
+# A branch whose outcome is predictable runs faster than the same branch
+# fed random data, even though the instruction count is identical:
+#   - sorted input:   the `if` is taken in a long run, then not -> easy to predict
+#   - shuffled input: the `if` flips unpredictably -> frequent mispredictions
+```
+
+**Speculative execution** is the same mechanism applied broadly — the CPU does work it might need to throw away. It is a huge performance win but also the root of the **Spectre** and **Meltdown** side-channel attacks (2018): speculatively-executed instructions leave measurable traces in the cache, letting an attacker infer memory they should not be able to read. The mitigations (kernel page-table isolation, retpolines, microcode updates) imposed a real, measurable performance tax on syscall-heavy workloads — a rare case where a CPU *architecture* detail showed up directly in production latency budgets.
+
+> **Key Takeaway:** Big-O ignores the memory hierarchy, but production performance lives in it. Favor sequential, cache-line-friendly access; pad hot per-thread state to avoid false sharing; pin memory on NUMA boxes; and remember that predictable branches and good locality can make an "asymptotically equal" algorithm several times faster. When a profiler shows a tight loop is slow despite a good Big-O, the answer is almost always cache misses or branch mispredictions, not the algorithm on paper.
 
 ---
 
@@ -401,6 +518,153 @@ VmRSS:     156432 kB
 **How to read this output:** `VmRSS` (~156 MB here) is the physical RAM actually resident — this is the number the OOM killer and your container's memory cgroup care about. `VmSize` (~398 MB) is the total virtual address space mapped, which is almost always larger than RSS because it counts shared libraries and lazily-allocated/`mmap`'d regions that aren't resident. `VmPeak` is the high-water mark of `VmSize`. In an interview the key point is: a high VSZ alone is not a leak — watch RSS climbing steadily over time, because that is what triggers OOM kills in a 512 MB container.
 
 > **Key Takeaway:** Memory management is where many production performance issues live. Understanding virtual memory, the TLB, stack vs heap, and Python's GC helps you diagnose memory leaks, reduce GC pauses, and configure memory limits. Use `tracemalloc` in Python to profile memory allocations, and always set memory limits on containers to prevent OOM cascades.
+
+---
+
+### Concurrency & Synchronization Primitives
+
+The moment two threads (or processes) touch shared mutable state, you need synchronization. These primitives are the vocabulary of every concurrent system, and getting them wrong produces the hardest bugs in backend engineering — ones that appear only under load and vanish when you attach a debugger.
+
+#### Race Conditions and Critical Sections
+
+A **race condition** is a bug where the result depends on the unpredictable *interleaving* of operations on shared state. The classic example is `counter += 1`, which is not atomic — it is read, add, write, and two threads can interleave to lose an update.
+
+```python
+import threading
+
+counter = 0
+def increment():
+    global counter
+    for _ in range(100_000):
+        counter += 1          # NOT atomic: read, +1, write-back
+
+threads = [threading.Thread(target=increment) for _ in range(4)]
+for t in threads: t.start()
+for t in threads: t.join()
+print(counter)                # expected 400000 — but often less
+```
+
+```text
+312847
+```
+
+**How to read this output:** Four threads each adding 100,000 *should* yield 400,000, but the result is lower and varies run-to-run because increments interleave and overwrite each other. (In CPython the GIL makes a *single* bytecode atomic, but `+=` compiles to several bytecodes, so the race survives even under the GIL — a common misconception in interviews.) The region of code that must not run concurrently — here, the read-modify-write — is the **critical section**, and it must be protected by a lock.
+
+#### Mutex, Semaphore, Condition Variable
+
+- **Mutex (mutual exclusion lock):** only one holder at a time. Wrap the critical section in `lock.acquire()`/`release()` — in Python always via a `with` block so it is released on every path, including exceptions.
+- **Semaphore:** a counter permitting up to **N** concurrent holders. A binary semaphore (N=1) behaves like a mutex; larger N **bounds concurrency** — e.g., "at most 10 simultaneous outbound DB connections."
+- **Condition variable:** lets a thread *wait until a predicate becomes true*, woken by another thread's `notify()`. The producer-consumer pattern is built on this.
+
+```python
+import threading
+
+lock = threading.Lock()
+counter = 0
+def safe_increment():
+    global counter
+    for _ in range(100_000):
+        with lock:            # critical section — exactly one thread at a time
+            counter += 1
+
+# Semaphore: cap concurrency at 10
+db_slots = threading.Semaphore(10)
+def query_db():
+    with db_slots:            # blocks if 10 are already inside
+        ...                   # at most 10 threads run this concurrently
+
+# Condition variable — ALWAYS re-check the predicate in a while loop:
+cond = threading.Condition()
+queue = []
+def consumer():
+    with cond:
+        while not queue:                  # NOT `if` — guards against spurious wakeups
+            cond.wait()                   # releases lock, sleeps, re-acquires on wake
+        item = queue.pop(0)
+```
+
+> **Common pitfall:** Waiting on a condition variable with `if` instead of `while`. A thread can wake up **without** the predicate being true — a **spurious wakeup** (and even without true spuriousness, another thread may have grabbed the item first). Always loop: `while not predicate: cond.wait()`. This single mistake causes "impossible" empty-queue pops under load.
+
+#### Spinlocks, Futexes, and Read-Write Locks
+
+- **Spinlock:** instead of sleeping, the thread **busy-waits** in a tight loop until the lock frees. Cheap for *very short* critical sections on multicore (no context-switch cost); wasteful otherwise (burns a CPU). Used inside kernels and lock-free libraries.
+- **Futex (fast userspace mutex, Linux):** the building block of `pthread` mutexes. The uncontended case is resolved entirely in user space with an atomic compare-and-swap (no syscall); only when there is contention does it fall into the kernel to sleep/wake. This is why an uncontended lock is nearly free.
+- **Read-write lock:** allows **many concurrent readers OR one exclusive writer**. Ideal for read-heavy shared state (a config cache read constantly, written rarely). The risk is **writer starvation** — a steady stream of readers can keep a writer waiting forever unless the lock is writer-preferring.
+
+#### Atomic Operations and CAS
+
+**Compare-and-swap (CAS)** is a hardware instruction that atomically does "if this memory still equals the value I read, replace it; otherwise tell me it changed." It is the foundation of **lock-free** programming: reference counts, lock-free queues, and **optimistic concurrency control** (read a version, compute, then CAS — retry if someone else won). Lock-free code avoids the deadlock/priority-inversion failures of locks, at the cost of subtle correctness reasoning (the "ABA problem", memory ordering).
+
+#### Deadlock, Livelock, Starvation
+
+A **deadlock** is a cycle of threads each holding a resource the next one needs. It requires **all four Coffman conditions** simultaneously — break any one and deadlock is impossible:
+
+```
+Coffman conditions (ALL four must hold for deadlock):
+  1. Mutual exclusion   - resources can't be shared
+  2. Hold and wait      - a thread holds one resource while waiting for another
+  3. No preemption      - resources can't be forcibly taken away
+  4. Circular wait      - a cycle: T1 waits on T2 waits on ... waits on T1
+
+Classic deadlock — inconsistent lock ordering:
+  Thread A: lock(X) ... lock(Y)        Thread B: lock(Y) ... lock(X)
+  -> A holds X waiting for Y; B holds Y waiting for X. Forever.
+
+Fix: GLOBAL LOCK ORDERING. Every thread acquires locks in the same order
+     (e.g., always X before Y). This breaks "circular wait".
+```
+
+The most practical defense is a **global lock-ordering discipline**: define a total order over locks and always acquire them in that order. Related failures:
+
+- **Livelock:** threads keep changing state in response to each other but make no progress (two people stepping aside in a corridor, repeatedly, in the same direction). They are not blocked — they are busy doing nothing useful.
+- **Starvation:** a thread *never* gets the resource because others keep jumping ahead (e.g., writer starvation under a reader-preferring RW lock).
+
+#### Priority Inversion
+
+A **low**-priority thread holds a lock that a **high**-priority thread needs; meanwhile a **medium**-priority thread preempts the low one, so the low thread can't run to release the lock — and the high-priority thread is stuck waiting on the medium one indirectly. The fix is **priority inheritance**: the lock-holder temporarily inherits the priority of the highest-priority waiter so it can finish and release. This famously caused the **Mars Pathfinder** to repeatedly reset on the surface of Mars in 1997, fixed by enabling priority inheritance remotely.
+
+> **Key Takeaway:** Protect every critical section, prefer `with lock:` so locks are always released, re-check condition predicates in a `while` loop, and bound concurrency with semaphores rather than unbounded thread spawning. To avoid deadlock, impose a consistent global lock order. And remember: in CPython the GIL serializes bytecode but does **not** make multi-step operations like `+=` atomic — you still need real locks for shared mutable state.
+
+---
+
+### Scheduling
+
+The OS scheduler decides which runnable thread gets the CPU next. How it does this — and how you size your own thread/worker pools on top of it — directly determines a service's throughput and tail latency.
+
+#### Preemptive vs Cooperative
+
+- **Preemptive scheduling:** the OS forcibly interrupts a running thread on a timer (the **time slice** / quantum) and switches to another. No thread can monopolize the CPU. This is how OS threads and processes are scheduled. The cost is **context-switch overhead** and cache pollution on every switch.
+- **Cooperative scheduling:** a task runs until it **voluntarily yields** (asyncio coroutines at `await`, generators at `yield`). Simpler to reason about — no preemption means no surprise interleavings between yield points, so you need far fewer locks. The danger is that **one CPU-bound task that never yields stalls everything** (a synchronous `time.sleep` or a heavy computation inside an async event loop freezes the whole loop).
+
+#### The Linux CFS (and EEVDF)
+
+Linux's longtime default was the **Completely Fair Scheduler (CFS)**, which allocates CPU *proportionally* rather than via fixed time slices. Each task accumulates **virtual runtime (vruntime)** — roughly, how much CPU it has consumed, weighted by priority. The scheduler always runs the task with the **smallest vruntime**, so threads that have run less get the CPU next, approximating "everyone gets a fair share." (Recent kernels, 6.6+, replaced CFS with **EEVDF**, which adds latency-sensitivity but keeps the same fair-share spirit.)
+
+- **`nice` value** (-20 to +19): biases a task's share. Lower nice = higher priority = larger CPU slice; a "nicer" (higher) value yields more to others. It weights vruntime accumulation, not a hard guarantee.
+- **Real-time classes** (`SCHED_FIFO`, `SCHED_RR`): for latency-critical work that must run ahead of all normal tasks. A runaway `SCHED_FIFO` thread can lock up a core, so these are used sparingly (audio, control loops, some trading systems).
+
+#### Pool Sizing
+
+The most common practical scheduling decision a backend engineer makes is **how many workers/threads to run**. Oversubscribing — far more busy threads than cores — degrades throughput via context-switch thrash and cache pollution, while undersubscribing leaves cores idle. The rule of thumb depends on what the work *does*:
+
+```
+CPU-bound work  (parsing, hashing, image resize, math):
+    pool size  ~=  number of cores
+    More threads than cores just thrash; they can't run in parallel anyway.
+
+I/O-bound work  (DB queries, HTTP calls, disk):
+    pool size  >>  number of cores
+    Threads spend most of their time blocked/waiting, so many can overlap
+    on few cores. Size to the concurrency you need, bounded by the
+    downstream's capacity (e.g., the DB connection-pool limit).
+
+Little's Law sanity check:  concurrency = throughput x latency
+    e.g., 1000 req/s x 0.05 s each  ->  ~50 in-flight  ->  ~50 workers.
+```
+
+**How to read this guidance:** For CPU-bound work, going past core count buys nothing (the GIL makes this *especially* true in Python — use processes, sized to cores). For I/O-bound work, the threads are mostly asleep waiting on the network or disk, so dozens or hundreds can share a few cores productively — but the real ceiling is usually the **downstream resource** (a 20-connection DB pool means 200 worker threads will just queue on the pool). Use Little's Law (`concurrency = throughput × latency`) to derive a starting pool size, then measure: watch for rising context-switch counts (`vmstat`) and tail latency as the signal that you have oversubscribed.
+
+> **Key Takeaway:** Match concurrency to the work. CPU-bound pools ≈ cores (processes in Python); I/O-bound pools can be much larger but are capped by the slowest downstream dependency. Understand that the OS scheduler is already multiplexing fairly via CFS/vruntime — your job is to avoid fighting it by oversubscribing CPUs, and to keep cooperative event loops free of blocking calls so one task never starves the rest.
 
 ---
 

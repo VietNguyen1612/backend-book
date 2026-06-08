@@ -727,3 +727,108 @@ def compute_fastest(values):
 ```
 
 > **Key Takeaway:** Always profile before optimizing -- your intuition about bottlenecks is usually wrong. Use `cProfile` to find hot functions, `line_profiler` to find hot lines, and `py-spy` for production profiling. Algorithmic improvements give the biggest gains. Use built-in functions, `str.join`, and NumPy before reaching for C extensions.
+
+---
+
+### Standard Library Essentials
+
+Beyond third-party tooling, two stdlib areas separate throwaway scripts from production services: structured **logging** and safe **filesystem/process** interaction.
+
+#### Logging: Never `print` in Production
+
+`print` writes to stdout with no levels, no timestamps, no routing, and no way to silence it per-module. The `logging` module gives you a hierarchy of named loggers, *handlers* (where logs go), *formatters* (how they look), and *levels* (DEBUG/INFO/WARNING/ERROR/CRITICAL).
+
+```python
+import logging
+import logging.config
+
+# -- Configure ONCE at app startup with dictConfig --
+logging.config.dictConfig({
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"},
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "standard"},
+    },
+    "root": {"handlers": ["console"], "level": "INFO"},
+})
+
+# -- Module-level logger named after the module path --
+logger = logging.getLogger(__name__)   # e.g. "myapp.billing.charge"
+
+def charge(user_id, cents):
+    # Lazy %-formatting: the string is only built if INFO is enabled.
+    logger.info("charging user %s for %s cents", user_id, cents)
+    try:
+        if cents < 0:
+            raise ValueError("negative amount")
+    except ValueError:
+        # logger.exception() logs the message AND the traceback, at ERROR level.
+        logger.exception("charge failed for user %s", user_id)
+
+charge(42, 1500)
+charge(7, -3)
+```
+
+```text
+2026-06-08 09:15:02,331 INFO myapp.billing: charging user 42 for 1500 cents
+2026-06-08 09:15:02,332 INFO myapp.billing: charging user 7 for -3 cents
+2026-06-08 09:15:02,332 ERROR myapp.billing: charge failed for user 7
+Traceback (most recent call last):
+  File "billing.py", line 24, in charge
+    raise ValueError("negative amount")
+ValueError: negative amount
+```
+
+**How to read this output:** Every line carries a timestamp, level, and logger *name* — the name is `myapp.billing` because `getLogger(__name__)` inherits the module path, which lets you later raise just that subsystem to DEBUG without touching the rest of the app. The `logger.exception(...)` call produced both the message *and* the full traceback at ERROR level; this is the correct way to log a caught exception (calling it outside an `except` block logs "NoneType: None"). The `%s` placeholders use lazy formatting: if the level were above INFO, the interpolation would be skipped entirely — measurably cheaper than an f-string that always builds the string even when the log is discarded.
+
+The big rules: configure logging exactly once at startup (libraries should *only* `getLogger`, never configure); for production, emit **structured** logs (a JSON formatter or `structlog`) and attach request context (`request_id`, `user_id`) via `contextvars` so it follows the request across `await` points and threads; and **never log secrets or PII** (tokens, passwords, card numbers) — logs are widely readable and long-lived.
+
+#### Filesystem, Processes & OS Interaction
+
+```python
+from pathlib import Path
+import subprocess
+import os, tempfile
+
+# -- pathlib.Path: object-oriented paths (prefer over os.path string juggling) --
+config = Path.home() / ".config" / "myapp" / "settings.toml"
+print(config.exists(), config.suffix, config.parent.name)
+# config.read_text(encoding="utf-8"); config.write_text(...); Path(".").glob("*.py")
+
+# -- subprocess.run: the right way to shell out --
+result = subprocess.run(
+    ["git", "rev-parse", "--short", "HEAD"],   # args as a LIST, not a string
+    check=True,            # raise CalledProcessError on non-zero exit
+    capture_output=True,   # capture stdout/stderr
+    text=True,             # decode bytes -> str
+    timeout=10,
+)
+print(result.stdout.strip())
+# NEVER do subprocess.run(f"git log {user_input}", shell=True) with untrusted
+# input -> shell injection. Pass a list and shell=False (the default).
+
+# -- Atomic write: write to a temp file, then os.replace (atomic on same fs) --
+def atomic_write(path: Path, data: str):
+    fd, tmp = tempfile.mkstemp(dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(data)
+        os.replace(tmp, path)   # atomic rename: readers never see a half file
+    except BaseException:
+        os.unlink(tmp)
+        raise
+```
+
+```text
+True .toml myapp
+a1b2c3d
+```
+
+**How to read this output:** `pathlib` turns path manipulation into typed object operations — `config.suffix` (`.toml`) and `config.parent.name` (`myapp`) replace brittle string splitting and work identically across OSes (the `/` operator emits the right separator). The `subprocess.run` line returned the short commit hash because `check=True` would have raised on failure and `capture_output=True, text=True` handed back decoded stdout; passing the command as a *list* with the default `shell=False` is what makes it injection-proof — there is no shell to interpret metacharacters in user input. The atomic-write helper exists because a plain `open(path, "w")` truncates the file *first*, so a crash mid-write leaves a corrupted file; writing to a temp file and `os.replace`-ing it means any reader sees either the complete old file or the complete new one, never a partial one.
+
+For configuration and CLIs: `argparse` (stdlib) handles command-line parsing (or `click`/`typer` for richer interfaces); `tomllib` (stdlib, 3.11+) reads TOML config (read-only), and `configparser` reads INI-style files. Use `os`/`shutil` for environment variables and high-level file operations (`shutil.copy`, `shutil.rmtree`), and `tempfile` for scratch files that clean themselves up.
+
+> **Key Takeaway:** Replace `print` with a configured `logging` setup (module loggers, lazy `%s` formatting, `logger.exception()` for tracebacks, structured logs in prod, no secrets). Use `pathlib.Path` over `os.path`, call external programs with `subprocess.run([...], check=True)` and never `shell=True` on untrusted input, and make file writes crash-safe with a temp file plus atomic `os.replace`.

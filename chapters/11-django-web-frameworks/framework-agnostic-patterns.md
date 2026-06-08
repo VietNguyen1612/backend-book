@@ -312,6 +312,211 @@ The underlying principle is identical: define a schema, validate at the boundary
 
 ---
 
+### API Layer: ViewSets, Permissions, Throttling, Pagination & Schema
+
+The generic views shown above (`ListCreateAPIView`, `RetrieveUpdateDestroyAPIView`) are the workhorse of DRF, but a few more building blocks complete the API layer. These map directly onto concepts in every API framework: route grouping, authorization, rate limiting, paging, and machine-readable schemas.
+
+#### ViewSets and Routers
+
+A `ViewSet` collapses the list/create/retrieve/update/destroy endpoints for one resource into a single class, and a **router** auto-generates the URL patterns for it. This eliminates the repetitive `path(...)` declarations for standard CRUD.
+
+```python
+# books/viewsets.py
+from rest_framework import viewsets, permissions
+from django.db.models import Avg, Count
+
+from .models import Book
+from .serializers import BookListSerializer, BookDetailSerializer
+
+
+class BookViewSet(viewsets.ModelViewSet):
+    """
+    Provides list, create, retrieve, update, partial_update, and destroy
+    for Book -- all from one class.
+    """
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        return (
+            Book.objects
+            .select_related("author", "publisher")
+            .annotate(avg_rating=Avg("reviews__rating"), review_count=Count("reviews"))
+        )
+
+    def get_serializer_class(self):
+        # Lightweight serializer for the list action, full one for detail/write.
+        if self.action == "list":
+            return BookListSerializer
+        return BookDetailSerializer
+```
+
+```python
+# books/urls.py
+from rest_framework.routers import DefaultRouter
+from .viewsets import BookViewSet
+
+router = DefaultRouter()
+router.register(r"books", BookViewSet, basename="book")
+
+urlpatterns = router.urls
+# Auto-generates:
+#   GET/POST          /books/
+#   GET/PUT/PATCH/DELETE  /books/{pk}/
+```
+
+Use a `ViewSet` when a resource follows the standard CRUD shape; drop to `APIView` or generic views when an endpoint is irregular (custom verbs, non-CRUD logic) and you want explicit control. `APIView` is the lowest-level DRF class -- you implement `get()`, `post()`, etc. yourself, gaining full control at the cost of writing the boilerplate the generics/viewsets provide.
+
+#### Object-Level Permissions (Preventing IDOR)
+
+View-level permissions (`IsAuthenticated`) answer "may this user use this endpoint at all?" They do **not** answer "may this user touch *this specific object*?" Skipping the second check is the **IDOR** (Insecure Direct Object Reference) vulnerability: an authenticated user changes `/reviews/41/` to `/reviews/42/` and edits someone else's review. Object-level permissions close this gap.
+
+```python
+# books/permissions.py
+from rest_framework import permissions
+
+
+class IsAuthorOrReadOnly(permissions.BasePermission):
+    """Anyone may read; only the object's owner may modify it."""
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:  # GET/HEAD/OPTIONS
+            return True
+        return obj.author == request.user  # write only if you own it
+```
+
+```python
+# books/viewsets.py
+from rest_framework import viewsets
+from .permissions import IsAuthorOrReadOnly
+from .models import Review
+from .serializers import ReviewSerializer
+
+
+class ReviewViewSet(viewsets.ModelViewSet):
+    serializer_class = ReviewSerializer
+    permission_classes = [IsAuthorOrReadOnly]
+
+    def get_queryset(self):
+        # Defense in depth: also scope the queryset so non-owners cannot even
+        # see objects that are not theirs where appropriate.
+        return Review.objects.select_related("author", "book")
+```
+
+When user `bob` tries to `PATCH` a review owned by `alice`, the `has_object_permission` check fails and DRF returns:
+
+```text
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+
+{"detail": "You do not have permission to perform this action."}
+```
+
+**How to read this output:** The `403` (not `404` or `200`) is DRF reporting that authentication succeeded but authorization failed at the object level -- exactly the wall that stops IDOR. The subtle point: `has_object_permission` only runs for views that call `self.get_object()` (detail and write actions on generics/viewsets), so it does **not** filter list endpoints. For lists you must additionally scope `get_queryset()` to the requesting user, or one user's objects will appear in another's list even though they cannot edit them. Some teams deliberately return `404` instead of `403` to avoid revealing that the object exists at all.
+
+#### Throttling
+
+Throttling limits how many requests a client may make in a time window, protecting against abuse, brute-force attempts, and runaway scripts.
+
+```python
+# settings.py
+REST_FRAMEWORK = {
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "100/day",      # unauthenticated clients
+        "user": "1000/day",     # authenticated users
+        "login": "5/min",       # a custom scope (see below)
+    },
+}
+```
+
+```python
+# A scoped throttle for a sensitive endpoint
+from rest_framework.views import APIView
+from rest_framework.throttling import ScopedRateThrottle
+
+
+class LoginView(APIView):
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"  # uses the "5/min" rate above
+    # ...
+```
+
+When the limit is exceeded, DRF returns `429 Too Many Requests` with a `Retry-After` header telling the client when to try again:
+
+```text
+HTTP/1.1 429 Too Many Requests
+Retry-After: 3600
+Content-Type: application/json
+
+{"detail": "Request was throttled. Expected available in 3600 seconds."}
+```
+
+**How to read this output:** The `429` status and `Retry-After` header are the standard contract a well-behaved client uses to back off rather than hammering the server. DRF's default throttles track counts in the cache (Redis in production), so throttling state is shared across all your workers -- a per-process counter would let a client multiply its quota by your worker count. Apply a tight scoped throttle (like `5/min`) to login and password-reset endpoints specifically, since the global `user`/`anon` rates are far too generous to stop credential brute-forcing.
+
+#### Cursor Pagination for Large, Changing Datasets
+
+The `PageNumberPagination` shown earlier (`?page=2`) is simple but has two problems at scale: large `OFFSET` values get progressively slower in the database, and if rows are inserted or deleted between page requests, items shift and the user sees duplicates or skips. **Cursor pagination** solves both -- it pages by an opaque pointer into an ordered field rather than by offset.
+
+```python
+# books/pagination.py
+from rest_framework.pagination import CursorPagination
+
+
+class BookCursorPagination(CursorPagination):
+    page_size = 25
+    ordering = "-created_at"   # must be a stable, unique-ish, indexed ordering
+    cursor_query_param = "cursor"
+```
+
+A cursor-paginated response returns opaque `next`/`previous` URLs instead of page numbers:
+
+```text
+{
+    "next": "https://api.example.com/books/?cursor=cD0yMDI2LTA2LTAxKzEyJTNB",
+    "previous": null,
+    "results": [ ... 25 books ... ]
+}
+```
+
+**How to read this output:** The `cursor` value is an opaque, base64-encoded pointer to a position in the ordering (here, a `created_at` timestamp), not a page index -- which is why the client must follow the `next` URL rather than constructing `?page=N` itself. Because the query becomes `WHERE created_at < <last_seen>` instead of `LIMIT 25 OFFSET 5000`, it stays fast at any depth (it uses the index instead of scanning and discarding skipped rows) and is immune to rows shifting between requests. The trade-offs: you cannot jump to an arbitrary page or show a total count, and the ordering field must be effectively unique and indexed. Use cursor pagination for large, append-heavy feeds (activity streams, logs, infinite scroll); page-number pagination is fine for small, stable result sets where users want to jump around.
+
+#### OpenAPI Schema Generation with drf-spectacular
+
+An OpenAPI schema is a machine-readable description of your API -- every endpoint, parameter, request/response shape, and auth scheme. From it you get interactive docs (Swagger UI / ReDoc) and auto-generated client SDKs, giving you the contract-first benefits described in the API design chapter without hand-writing the contract. **drf-spectacular** generates the schema by introspecting your serializers and views.
+
+```python
+# settings.py
+INSTALLED_APPS += ["drf_spectacular"]
+REST_FRAMEWORK["DEFAULT_SCHEMA_CLASS"] = "drf_spectacular.openapi.AutoSchema"
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Bookstore API",
+    "DESCRIPTION": "Catalog and reviews API.",
+    "VERSION": "1.0.0",
+}
+```
+
+```python
+# urls.py
+from drf_spectacular.views import (
+    SpectacularAPIView, SpectacularSwaggerView,
+)
+
+urlpatterns += [
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),
+]
+```
+
+You can refine what the introspection cannot infer with the `@extend_schema` decorator (custom responses, examples, parameter docs). The generated schema becomes the single source of truth: frontend and mobile teams generate typed clients from it, and CI can diff it to catch breaking API changes before they ship.
+
+> **Key Takeaway:** ViewSets + routers eliminate CRUD boilerplate; drop to APIView for irregular endpoints. Always pair view-level permissions with object-level (`has_object_permission`) checks and user-scoped querysets to prevent IDOR. Throttle sensitive endpoints tightly. Prefer cursor pagination for large or fast-changing datasets. Generate an OpenAPI schema with drf-spectacular so your API has a verifiable, client-generating contract.
+
+---
+
 ### Background Task Processing
 
 Many web applications need to perform work that is too slow or too unreliable to do inside an HTTP request/response cycle: sending emails, generating reports, processing images, calling third-party APIs, or running data pipelines. Background task processing offloads this work to separate worker processes that consume tasks from a message broker (like Redis or RabbitMQ).
@@ -540,6 +745,62 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 ```
+
+#### Queue Routing to Dedicated Workers
+
+By default every task lands on a single `celery` queue and competes for the same workers. That is fine until a flood of slow tasks (report generation, video transcoding) starves fast, latency-sensitive tasks (sending a login email) behind them in the queue. The fix is to route task types to **separate queues** consumed by **dedicated worker pools**, so slow work cannot block fast work.
+
+```python
+# myproject/settings.py
+CELERY_TASK_ROUTES = {
+    "books.tasks.send_review_notification": {"queue": "notifications"},
+    "books.tasks.generate_daily_report": {"queue": "reports"},
+    "books.tasks.sync_book_to_search_index": {"queue": "indexing"},
+}
+```
+
+```bash
+# Run separate worker processes, each consuming only its own queue(s).
+
+# A pool of fast workers for short, latency-sensitive tasks
+celery -A myproject worker -Q notifications --concurrency=8 -n fast@%h
+
+# A small pool of workers for slow, heavy tasks -- isolated so they cannot
+# block the notification queue.
+celery -A myproject worker -Q reports,indexing --concurrency=2 -n heavy@%h
+```
+
+**How to read this output:** You now run two distinct worker fleets reading from different queues. A burst of slow `reports` tasks fills only the `heavy` workers' queue; the `fast` workers keep draining `notifications` with no added latency. This is the operational lever behind "route long/heavy tasks to dedicated queues/workers" -- it lets you scale and tune each workload independently (more concurrency for I/O-bound notifications, fewer workers for memory-hungry reports) and gives you per-queue monitoring so a backlog is attributable to a specific workload.
+
+#### Enqueuing Tasks Safely from a Transaction: on_commit()
+
+The most common Celery-with-Django bug is enqueuing a task inside a database transaction that has not committed yet. The worker -- running in a different process -- can pick up the task and query for the row **before** the web process commits (or after it rolls back), so the task sees missing or stale data. Always enqueue from `transaction.on_commit()`, which fires the callback only after the surrounding transaction durably commits.
+
+```python
+# books/views_api.py
+from django.db import transaction
+from books.tasks import sync_book_to_search_index, send_review_notification
+
+
+class ReviewCreateView(generics.CreateAPIView):
+    serializer_class = ReviewSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        review = serializer.save(author=self.request.user)
+        # WRONG: .delay() here can run before this request's transaction commits.
+        # send_review_notification.delay(review.book_id, ...)
+
+        # RIGHT: enqueue only after commit. If the transaction rolls back,
+        # the task is never sent -- no orphaned work referencing a phantom row.
+        transaction.on_commit(
+            lambda: send_review_notification.delay(
+                review.book_id, self.request.user.username, review.rating
+            )
+        )
+```
+
+This pairs directly with the `on_commit()` ORM hook described in the Django specifics chapter: it is the single most important habit for correctness when combining transactions and a task queue.
 
 #### Task Design Principles
 

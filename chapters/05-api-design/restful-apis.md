@@ -233,6 +233,49 @@ HATEOAS is the constraint that responses should include hyperlinks to related re
 
 While HATEOAS is part of the formal REST definition (as described by Roy Fielding), it is rarely implemented fully in practice. Most real-world APIs settle for "pragmatic REST" -- well-designed URIs and HTTP methods without full hypermedia controls. If you do implement it, consider established formats like HAL (Hypertext Application Language) or JSON:API.
 
+**Richardson Maturity Model**
+
+The Richardson Maturity Model is a four-level scale (Leonard Richardson) that grades how "RESTful" an API actually is. It is the standard interview framing for "what makes an API REST?" and maps the constraints above onto increasing levels of maturity.
+
+- **Level 0 -- The Swamp of POX (Plain Old XML).** A single URI and a single HTTP method (almost always `POST`) used as an RPC tunnel. The endpoint is an opaque method dispatcher; the action lives in the request body, not the URL or verb. SOAP and most XML-RPC services sit here: `POST /api` with a body that names the operation.
+- **Level 1 -- Resources.** The API introduces multiple URIs, one per resource (`/users`, `/orders/42`), but still funnels everything through one verb (typically `POST`). You now address *things*, but you have not yet used HTTP methods to express *actions*.
+- **Level 2 -- HTTP Verbs.** Resources are combined with the correct HTTP methods and status codes: `GET` to read, `POST` to create, `PUT`/`PATCH` to update, `DELETE` to remove, with `200`/`201`/`404`/etc. conveying outcome. This is where idempotency and caching start working as designed. The overwhelming majority of "REST APIs" in production live exactly here -- and that is generally considered good enough.
+- **Level 3 -- Hypermedia Controls (HATEOAS).** Responses carry links describing the next available actions, so clients discover the state machine at runtime rather than hardcoding URLs (the `_links` block shown above).
+
+```text
+Level 0:  POST /api            (1 URI, 1 verb -- RPC tunnel)
+Level 1:  POST /users/42       (many URIs, still 1 verb)
+Level 2:  GET  /users/42  -> 200      (URIs + verbs + status codes)
+          POST /users     -> 201
+Level 3:  GET  /users/42  -> 200 + _links: {orders, deactivate, ...}
+```
+
+**How to read this output:** the jump that actually matters in practice is Level 1 -> Level 2 -- that is the line between an RPC-over-HTTP service and a real REST API, because only Level 2 lets the HTTP infrastructure (caches, proxies, retries on idempotent verbs) do its job. Level 3 is desirable but optional; saying "most production APIs are pragmatic Level 2" is the correct, senior answer in an interview, not a confession of cutting corners.
+
+**Content Negotiation**
+
+Content negotiation lets a single resource be served in different *representations* -- formats, encodings, languages, or API versions -- chosen by request headers rather than separate URLs. The client states its preferences and the server picks the best match it can produce.
+
+- **`Accept`** -- what representation the client *wants back*. `Accept: application/json` asks for JSON; `Accept: application/json, application/xml;q=0.9` asks for JSON but will take XML (the `q` value is a 0-1 preference weight). If the server cannot satisfy it, it returns `406 Not Acceptable`.
+- **`Content-Type`** -- what the client is *sending* in the request body (on `POST`/`PUT`/`PATCH`). If the server does not understand it, it returns `415 Unsupported Media Type`.
+- **`Accept-Encoding`** -- which compression the client supports (`gzip`, `br`, `zstd`). The server compresses the body and echoes its choice in the `Content-Encoding` response header. This is transparent to application code but cuts payload size dramatically over the wire.
+- **Versioning via `Accept`** -- a custom media type embeds the API version, e.g. `Accept: application/vnd.myapi.v2+json` (the header-versioning approach covered under *Versioning* above). The `vnd.` prefix marks it as a vendor-specific media type.
+
+The server also advertises what it returns. A well-behaved response echoes the negotiated choices and lists the headers that affected selection in `Vary`, so caches do not serve the wrong representation:
+
+```text
+GET /users/42
+Accept: application/json
+Accept-Encoding: gzip, br
+
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Encoding: gzip
+Vary: Accept, Accept-Encoding
+```
+
+**How to read this output:** the `Vary: Accept, Accept-Encoding` header is the load-bearing detail. It tells every cache between client and server that the response body depends on those two request headers, so a gzipped JSON copy is never handed to a client that asked for XML or cannot decompress. Omitting `Vary` is a classic production bug: a CDN caches one representation and serves it to everyone, so a mobile client that requested `application/vnd.myapi.v1+json` silently receives the v2 body cached for someone else.
+
 > **Key Takeaway:** The core of REST is a clean division of labor: the URI names the *resource* (a noun) and the HTTP method names the *action*, while the status code reports the *outcome*. Get those three right -- nouns in paths, correct method semantics including idempotency, and accurate status codes -- and you have a predictable API even without full HATEOAS, which most teams skip.
 
 ### API Design Best Practices

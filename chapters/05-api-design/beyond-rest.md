@@ -291,6 +291,15 @@ Response:
 }
 ```
 
+The four pieces of the connection envelope each have a specific job, and knowing the vocabulary is the difference between "I've seen this shape" and "I understand the spec":
+
+- **`node`** -- the actual domain object (the `User`). This is what a naive list endpoint would have returned directly.
+- **`edge`** -- a wrapper around a single `node` that pairs it with its `cursor` and is the natural home for *relationship* metadata. For example, an edge on a `friends` connection can carry `friendedAt` -- a property of the connection between the two records, not of either record itself. This is why connections wrap nodes in edges instead of returning a bare list.
+- **`cursor`** -- an opaque, per-item pointer (typically base64). The client never parses it; it passes it back as `after:` (or `before:`) to resume from exactly that position. Because it encodes the sort key rather than an offset, it is stable under concurrent inserts and deletes.
+- **`pageInfo`** -- page-level metadata: `hasNextPage`/`hasPreviousPage` let the UI enable or disable the next/prev buttons without a count query, and `startCursor`/`endCursor` are shortcuts to the first and last edge cursors for paging in either direction.
+
+The connection also conventionally exposes `totalCount` when the backend can afford it, but Relay deliberately makes that optional precisely because `COUNT(*)` is expensive on large tables -- the same reason REST cursor pagination prefers a "fetch one extra to detect more" trick over a count.
+
 **Authorization**
 
 GraphQL allows authorization at multiple granularity levels. You can protect entire types, individual fields, or specific resolver logic. Directive-based authorization is a clean declarative approach:
@@ -338,6 +347,26 @@ schema = strawberry.Schema(
     extensions=[QueryDepthLimiter(max_depth=10)],
 )
 ```
+
+Depth limiting alone is not enough. A query can be *shallow yet enormous* -- `{ users(first: 1000) { posts(first: 1000) { comments(first: 1000) { author { name } } } } }` is only four levels deep but asks for up to a billion objects. **Query complexity analysis** assigns each field a cost (often weighted by its `first`/`last` pagination argument so a list multiplies the cost of its children) and rejects the request before execution if the total exceeds a budget. This is what stops a single crafted query from exhausting CPU, memory, and database connections -- the GraphQL equivalent of rate limiting, since one POST can do the damage of thousands of REST calls.
+
+```python
+# Cost-based limiting: budget the whole query, not just its depth
+from strawberry.extensions import QueryDepthLimiter, MaxTokensLimiter
+
+schema = strawberry.Schema(
+    query=Query,
+    extensions=[
+        QueryDepthLimiter(max_depth=10),   # caps nesting
+        MaxTokensLimiter(max_token_count=1000),  # caps overall query size
+    ],
+)
+# Dedicated cost libraries (e.g. graphql-core cost validators, or
+# Apollo's @cost directive) let you weight individual fields and
+# multiply by list-size arguments for a true complexity score.
+```
+
+In production you also enforce **persisted queries** (the client registers approved query documents by hash and sends only the hash), so arbitrary attacker-authored queries never reach the server at all -- the strongest defense, since depth and complexity limits only constrain queries you have already agreed to run.
 
 **When to Choose GraphQL vs REST**
 

@@ -134,6 +134,29 @@ separate database), which defeats the purpose.
 
 ---
 
+### RFC / Design-Doc Process
+
+An ADR records a decision *after* it has been reasoned through. A design doc (often called an RFC -- "Request for Comments" -- borrowing the term from the internet standards process) is the artifact that gets you *to* that decision. The core discipline is simple and counterintuitive to engineers who like to code: **write the design before you build anything non-trivial, and circulate it for feedback before you write production code.** The whole point is to surface objections, missing requirements, and better alternatives while they are still cheap to fix -- a paragraph rewritten in a doc costs minutes; the same flaw discovered after three weeks of implementation costs a sprint.
+
+A design doc is not the same as an ADR, though they are complementary. The design doc is a *proposal under discussion*; it is broader, exploratory, and explicitly invites disagreement. Once the discussion converges, the resulting commitments are distilled into one or more ADRs (the durable "we decided X because Y"). Think of the RFC as the conversation and the ADR as the minutes.
+
+A useful design doc answers, in roughly this order:
+
+- **Problem / motivation** -- What are we trying to solve, and why now? Who is affected if we do nothing?
+- **Goals and non-goals** -- An explicit non-goals list is one of the highest-value sections; it prevents scope creep and tells reviewers what *not* to comment on.
+- **Requirements and constraints** -- Functional and non-functional requirements (latency, throughput, consistency, compliance, budget, deadline). State the constraints up front so the design is evaluated against them.
+- **Proposed design** -- The actual approach: data model, APIs, component diagram, key flows, and how it handles failure.
+- **Alternatives considered** -- The options you rejected and *why*. Reviewers often probe exactly here, so doing this honestly earns trust and pre-empts the "did you consider X?" comments.
+- **Risks, rollout, and open questions** -- Migration plan, backward compatibility, observability, and the questions you genuinely want feedback on.
+
+The process matters as much as the template. Set a clear review window (e.g. "comments by Friday"), tag the specific reviewers whose sign-off you need rather than spraying it to a 50-person channel, and resolve comments in the doc itself so the reasoning is preserved. A design doc that nobody reads is theater; gate it behind a lightweight norm such as "any change estimated at more than ~1 week, or touching a public API or data model, needs a one-page design doc and at least two approvals before implementation starts." Smaller changes should *not* require a doc -- forcing RFCs on trivial work teaches people to route around the process.
+
+The most common failure mode is writing the doc *after* the code is already written, to satisfy a checkbox. At that point the author is psychologically committed to their implementation and the doc becomes a defense rather than an inquiry; reviewers can feel it and stop engaging. Write it first, when changing your mind is still cheap.
+
+> **Key Takeaway:** The design doc is where you change your mind cheaply. Code is expensive to write and even more expensive to throw away, so move the disagreement upstream into prose where rewriting a paragraph is free. A good RFC culture trades a day of writing and review for weeks of avoided rework and surfaces the objection that would otherwise have shown up in production.
+
+---
+
 ### Technical Debt Management
 
 Technical debt is the implied cost of future rework caused by choosing an expedient solution now instead of a better approach that would take longer. Like financial debt, technical debt is not inherently bad -- sometimes borrowing is the right business decision -- but unmanaged debt compounds and eventually cripples a team's ability to deliver.

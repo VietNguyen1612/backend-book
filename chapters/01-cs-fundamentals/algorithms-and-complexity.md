@@ -124,6 +124,174 @@ Examples:
 
 ---
 
+### Algorithmic Techniques (Problem-Solving Patterns)
+
+Most interview problems — and a surprising amount of real backend code — are instances of a handful of recurring patterns. Recognizing the pattern is the whole battle; the implementation usually follows mechanically.
+
+#### Two Pointers
+
+Walk a sequence with two indices instead of nesting two loops. The classic uses: find a pair summing to a target in a **sorted** array, remove duplicates in place, partition, or check a palindrome. Moving the pointers based on the current comparison collapses an O(n²) brute force into a single **O(n)** pass.
+
+```python
+def two_sum_sorted(nums, target):
+    """Find indices of two numbers that sum to target. Array must be sorted."""
+    lo, hi = 0, len(nums) - 1
+    while lo < hi:
+        s = nums[lo] + nums[hi]
+        if s == target:
+            return (lo, hi)
+        if s < target:
+            lo += 1      # need a bigger sum -> move left pointer up
+        else:
+            hi -= 1      # need a smaller sum -> move right pointer down
+    return None
+
+print(two_sum_sorted([1, 3, 4, 6, 8, 11], 10))  # (1, 4)  -> 3 + 8
+```
+
+The key insight: because the array is sorted, each comparison lets you *discard* a whole side, so each element is visited at most once.
+
+#### Sliding Window
+
+A sliding window maintains a contiguous range `[left, right)` over a sequence and answers a question about "the best/longest/shortest subarray satisfying a constraint." There are two flavors:
+
+- **Fixed window:** the size `k` is given (e.g., max sum of any 5 consecutive elements). Slide by adding the new element and subtracting the one that fell off — O(n) instead of O(n·k).
+- **Variable window:** the window grows and shrinks to satisfy a constraint (e.g., longest substring with no repeated characters). Expand `right` to include more; when the constraint breaks, advance `left` until it holds again.
+
+```python
+def longest_unique_substring(s):
+    """Length of the longest substring without repeating characters (variable window)."""
+    seen = {}            # char -> last index
+    left = best = 0
+    for right, ch in enumerate(s):
+        if ch in seen and seen[ch] >= left:
+            left = seen[ch] + 1   # shrink window past the previous occurrence
+        seen[ch] = right
+        best = max(best, right - left + 1)
+    return best
+
+print(longest_unique_substring("abcabcbb"))  # 3  ("abc")
+print(longest_unique_substring("bbbbb"))      # 1  ("b")
+```
+
+```text
+3
+1
+```
+
+**How to read this output:** Each character is added once (by `right`) and removed at most once (by advancing `left`), so the whole scan is O(n) even though it *feels* like it re-examines characters. This is the exact structure behind **rate-limiting sliding windows** and **time-windowed aggregations** in backend systems: you keep a running window over a stream and update it incrementally instead of recomputing from scratch on every event.
+
+#### Binary Search on the Answer
+
+Binary search is not only for searching a sorted array. When a problem asks "what is the minimum/maximum X that works?" and the predicate `works(X)` is **monotonic** (if `X` works, every larger X works — or vice versa), you can binary-search over the *answer space* and call `works()` as the comparison. This turns "try every possible value" into O(log(range) · cost-of-check).
+
+```python
+def min_capacity_to_ship(weights, days):
+    """Smallest daily ship capacity that delivers all packages within `days`."""
+    def feasible(cap):
+        needed, load = 1, 0
+        for w in weights:
+            if load + w > cap:
+                needed += 1      # start a new day
+                load = 0
+            load += w
+        return needed <= days
+
+    lo, hi = max(weights), sum(weights)   # answer is somewhere in this range
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if feasible(mid):
+            hi = mid            # mid works -> maybe a smaller cap also works
+        else:
+            lo = mid + 1        # mid too small -> need more capacity
+    return lo
+
+print(min_capacity_to_ship([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], days=5))  # 15
+```
+
+This pattern shows up directly in **capacity planning** ("smallest instance size that meets the SLA"), **allocation** ("minimize the maximum load on any worker"), and rate/quota tuning.
+
+#### Backtracking
+
+Backtracking builds a solution incrementally and **abandons (prunes)** any partial candidate the moment it cannot possibly succeed. It is depth-first search over the space of choices. Permutations, combinations, subsets, N-queens, Sudoku, and constraint-satisfaction problems are all backtracking.
+
+```python
+def permutations(items):
+    result = []
+    def backtrack(current, remaining):
+        if not remaining:
+            result.append(current[:])
+            return
+        for i in range(len(remaining)):
+            current.append(remaining[i])
+            backtrack(current, remaining[:i] + remaining[i+1:])
+            current.pop()       # undo the choice — the "backtrack" step
+    backtrack([], items)
+    return result
+
+print(permutations([1, 2, 3]))
+# [[1,2,3],[1,3,2],[2,1,3],[2,3,1],[3,1,2],[3,2,1]]
+```
+
+The `current.pop()` is the heart of the technique: after exploring a branch, you undo the choice so the parent frame can try the next one. Effective backtracking lives or dies on **pruning** — the earlier you can reject a doomed partial solution, the smaller the search tree.
+
+#### Greedy
+
+A greedy algorithm makes the **locally optimal choice** at each step and never reconsiders. It is correct only when the problem has the **greedy-choice property** (a global optimum can be reached by local choices) plus optimal substructure. Interval scheduling (always pick the earliest-finishing compatible interval), Huffman coding, and Dijkstra are greedy and provably correct.
+
+```python
+def max_non_overlapping(intervals):
+    """Maximum number of non-overlapping intervals (activity selection)."""
+    intervals.sort(key=lambda iv: iv[1])   # sort by END time — the greedy key
+    count, last_end = 0, float('-inf')
+    for start, end in intervals:
+        if start >= last_end:
+            count += 1
+            last_end = end
+    return count
+
+print(max_non_overlapping([(1, 3), (2, 5), (4, 7), (6, 8)]))  # 3
+```
+
+> **Common pitfall:** Greedy *feels* right far more often than it *is* right. Sorting by start time (instead of end time) above gives a wrong answer; many "obvious" greedy strategies fail on adversarial inputs. Before trusting a greedy solution, either prove the greedy-choice property or test it against a brute-force/DP solution on random inputs — a silently-wrong greedy is a classic production bug.
+
+#### Divide and Conquer
+
+Split the problem into independent subproblems, solve them recursively, and combine the results. Merge sort, quickselect, FFT, and Karatsuba multiplication are all divide-and-conquer; their running times come straight from the Master Theorem above. The pattern parallelizes naturally because the subproblems are independent (map-reduce is divide-and-conquer at cluster scale).
+
+#### Bit Manipulation
+
+Treating integers as bitsets enables compact flags and constant-time tricks that are common in low-level/high-performance code:
+
+```python
+x = 0b101100
+
+x & (x - 1)     # 0b101000 — clears the LOWEST set bit
+x & -x          # 0b000100 — isolates the LOWEST set bit
+x | (1 << 3)    # set bit 3
+x & ~(1 << 2)   # clear bit 2
+bin(x).count("1")  # popcount — number of set bits (Python 3.10+: x.bit_count())
+
+# XOR trick: find the single element that appears once when all others appear twice
+def single_number(nums):
+    result = 0
+    for n in nums:
+        result ^= n     # pairs cancel (a ^ a == 0); the lone value survives
+    return result
+
+print(single_number([4, 1, 2, 1, 2]))  # 4
+```
+
+```text
+4
+```
+
+**How to read this output:** The XOR scan finds the unpaired number in a single O(n) pass with O(1) memory — no hash set needed — because `a ^ a == 0` and XOR is commutative, so every duplicated value cancels itself out and only the singleton remains. Bit tricks like this and `x & (x-1)` are the backbone of **permission/flag fields** (a single integer column encoding many booleans), **bitset-based filters**, and compact data structures where memory and cache footprint dominate.
+
+> **Key Takeaway:** Internalize the trigger words. "Pair / sorted array" → two pointers. "Longest/shortest contiguous … window" → sliding window. "Minimum X such that …" with a monotonic check → binary search on the answer. "All combinations / valid configurations" → backtracking. "Pick the best at each step" → greedy (but verify it). Pattern recognition is what turns a 30-minute interview problem into a 5-minute one, and it is exactly how experienced engineers map a fuzzy product requirement onto a known algorithm.
+
+---
+
 ### Sorting
 
 #### Comparison-Based Sorts
@@ -306,6 +474,93 @@ When data is too large to fit in RAM, **external sorting** uses a merge sort var
 This is the technique used by database query processors for `ORDER BY` on large result sets, and by Unix `sort` command for large files.
 
 > **Key Takeaway:** For almost all Python work, use the built-in `sorted()` or `.sort()` — Timsort is an excellent general-purpose sort. Know the properties of each algorithm (stability, space, worst case) so you can reason about performance and understand database query plan choices. Non-comparison sorts are important for specialized high-throughput scenarios like sorting log entries by timestamp or IP addresses.
+
+---
+
+### Selection & Order Statistics
+
+Often you do not need a fully sorted array — you need *one* element by rank (the median, the 95th percentile) or the *top few*. Fully sorting is O(n log n); these problems can be solved faster.
+
+#### Quickselect
+
+Quickselect finds the **k-th smallest element in O(n) average time**. It uses quicksort's partition step, but instead of recursing into both halves, it recurses only into the side that contains rank `k`. Each step discards (on average) half the array, giving the linear average cost — though, like quicksort, a bad pivot gives O(n²) worst case (a random pivot avoids it in practice).
+
+```python
+import random
+
+def quickselect(arr, k):
+    """Return the k-th smallest element (0-indexed) in O(n) average time."""
+    if not 0 <= k < len(arr):
+        raise IndexError("k out of range")
+    arr = arr[:]                      # don't mutate caller's list
+    lo, hi = 0, len(arr) - 1
+    while True:
+        pivot = arr[random.randint(lo, hi)]
+        # 3-way partition: < pivot | == pivot | > pivot
+        lt, gt, i = lo, hi, lo
+        while i <= gt:
+            if arr[i] < pivot:
+                arr[lt], arr[i] = arr[i], arr[lt]; lt += 1; i += 1
+            elif arr[i] > pivot:
+                arr[gt], arr[i] = arr[i], arr[gt]; gt -= 1
+            else:
+                i += 1
+        if k < lt:
+            hi = lt - 1               # k is in the "< pivot" region
+        elif k > gt:
+            lo = gt + 1               # k is in the "> pivot" region
+        else:
+            return arr[k]             # k landed in the "== pivot" region -> done
+
+data = [7, 2, 9, 4, 1, 8, 5, 3, 6]
+print(quickselect(data, 0))  # 1  (smallest)
+print(quickselect(data, 4))  # 5  (median of 9 elements)
+print(quickselect(data, 8))  # 9  (largest)
+```
+
+```text
+1
+5
+9
+```
+
+**How to read this output:** Each call returns the element that *would* sit at index `k` if the array were sorted, without ever fully sorting it. The win is real when you need a percentile or median once: O(n) average versus O(n log n) for a full sort. The catch — and a good interview point — is the worst case: on adversarial input a fixed pivot degrades to O(n²), which is why the randomized pivot above (or the median-of-medians variant for a *guaranteed* O(n)) matters in any code path an attacker can feed.
+
+#### Heap-Based Top-K
+
+When you want the **k largest (or smallest) of n** items and `k ≪ n` — or the data is a *stream* you cannot fully hold — maintain a size-`k` heap. Each item costs O(log k) to consider, giving **O(n log k)** total, which beats sorting (O(n log n)) when k is small and uses only O(k) memory.
+
+```python
+import heapq
+
+stream = [34, 1, 89, 12, 45, 67, 23, 56, 78, 9]
+
+# Top-3 largest. heapq.nlargest does exactly the size-k heap trick internally.
+print(heapq.nlargest(3, stream))   # [89, 78, 67]
+print(heapq.nsmallest(3, stream))  # [1, 9, 12]
+
+# Streaming top-k with a bounded MIN-heap of size k:
+def top_k_stream(stream, k):
+    heap = []                          # min-heap; smallest of the top-k sits at root
+    for x in stream:
+        if len(heap) < k:
+            heapq.heappush(heap, x)
+        elif x > heap[0]:              # bigger than the current weakest survivor?
+            heapq.heapreplace(heap, x) # pop smallest, push x — O(log k)
+    return sorted(heap, reverse=True)
+
+print(top_k_stream(stream, 3))         # [89, 78, 67]
+```
+
+```text
+[89, 78, 67]
+[1, 9, 12]
+[89, 78, 67]
+```
+
+**How to read this output:** All three approaches agree, but the streaming version is the one that scales: it never holds more than `k` elements in memory, so it works on an unbounded stream (top-100 trending products from a firehose of events, top-N slowest queries from a log tail). The trick is the **min**-heap for the **largest** k — the root is the weakest member of the current winners, so a new item only needs one O(log k) comparison to decide if it earns a spot. Reaching for a full sort here, or for `nlargest` over a materialized list, would force you to buffer the entire stream.
+
+> **Key Takeaway:** Match the tool to the need. One percentile/median from a list → quickselect (O(n)). Top-k from a large or streaming dataset → a size-k heap / `heapq.nlargest` (O(n log k), O(k) memory). Reserve a full sort for when you genuinely need *all* elements ordered — paying O(n log n) to read off one element or a handful is a common, avoidable inefficiency.
 
 ---
 
@@ -685,3 +940,77 @@ A **suffix array** is a sorted array of all suffixes of a string. It can be cons
 **Real-world use:** Bioinformatics (genome sequence matching), full-text search engines, data compression (BWT-based compression like bzip2).
 
 > **Key Takeaway:** String algorithms power many backend features: search, pattern matching, content filtering, and text analysis. Python's built-in `in` operator and `str.find()` use optimized versions of these algorithms internally, but understanding them helps you choose the right approach for specialized needs like multi-pattern matching or fuzzy search.
+
+---
+
+### Randomized & Streaming Algorithms
+
+Streaming algorithms process data in a **single pass** with **memory far smaller than the data**, accepting randomness or approximation in exchange. They are essential when the input is too large to store or arrives continuously (logs, metrics, clickstreams). (The probabilistic *data structures* — Bloom filter, HyperLogLog, Count-Min Sketch — live in the Data Structures section; here we focus on the algorithmic techniques.)
+
+#### Reservoir Sampling
+
+Reservoir sampling selects **k uniformly random items from a stream of unknown length** in one pass, using only O(k) memory — so every element has an equal probability of being chosen even though you never know the total count in advance. Keep the first k items; for each later item `i` (0-indexed), keep it with probability `k/(i+1)`, evicting a random current member if so.
+
+```python
+import random
+
+def reservoir_sample(stream, k):
+    """Uniformly sample k items from an iterable of unknown length, one pass."""
+    reservoir = []
+    for i, item in enumerate(stream):
+        if i < k:
+            reservoir.append(item)              # fill the reservoir first
+        else:
+            j = random.randint(0, i)            # 0..i inclusive
+            if j < k:
+                reservoir[j] = item             # keep with prob k/(i+1)
+    return reservoir
+
+# Sample 3 log lines from a (conceptually unbounded) stream:
+sample = reservoir_sample(range(1_000_000), k=3)
+print(sample)   # e.g. [428193, 12, 750021] — different every run, each item equally likely
+```
+
+```text
+[428193, 12, 750021]
+```
+
+**How to read this output:** You get a uniform random sample without ever knowing the stream length up front and without buffering it — exactly what you need for **log sampling** (keep 1% of requests for tracing), **A/B test bucketing**, and **telemetry** where storing every event is impossible. The non-obvious part for an interview: the `k/(i+1)` probability is precisely what keeps the distribution uniform as the stream grows; a fixed "keep with probability p" would over-represent early items.
+
+#### Misra-Gries / Heavy Hitters
+
+The **heavy hitters** problem asks: which elements occur more than `n/k` times in a stream? You cannot keep an exact count per distinct element (that is unbounded memory), so the **Misra-Gries** algorithm keeps only `k-1` counters. Increment a counter for a tracked item; if a new item appears and all counters are taken, decrement *all* counters and drop any that hit zero. After one pass, the surviving counters are a superset of the true heavy hitters (a second pass can verify exact counts).
+
+```python
+def misra_gries(stream, k):
+    """Approximate heavy hitters: candidates appearing > n/k times. Uses k-1 counters."""
+    counters = {}
+    for item in stream:
+        if item in counters:
+            counters[item] += 1
+        elif len(counters) < k - 1:
+            counters[item] = 1
+        else:
+            # all counters in use: decrement every one, drop those reaching 0
+            for key in list(counters):
+                counters[key] -= 1
+                if counters[key] == 0:
+                    del counters[key]
+    return counters   # candidate set (overestimate-free for true heavy hitters)
+
+traffic = ["A","A","A","B","C","A","A","D","A","B","A"]
+print(misra_gries(traffic, k=2))   # {'A': ...} -> "A" is the dominant heavy hitter
+```
+
+**Real-world use:** network "top talkers" (which IPs send the most packets), trending-content detection, and finding the hot keys overloading a cache or shard — all with bounded memory regardless of how many distinct items flow through.
+
+#### Monte Carlo vs Las Vegas
+
+Randomized algorithms come in two flavors, and the distinction is a common interview question:
+
+- **Monte Carlo:** runs in **bounded (often deterministic) time** but may give a **wrong answer with small probability**. You trade correctness for speed, and you can drive the error rate arbitrarily low by repeating (e.g., the Miller-Rabin primality test, randomized min-cut, Bloom-filter membership).
+- **Las Vegas:** **always returns the correct answer**, but its **running time is random**. Randomized quicksort is the canonical example — its output is always sorted; only *how long it takes* depends on the random pivots (avoiding the O(n²) worst case on adversarial/sorted input that a fixed pivot would hit).
+
+A useful mnemonic: **Monte Carlo gambles on the answer; Las Vegas gambles on the time.** In production, randomization most often appears as the Las Vegas kind — random pivots, randomized hash seeds, jittered retry backoff — used specifically to make worst-case-triggering inputs (whether accidental or adversarial) astronomically unlikely.
+
+> **Key Takeaway:** When data is unbounded or too large to store, switch from "compute the exact answer" to "approximate it in one pass with bounded memory." Reservoir sampling gives uniform samples without knowing the length; Misra-Gries finds heavy hitters in tiny space; and knowing the Monte Carlo / Las Vegas distinction explains *why* the randomization in everyday tools (quicksort pivots, retry jitter, SipHash) is there — to convert worst cases into vanishingly rare cases.

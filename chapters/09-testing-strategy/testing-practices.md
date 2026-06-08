@@ -18,6 +18,63 @@ The F.I.R.S.T. acronym captures five qualities that every good test should have.
 
 **Timely.** Tests should be written alongside the code, not weeks later as an afterthought. When you write a function, write its tests before you move on. Test-Driven Development (TDD) takes this further by writing the test *before* the implementation. Whether or not you practice strict TDD, the principle is: do not accumulate a testing debt that you will never repay.
 
+#### Determinism: Time, Randomness, Ordering, and Flaky Tests
+
+The *Repeatable* principle deserves concrete techniques, because non-determinism is the single largest source of flaky tests -- tests that pass and fail without any code change. A flaky test is arguably worse than no test: it trains the team to ignore red builds ("just re-run it"), and that learned blindness eventually lets a real regression slip through. The four classic sources of non-determinism each have a standard fix.
+
+**Freeze the clock.** Any code that reads the current time (`datetime.now()`, `time.time()`, token-expiry checks, "is this coupon expired" logic) produces a different result tomorrow than today. Inject a clock and pass a fixed value, or freeze time at the test boundary. In Python the two common libraries are `freezegun` and `time-machine` (the latter is a faster C-backed reimplementation with the same idea); both let you pin "now" so a date-dependent assertion is stable forever.
+
+```python
+# pip install freezegun
+from freezegun import freeze_time
+from datetime import date, datetime
+from coupons import is_expired
+
+@freeze_time("2026-01-15")
+def test_coupon_expiry_is_deterministic():
+    # Inside this block, date.today() and datetime.now() return 2026-01-15.
+    assert is_expired(expiry=date(2026, 1, 14)) is True
+    assert is_expired(expiry=date(2026, 1, 16)) is False
+    assert datetime.now() == datetime(2026, 1, 15, 0, 0, 0)
+
+# time-machine has the same effect with a faster, lower-overhead implementation:
+import time_machine
+
+@time_machine.travel("2026-01-15")
+def test_same_thing_with_time_machine():
+    assert is_expired(expiry=date(2026, 1, 14)) is True
+```
+
+```text
+tests/test_coupons.py::test_coupon_expiry_is_deterministic PASSED   [ 50%]
+tests/test_coupons.py::test_same_thing_with_time_machine PASSED     [100%]
+============================== 2 passed in 0.02s ==============================
+```
+
+**How to read this output:** These two tests will print `PASSED` identically whether you run them today or in five years -- that is the whole point. Without `@freeze_time`, the assertion `is_expired(expiry=date(2026, 1, 14)) is True` is true only until the clock passes that date, after which the test silently flips and someone wastes an afternoon. The interview-level point is *why prefer dependency injection of a clock over patching*: freezing libraries are perfect for tests, but designing the production code to accept a `clock` parameter makes the time-dependence explicit and testable without any monkeypatching at all.
+
+**Seed randomness.** Code that uses `random`, `uuid4`, shuffling, or sampling must be seeded in tests so the "random" choice is reproducible (`random.seed(0)` / `np.random.seed(0)`). For property-based tests, Hypothesis already records and replays the seed of a failing example so you can reproduce it deterministically. Never assert on an unseeded random value.
+
+**Do not depend on test ordering.** Tests must pass in any order and in isolation. A test that only passes because an earlier test left a row in the database (or set a module-level global) has a hidden dependency that will explode the moment the suite is parallelized or filtered. Catch this proactively by randomizing order in CI -- `pytest-randomly` shuffles test order every run and prints the seed it used, so an ordering bug surfaces as an intermittent failure you can then reproduce with that exact seed.
+
+```bash
+# pytest-randomly prints the seed so a discovered ordering bug is reproducible:
+pytest -p randomly --randomly-seed=12345
+```
+
+**Quarantine, then fix, flaky tests.** When a test is intermittently failing and you cannot fix it immediately, do not leave it failing in the main suite (it desensitizes everyone) and do not silently delete it (you lose the coverage). Mark it as known-flaky so it runs but does not break the build, and file a ticket to fix it -- quarantine is a temporary holding pen, not a graveyard.
+
+```python
+import pytest
+
+@pytest.mark.flaky  # custom marker: collected into a separate, non-blocking CI job
+@pytest.mark.xfail(reason="JIRA-1234: race in async cache warmup; under investigation", strict=False)
+def test_cache_warmup_under_concurrency():
+    ...
+```
+
+> **Common pitfall:** Re-running until green (`--reruns`) is a band-aid, not a cure. Auto-retry hides flakiness instead of fixing it, and a test that needs three attempts to pass is also a test that can let a one-in-three real bug through. Use retries only as a temporary stopgap while a quarantined test is being properly fixed, and track the rerun rate so flakiness cannot quietly accumulate.
+
 #### Test Coverage
 
 Test coverage measures what fraction of your code is exercised by your test suite. **Branch coverage** is strictly more informative than line coverage because it counts whether both the true and false branches of every conditional have been tested. A line that contains `if x > 0: return x` is "covered" by line coverage if any test executes it, but branch coverage also asks whether a test triggered the case where `x <= 0`.
@@ -281,3 +338,75 @@ Verifying a pact between BookstoreWeb and BookService
 > **Common pitfall:** The `--provider-states-setup-url` is mandatory whenever your contract uses `given(...)` states. The provider must seed the database (e.g. insert ISBN 9780132350884) before each interaction; if that endpoint is missing or a no-op, the book genuinely will not exist and the `200` interaction fails for the wrong reason — a setup gap masquerading as a contract break.
 
 > **Key Takeaway:** Good test practices go far beyond writing assertions. Use factory_boy to eliminate brittle test data, mutation testing to verify that your tests actually catch bugs, and contract testing to safely decouple microservice deployments. The goal is not just to have tests, but to have tests that you trust -- tests that fail when something is genuinely broken and pass when everything works.
+
+---
+
+### Testing in Production (Safely)
+
+No amount of pre-production testing fully predicts how a system behaves once it meets reality. Real traffic has patterns no synthetic load reproduces; production data has a scale, skew, and messiness that staging never matches; and third-party dependencies behave differently against real accounts than against sandboxes. "Testing in production" is therefore not an admission of inadequate testing -- it is a deliberate, controlled discipline for validating the things that *can only* be validated with real traffic. The non-negotiable prerequisite is a strong safety net: rich observability (metrics, logs, traces, SLOs) to *see* a problem within seconds, and a fast, rehearsed rollback to *undo* it before it spreads. Without those two, testing in production is just gambling.
+
+#### Feature Flags: Gradual Rollout and Instant Kill
+
+A feature flag decouples *deploying* code from *releasing* a feature. The new code path ships to production dormant, wrapped in a runtime check, and you turn it on for a controlled audience -- internal users first, then 1%, 5%, 25%, 100% of traffic -- while watching your dashboards at each step. The flag's most important property is the **kill switch**: if error rates climb, you flip it off in seconds without a redeploy, instantly reverting every user to the old path.
+
+```python
+def checkout(cart, user, flags):
+    if flags.is_enabled("new_pricing_engine", user=user):
+        total = new_pricing_engine.compute(cart)   # new code path, dark until enabled
+    else:
+        total = legacy_pricing.compute(cart)        # known-good fallback
+    return charge(user, total)
+```
+
+Flags should target by user/cohort (so a percentage rollout is *consistent* per user, not random per request), be cleaned up once a feature is fully rolled out (stale flags accumulate into untestable combinatorial branches), and be auditable -- who flipped what, when. A managed flag service (LaunchDarkly, Unleash, Flagsmith) provides the targeting, audit log, and instant propagation; a hand-rolled config flag works for simple on/off cases.
+
+#### Canary Releases with Automated Analysis
+
+A canary release routes a small slice of *real* traffic (say 5%) to the new version while the remaining 95% stays on the stable version, then **automatically compares** the two cohorts' golden signals -- error rate, latency percentiles, saturation -- and promotes or rolls back based on the comparison. The key word is *automated*: a human watching graphs is slow and subjective, so tools like Argo Rollouts or Flagger run a statistical analysis (often against Prometheus metrics) and abort the rollout the moment the canary's metrics diverge from the baseline beyond a threshold.
+
+```yaml
+# Flagger canary analysis (abbreviated) -- promote in 5% steps, auto-rollback on regression
+analysis:
+  interval: 1m
+  threshold: 5            # number of failed checks before rollback
+  stepWeight: 5           # shift 5% more traffic to canary each interval
+  maxWeight: 50
+  metrics:
+    - name: request-success-rate
+      thresholdRange: { min: 99 }   # rollback if success rate drops below 99%
+    - name: request-duration
+      thresholdRange: { max: 500 }  # rollback if p99 latency exceeds 500ms
+```
+
+```text
+Starting canary analysis for new-pricing-engine.prod
+Advance new-pricing-engine canary weight 5
+Advance new-pricing-engine canary weight 10
+Halt new-pricing-engine.prod advancement request-duration 812ms > 500ms
+Rolling back new-pricing-engine.prod failed checks threshold reached (5/5)
+Canary failed! Scaling down new-pricing-engine.prod
+```
+
+**How to read this output:** The rollout climbed to 10% of traffic, then the analysis engine measured the canary's p99 latency at `812ms` against the `500ms` threshold and *halted on its own* -- no human was watching at 3 a.m. After the failure count hit `5/5` it automatically scaled the canary back to zero, returning all traffic to the stable version. The point to articulate is the closed loop: the canary limited the blast radius to 10% of users, the metric comparison detected the regression objectively, and the rollback contained it -- the same change shipped at 100% with no canary would have been a full outage.
+
+#### Shadow (Dark) Traffic
+
+Shadowing mirrors real production requests to a new version *in parallel* with the live one, but discards the shadow's response so users never see it. This lets you exercise new code against the full fidelity of production traffic -- real query distributions, real payloads, real concurrency -- with zero user-facing risk, which is ideal for validating a rewritten service or a new model before it serves anyone. The critical caveat is side effects: a shadowed request must not write to the real database, send real emails, or charge real cards, so shadowing is safe for read paths but requires careful isolation (a shadow datastore, stubbed outbound calls) for anything that mutates state.
+
+#### Synthetic Monitoring
+
+Synthetic monitoring runs scripted probes -- a robot that logs in, searches for a book, and adds it to a cart -- against production on a fixed schedule (every minute, from multiple regions). Unlike real-user monitoring, which only tells you about problems *after* users hit them, synthetics catch a broken critical path proactively, often before any real user is awake to notice, and they verify availability from the *outside* (through your real DNS, CDN, and load balancer) the way a customer actually experiences it. A failing synthetic is one of the highest-signal pager alerts you can wire up, because it maps directly to a broken user journey rather than an ambiguous internal metric.
+
+#### Chaos Engineering
+
+Chaos engineering deliberately injects failures into production (or production-like) systems to verify that resilience mechanisms -- retries, timeouts, circuit breakers, failover, autoscaling -- actually work *before* an unplanned outage tests them for you. The discipline is experimental, not reckless: you form a hypothesis ("if one of the three payment-service replicas dies, success rate stays above 99.9%"), define a steady-state metric, inject the smallest possible failure with a tight blast radius, and abort immediately if the steady state breaks. Tools like Chaos Monkey (kill instances), Gremlin, and Litmus inject node kills, added latency, packet loss, CPU exhaustion, or dependency outages.
+
+A **game day** is the human side of the same idea: a scheduled exercise where the team intentionally triggers a failure scenario and practices the response -- did the alert fire, did the runbook work, did the on-call engineer know what to do? Game days test the *organization and its tooling*, not just the software, and routinely surface gaps (a missing dashboard, an out-of-date runbook, an alert that pages the wrong team) that no automated test could find.
+
+#### Disaster Recovery: RTO, RPO, and Actually Testing It
+
+Two numbers define your disaster-recovery target. **RPO (Recovery Point Objective)** is the maximum acceptable *data loss*, measured in time -- "we can tolerate losing at most 5 minutes of data" -- which dictates how frequently you back up or replicate. **RTO (Recovery Time Objective)** is the maximum acceptable *downtime* -- "we must be back up within 1 hour" -- which dictates how fast your restore-and-failover procedure must be. The two are independent: a system can have a tiny RPO (continuous replication, near-zero data loss) but a large RTO if the failover is a slow manual process.
+
+The crucial discipline is that **an untested backup is not a backup.** Teams discover during a real incident that their backups were corrupt, encrypted with a lost key, missing a critical table, or that the documented restore procedure no longer matches the current schema. The only way to trust your DR plan is to rehearse it: periodically restore a backup into a clean environment and verify the data, and run a failover drill (often as a game day) to confirm you actually meet your stated RTO. Measuring the *real* restore time against the *promised* RTO is the test, and the gap between them is almost always larger than anyone expected.
+
+> **Key Takeaway:** Testing in production is a controlled discipline, not a shortcut. Feature flags and canary releases shrink the blast radius of every change; shadow traffic and synthetic monitoring validate new code and critical paths against real conditions; chaos engineering and game days prove your resilience and your team's response before a real outage does. None of it is responsible without the safety net underneath: observability to detect problems in seconds and a fast, rehearsed rollback to contain them -- and a disaster-recovery plan you have actually restored from, not merely written down.

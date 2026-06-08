@@ -563,4 +563,65 @@ Effective alerting is critical, but excessive or poorly designed alerting is cou
 
 **Include context in alerts.** Alert messages should contain enough information for the responder to start investigating immediately: which service, which environment, the current metric value versus the threshold, a link to the relevant Grafana dashboard, and a link to the runbook.
 
+#### Error Tracking and APM
+
+Metrics tell you *that* error rate rose; **error tracking** tells you *which* exception, *where*, and *how often*. Tools like Sentry (and GlitchTip, Rollbar, Bugsnag) capture every unhandled exception with its full stack trace, the request context, and the user/release that hit it, then **group** identical errors into a single issue so 10,000 occurrences of the same `KeyError` become one ticket with a count and a sparkline — not 10,000 log lines you have to grep. The killer features are **deduplication/grouping** (by stack-trace fingerprint), **release health** (this error started in `v1.4.2`, so the deploy is the suspect), and **regression detection** (an issue you marked resolved reappeared). You wire it in with a small SDK that hooks your framework's exception handler:
+
+```python
+# app/observability.py
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+
+sentry_sdk.init(
+    dsn="https://examplePublicKey@o0.ingest.sentry.io/0",
+    integrations=[FastApiIntegration()],
+    environment="production",
+    release="myapp@1.4.2",          # Ties errors to a specific deploy
+    traces_sample_rate=0.1,          # Sample 10% of transactions for performance data
+    send_default_pii=False,          # Do not ship PII to the error backend
+)
+```
+
+**APM (Application Performance Monitoring)** — Datadog APM, New Relic, Honeycomb, Dynatrace, or open-source Tempo/Jaeger fed by OpenTelemetry — goes a layer deeper than RED metrics by recording **distributed traces**: a single request becomes a tree of timed **spans** (HTTP handler → DB query → cache lookup → downstream API call), each with its own duration. This is what lets you answer "why is P99 on `/checkout` 1.8s?" by seeing that 1.5s of it is one N+1 query, rather than guessing. APM correlates these traces with metrics and logs through the shared `trace_id`, so from a slow trace you can jump straight to the exact log lines and the exception that fired. Honeycomb in particular emphasizes **high-cardinality** wide events (tag spans with `user_id`, `feature_flag`, `region`) so you can slice latency by dimensions that a low-cardinality metrics store like Prometheus deliberately cannot hold.
+
+The mental model: **metrics** for cheap always-on aggregates and alerting, **error tracking** for grouped exceptions and release health, **APM/tracing** for per-request latency breakdowns when you need to find *where* the time or the failure went. They are complementary, joined by `trace_id`/`request_id`.
+
+#### On-Call and Runbooks
+
+Observability only pays off if a human can act on it at 3 a.m. That requires operational structure, not just dashboards.
+
+**Ownership.** Every service has a clearly defined owning team — encoded in code (a `CODEOWNERS` file, a service catalog like Backstage) — so an alert routes to the people who can actually fix it, not a generic ops queue.
+
+**On-call rotation and escalation policy.** A rotation (managed in PagerDuty, Opsgenie, or Grafana OnCall) spreads the pager fairly and time-bounds it. The **escalation policy** is the safety net: if the primary on-call doesn't acknowledge within, say, 5 minutes, the page escalates to a secondary, then to a manager. This guarantees no page is silently dropped because someone's phone was on mute.
+
+**Runbooks.** A runbook is a concise, step-by-step document for handling a specific alert: what the alert means, how to confirm the impact, the first diagnostic commands to run, common causes, the remediation/mitigation steps, and when to escalate. Crucially, **every alert links directly to its runbook** (the `runbook_url` annotation on the Prometheus alert). The goal is that a tired engineer who has never seen this alert before can still take correct first actions. Runbooks should be living documents — updated after every incident with what was actually learned.
+
+{% raw %}
+```yaml
+# A production alert carries everything the responder needs, including the runbook
+annotations:
+  summary: "High error rate on {{ $labels.service }}"
+  description: "Error rate {{ $value | humanizePercentage }} (>5%) for 5m."
+  dashboard_url: "https://grafana.example.com/d/abc/service-overview"
+  runbook_url: "https://runbooks.example.com/high-error-rate"
+```
+{% endraw %}
+
+This connects to the **blameless postmortem** culture: after a significant incident, the team writes up the timeline, root cause, and action items without assigning individual blame — the focus is on fixing the *system* (better alerts, a missing runbook step, a fragile dependency) so the same incident cannot recur.
+
+#### Capacity Planning and Cost (FinOps)
+
+Saturation (from the USE method and the golden signals) is not just a reliability signal — it is a **capacity** signal. Watching utilization and saturation over time tells you when you are heading toward a limit *before* you hit it: a connection pool trending from 60% to 90% over a month, a disk filling 2% a week, CPU headroom shrinking as traffic grows. Capacity planning is using these trends to provision ahead of demand rather than scrambling during an incident.
+
+The flip side is **cost / FinOps** — treating cloud spend as an engineering metric you observe and optimize, not an invoice you discover at month-end. The most common waste is **over-provisioning**: requesting far more CPU/memory than a workload uses (so it bin-packs poorly and you pay for idle nodes), running oversized instances, or leaving non-production environments running 24/7. The remedies follow directly from the metrics you already collect:
+
+- **Right-size from observed usage.** Compare actual CPU/memory (and Kubernetes `requests`) against real consumption and trim the gap — this is exactly what VPA recommendations give you. A Pod requesting 2 CPU but using 0.2 is wasting 90% of reserved capacity.
+- **Scale with demand.** HPA/Cluster Autoscaler/KEDA and scale-to-zero turn idle capacity off; schedule non-prod environments to shut down nights and weekends.
+- **Use cheaper capacity for the right workloads.** Spot/preemptible instances for fault-tolerant batch jobs; reserved/committed-use discounts for steady baseline load.
+- **Attribute cost.** Tag resources by team/service so spend is visible to the people who can reduce it; tools like Kubecost or the cloud cost explorers break a shared cluster's bill down per namespace.
+
+Understand the **cost of your architecture**, too: a chatty microservice mesh generates cross-AZ data-transfer charges; an under-tuned query forces a bigger database tier; verbose logging at full volume can cost more than the compute it describes. The discipline is to make these tradeoffs *visible* alongside latency and error rate — performance, reliability, and cost are three axes of the same system.
+
+> **Key Takeaway:** Production operation extends observability into action. Error tracking (Sentry) groups exceptions and tracks release health; APM/tracing (Datadog, Honeycomb, OpenTelemetry) breaks down per-request latency into spans — both join your metrics and logs via `trace_id`. Back it with operational structure: clear ownership, on-call rotations with escalation, and runbooks linked from every alert. Finally, treat capacity and cost as first-class signals — right-size from observed usage, scale with demand, and make the cost of your architecture as visible as its latency.
+
 > **Key Takeaway:** Observability is the combination of logs, metrics, and traces that lets you understand your system's behavior. Use Prometheus for metrics collection, Grafana for visualization, and structured logging for operational insight. Apply the RED method for services and the USE method for resources. Alert on user-facing symptoms, not internal causes. Make every alert actionable and include enough context for rapid diagnosis.

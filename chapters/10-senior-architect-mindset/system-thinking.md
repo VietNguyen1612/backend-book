@@ -122,6 +122,37 @@ RISKS:
 
 ---
 
+### Constraints First
+
+The single most common mistake in technical decision-making is jumping to a solution before the problem is fully understood. Engineers love solutions; we reach for the database, the framework, the pattern we already know, and then retrofit the requirements to justify it. The senior discipline is the opposite: **clarify the constraints before you evaluate a single option.** A solution can only be judged "good" or "bad" relative to the requirements it must satisfy, so until those are written down, any debate about options is unanchored.
+
+Separate the two kinds of requirements explicitly:
+
+- **Functional requirements** describe *what the system does*: the features, the operations, the inputs and outputs. "Users can place an order," "admins can issue refunds," "the system sends a confirmation email." These are usually what stakeholders volunteer first.
+- **Non-functional requirements (NFRs)** describe *how well it must do it*, and these are where architectures live or die: consistency model, latency targets (p50/p99), throughput, availability SLA, durability, security and compliance obligations (PCI, HIPAA, GDPR), cost ceiling, and the deadline. NFRs are frequently left implicit, and implicit NFRs are where projects fail -- nobody said "must be strongly consistent" until money went missing, and nobody said "p99 under 200ms" until the page felt sluggish under load.
+
+The reason to surface NFRs first is that they are the constraints that actually eliminate options. Two designs can both satisfy every functional requirement and yet only one survives a "99.99% availability across two regions on a $2,000/month budget" constraint. If you choose the design first and discover the binding NFR later, you have already spent the budget that the constraint would have saved you. Pin the numbers down -- "how many requests per second?", "how stale can this data be?", "what is the recovery point objective?" -- even if the answer is a rough range, because a range still rules out the obviously-infeasible.
+
+A practical habit: before any design discussion, write a short requirements block (functional bullets, then NFR bullets with concrete numbers, then hard constraints like budget, deadline, and existing-stack compatibility). This block is exactly the input the trade-off matrix above needs -- the weights in that matrix should fall straight out of the NFRs you just listed. When requirements are vague, the highest-leverage move is not to start building; it is to ask the clarifying questions that turn "make it fast" into "p99 under 200ms at 5,000 RPS."
+
+> **Key Takeaway:** Requirements before options, and non-functional requirements before functional ones, because the NFRs are the constraints that actually decide the architecture. A solution proposed before the constraints are known is a guess wearing a confidence costume.
+
+---
+
+### Prefer Boring Technology
+
+There is a strong, well-documented bias in engineering toward novelty: new languages, new databases, new frameworks feel exciting and look good on a resume. The senior counter-instinct, articulated memorably by Dan McKinley, is to **prefer boring technology** -- technology that is mature, well-understood, and predictable -- and to treat your appetite for novelty as a scarce, budgeted resource.
+
+The mental model is **innovation tokens**. Imagine a team has only about three innovation tokens to spend. Each genuinely new, unproven, exotic technology you adopt costs one token. The reason the budget is so small is that "boring" does not mean "bad" -- it means the failure modes are *known*. A decade-old database has had its sharp edges discovered, documented, and Stack-Overflowed by thousands of teams before you; when it breaks at 3 a.m., someone has already written the runbook. A brand-new datastore has unknown failure modes that you will discover personally, in production, during an incident. The hidden costs of novelty -- operational burden, scarce hiring pool, immature tooling, thin documentation, no battle-tested patterns -- are systematically underestimated because they show up later, after the exciting "getting started" tutorial is over.
+
+The discipline is therefore not "never use new technology" but **spend your innovation tokens where they create real differentiation.** If your product's entire value proposition is real-time collaborative editing, spend a token on the cutting-edge CRDT library that makes that possible -- that is where novelty buys you something a competitor cannot easily copy. But do not *also* run an exotic database, an experimental message queue, and a fashionable new language for the parts of the system that are pure commodity (auth, billing, CRUD). Those should be aggressively boring, so that all of your scarce risk budget and team attention concentrate on the one place that matters. Every undifferentiated component you build on novel tech is a token spent on something that earns you nothing.
+
+This connects directly to the simplicity-versus-flexibility and build-versus-buy trade-offs above: boring, proven, often-bought technology for the commodity 90% of the system; deliberate, well-justified novelty for the differentiating 10%.
+
+> **Key Takeaway:** You have roughly three innovation tokens. Spend them on the technology that makes your product uniquely valuable, and make everything else as boring as possible. Choosing exciting tech for an undifferentiated problem is paying a permanent operational tax for a one-time dopamine hit.
+
+---
+
 ### Back-of-Envelope Estimation
 
 Back-of-envelope estimation is the ability to quickly approximate the scale of a system: how many servers you need, how much storage, what throughput, what latency. This skill is essential for system design (both in interviews and in real architecture work) because it separates feasible designs from fantasy.
@@ -281,6 +312,14 @@ In practice, you would have more servers (50-100+) for:
 ```
 
 Sanity check: These numbers are in the right ballpark for a system of Twitter's scale. The fan-out write volume of 1M/sec confirms that a naive fan-out-on-write approach for all users is impractical, validating the need for the hybrid approach.
+
+#### Estimate vs. Actual: Calibrate Over Time
+
+The same humility that applies to sizing systems applies even more sharply to estimating *work*. An estimate exists to support a decision -- should we commit to this quarter? do we need to cut scope? -- not to predict the future with precision. Communicate estimates as **ranges with explicit assumptions** ("3 to 5 days, assuming the third-party API behaves like its docs claim"), never as false-precision single numbers, because a single number is read as a promise and a range is read as the uncertainty it actually is.
+
+The way you get better at estimating is not by thinking harder up front; it is by **tracking estimate versus actual and feeding the gap back into your next estimate.** Almost every engineer is systematically optimistic, because we estimate the happy-path coding time and forget the long tail: integration, edge cases, code review back-and-forth, testing, deployment, the meeting that derails a morning, the dependency that is broken. Record what you estimated and what it actually took, look at the ratio over many tasks, and you will discover a personal (and team) fudge factor -- it is common to find that real elapsed time runs 1.5x to 2x the naive estimate. Apply that multiplier deliberately rather than re-learning it through every missed deadline.
+
+> **Common pitfall:** Treating an estimate as a commitment, and then never comparing it to the actual. A team that estimates but never measures the error never improves -- it just keeps being surprised in the same direction. The cheapest calibration data you will ever get is the difference between what you said and what happened; throwing it away guarantees the next estimate is exactly as wrong as the last.
 
 > **Key Takeaway:** Back-of-envelope estimation is not about getting exact numbers. It is about getting the right order of magnitude so you can make informed architectural decisions. The process matters more than the result: it forces you to think about scale, identify bottlenecks, and validate (or invalidate) design approaches before writing a single line of code.
 

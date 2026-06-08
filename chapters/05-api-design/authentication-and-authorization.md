@@ -181,6 +181,71 @@ async def callback(code: str, state: str):
     }
 ```
 
+**Device Code Flow in Depth**
+
+The Device Code flow (the diagram above) exists for clients that cannot present a usable browser or accept a redirect: smart TVs, CLIs (`gh auth login`, `az login`), and other input-constrained or headless devices. Typing a password on a TV remote is miserable and embedding a `client_secret` in a distributed binary is insecure, so the flow moves the actual login onto a *second, trusted device* (the user's phone or laptop) while the original device simply polls in the background.
+
+The exchange has two phases. First the device asks the authorization server for a pair of codes:
+
+```text
+POST /device/code
+client_id=cli_app&scope=openid+profile
+
+HTTP/1.1 200 OK
+{
+  "device_code": "GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS",
+  "user_code": "WDJB-MJHT",
+  "verification_uri": "https://example.com/device",
+  "verification_uri_complete": "https://example.com/device?code=WDJB-MJHT",
+  "expires_in": 900,
+  "interval": 5
+}
+```
+
+The device displays the short, human-typeable `user_code` and the `verification_uri` ("Go to example.com/device and enter WDJB-MJHT"), while it keeps the long, secret `device_code` to itself. The user opens that URL on their phone, authenticates normally, and approves the request. Meanwhile the device polls the token endpoint:
+
+```python
+# device_flow_poll.py -- the polling half of the device flow
+import time, httpx
+
+def poll_for_token(device_code: str, interval: int, token_url: str, client_id: str):
+    while True:
+        resp = httpx.post(token_url, data={
+            "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+            "device_code": device_code,
+            "client_id": client_id,
+        })
+        body = resp.json()
+
+        if resp.status_code == 200:
+            return body                      # success: access + refresh tokens
+        error = body.get("error")
+        if error == "authorization_pending":
+            time.sleep(interval)             # user hasn't approved yet -- keep waiting
+        elif error == "slow_down":
+            interval += 5                    # server says we're polling too fast
+            time.sleep(interval)
+        elif error in ("expired_token", "access_denied"):
+            raise RuntimeError(f"Device flow failed: {error}")
+        else:
+            raise RuntimeError(f"Unexpected error: {error}")
+```
+
+A typical run prints (illustrative):
+
+```console
+$ mycli login
+To sign in, open https://example.com/device and enter code: WDJB-MJHT
+Waiting for authorization...
+[polling] authorization_pending
+[polling] authorization_pending
+[polling] slow_down            # backing off: 5s -> 10s
+[polling] authorization_pending
+Login successful. Tokens stored.
+```
+
+**How to read this output:** the device never sees the user's credentials -- it only ever holds the `device_code` and polls. The two non-error "errors" are the whole protocol: `authorization_pending` is the *normal* state while the user is still on their phone (you keep polling at `interval` seconds), and `slow_down` is the server throttling an over-eager client, which you must honor by *increasing* the interval, not ignoring it -- hammering the endpoint can get the client blocked. The poll loop is bounded by `expires_in` (here 900s); past that the server returns `expired_token` and the device must restart with a fresh `/device/code` request. This decoupling of "where you authenticate" from "where you use the token" is exactly why the flow needs no redirect URI and no client secret, which is the point to make in an interview.
+
 **JWT (JSON Web Token)**
 
 A JWT is a compact, URL-safe token consisting of three base64url-encoded parts separated by dots: `Header.Payload.Signature`.

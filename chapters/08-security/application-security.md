@@ -733,6 +733,113 @@ Additional prevention measures:
 
 ---
 
+#### SSRF (Server-Side Request Forgery)
+
+Server-Side Request Forgery tricks your server into making HTTP requests to destinations the attacker chooses. Because the request originates from inside your network, it can reach resources that are unreachable from the public internet: internal admin panels, databases, other microservices, and -- most dangerously -- the cloud provider's instance metadata endpoint at `http://169.254.169.254/`, which on a misconfigured instance hands out temporary IAM credentials. SSRF was the root cause of the 2019 Capital One breach.
+
+The vulnerability appears anywhere your code fetches a URL that a user can influence: webhook callbacks, "import from URL" features, link-preview generators, PDF renderers, and image proxies.
+
+**VULNERABLE code -- fetching a user-supplied URL:**
+
+```python
+# DANGEROUS: the user fully controls where the server connects
+import requests
+
+def fetch_avatar(request):
+    image_url = request.GET.get("url")
+    resp = requests.get(image_url, timeout=5)
+    return HttpResponse(resp.content, content_type=resp.headers["Content-Type"])
+
+# Attacker passes ?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/
+# The server happily returns the instance's temporary AWS credentials.
+# Or ?url=http://localhost:6379/ to poke internal Redis,
+# or ?url=http://admin.internal/delete-all to reach an internal-only service.
+```
+
+**SECURE code -- allow-list the host and block internal ranges:**
+
+```python
+# SAFE: validate the URL, resolve DNS, and reject private/link-local IPs
+import ipaddress
+import socket
+from urllib.parse import urlparse
+import requests
+
+ALLOWED_SCHEMES = {"https"}
+ALLOWED_HOSTS = {"cdn.example.com", "images.partner.com"}  # explicit allow-list
+
+def is_safe_url(url: str) -> bool:
+    parsed = urlparse(url)
+    if parsed.scheme not in ALLOWED_SCHEMES:
+        return False
+    if parsed.hostname not in ALLOWED_HOSTS:
+        return False
+    # Resolve DNS and ensure every resolved address is a public IP.
+    # This defeats DNS rebinding and hostnames that point at 169.254.x.x.
+    for family, _, _, _, sockaddr in socket.getaddrinfo(parsed.hostname, None):
+        ip = ipaddress.ip_address(sockaddr[0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            return False
+    return True
+
+def fetch_avatar(request):
+    image_url = request.GET.get("url", "")
+    if not is_safe_url(image_url):
+        return HttpResponseBadRequest("URL not allowed")
+    resp = requests.get(image_url, timeout=5, allow_redirects=False)  # block redirect-based bypass
+    return HttpResponse(resp.content, content_type=resp.headers.get("Content-Type", "application/octet-stream"))
+```
+
+Running the check against a metadata-endpoint payload shows why DNS resolution -- not just string matching -- is the load-bearing step:
+
+```text
+>>> is_safe_url("http://169.254.169.254/latest/meta-data/")
+False
+>>> is_safe_url("https://attacker-controlled.com/")   # resolves to a public IP but not allow-listed
+False
+>>> is_safe_url("https://cdn.example.com/avatar.png")
+True
+```
+
+**How to read this output:** the first call is rejected on scheme/host before DNS even runs, but the real defense is the loop over `getaddrinfo` -- an attacker can register `evil.com` and point its DNS A record at `169.254.169.254`, so a naive `if "169.254" in url` check would pass while the actual connection still hits the metadata service. Resolving the hostname and rejecting any private, loopback, link-local, or reserved address closes that hole. The `allow_redirects=False` matters because an allow-listed host can return a 302 to an internal URL, smuggling the request past your host check.
+
+Additional SSRF defenses:
+- Prefer never fetching user-controlled URLs at all. If you must, use a strict allow-list of exact hosts.
+- Block the link-local range (`169.254.0.0/16`), loopback (`127.0.0.0/8`), and RFC 1918 private ranges (`10/8`, `172.16/12`, `192.168/16`) at both the application and the network egress level.
+- Require IMDSv2 (token-based metadata) on AWS, which forces a `PUT` to obtain a token first and defeats the simple `GET` that classic SSRF relies on.
+- Run outbound traffic through an egress proxy/firewall that enforces the allow-list, so an application-layer bypass is still caught at the network boundary.
+
+> **Key Takeaway:** SSRF turns your server into a confused deputy that attacks your own internal network. Defend with an exact-host allow-list, resolve DNS and reject all non-public IPs (including link-local metadata), disable redirects, and enforce egress filtering at the network layer.
+
+---
+
+#### LDAP Injection
+
+When an application builds an LDAP search filter by concatenating user input, an attacker can inject filter metacharacters (`*`, `(`, `)`, `\`, `&`, `|`) to alter the query -- bypassing authentication or dumping directory entries, the LDAP analogue of SQL injection.
+
+```python
+# DANGEROUS: user input concatenated into an LDAP filter
+import ldap
+
+def find_user(username):
+    conn = ldap.initialize("ldap://directory.internal")
+    # Attacker passes username = "*)(uid=*))(|(uid=*"  -> filter matches every entry
+    flt = f"(uid={username})"
+    return conn.search_s("ou=people,dc=example,dc=com", ldap.SCOPE_SUBTREE, flt)
+
+# SAFE: escape filter metacharacters before building the filter
+from ldap.filter import escape_filter_chars
+
+def find_user(username):
+    conn = ldap.initialize("ldap://directory.internal")
+    flt = f"(uid={escape_filter_chars(username)})"  # *, (, ), \, NUL are escaped
+    return conn.search_s("ou=people,dc=example,dc=com", ldap.SCOPE_SUBTREE, flt)
+```
+
+The defense is identical in spirit to parameterized SQL: never let user input change the *structure* of the filter. Use the library's escaping helper (`escape_filter_chars`) and allow-list the expected character set for fields like usernames.
+
+---
+
 ### Input Validation & Security Headers
 
 #### Whitelist Validation
@@ -1159,3 +1266,123 @@ def login_view(request):
 ```
 
 > **Key Takeaway:** Defense in depth means applying multiple layers of security. Validate input with allowlists, use parameterized queries for all database access, set comprehensive security headers at both the application and web server level, configure CORS with specific origins, validate file uploads by content rather than extension, and rate-limit sensitive endpoints.
+
+---
+
+### Cryptography Fundamentals
+
+You should almost never implement a cryptographic primitive yourself -- the job of a backend developer is to *choose the right primitive for the goal and use a vetted library correctly*. The failures that cause breaches are rarely broken math; they are misuse: hashing passwords with MD5, reusing a nonce, comparing secrets with `==`, or seeding tokens from a non-cryptographic RNG. This section covers the mental model behind those choices. (Password hashing with bcrypt/Argon2 is covered above under Broken Authentication, and field-level encryption with Fernet under Infrastructure Security; the goal here is the underlying concepts that tie them together.)
+
+#### Hashing vs Encryption vs Encoding
+
+These three are constantly confused in interviews and code reviews, and the confusion causes real bugs.
+
+- **Hashing** is a one-way function: `hash(x)` is easy, recovering `x` from the hash is infeasible. Use it for integrity (verifying data wasn't tampered with), fingerprints/deduplication, and -- with a *slow, salted* KDF -- password storage. SHA-256 is fine for integrity but never for passwords.
+- **Encryption** is reversible *with a key*. Use it for confidentiality (protecting data at rest or in transit). Anyone without the key cannot read the plaintext; anyone with it can.
+- **Encoding** (base64, hex, URL-encoding) is *neither* -- it is a reversible transformation with no key, used purely to make bytes safe to transport. Base64 is not security. Treating "it's base64'd" as "it's protected" is a recurring mistake.
+
+```text
+>>> import base64, hashlib
+>>> base64.b64encode(b"password123")        # encoding: trivially reversible
+b'cGFzc3dvcmQxMjM='
+>>> base64.b64decode(b'cGFzc3dvcmQxMjM=')   # anyone can decode it
+b'password123'
+>>> hashlib.sha256(b"password123").hexdigest()  # hashing: one-way
+'ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f'
+```
+
+**How to read this output:** the base64 string *looks* scrambled but `b64decode` recovers the original instantly with no key -- that is encoding, and it provides zero confidentiality. The SHA-256 digest cannot be reversed, but it is also unsalted and fast, which is exactly why this same call is a disaster for passwords (an attacker precomputes or brute-forces it). The interview point: if someone says "we hash the credit card number so it's safe," ask whether they mean hash (then you can't charge the card) or encrypt (then key management is the real problem) -- the words are not interchangeable.
+
+#### Symmetric vs Asymmetric Encryption
+
+- **Symmetric** (one shared key for both encrypt and decrypt): fast, suited to bulk data. The modern default is **AES-GCM** (or **ChaCha20-Poly1305** on hardware without AES acceleration). The challenge is distributing the shared key securely.
+- **Asymmetric / public-key** (a key *pair*: public + private): slow, suited to small payloads. Used for key exchange, digital signatures, and identity. **RSA** and the elliptic-curve algorithms (**ECDSA**, **Ed25519**, ECDH) are the common families.
+- **Hybrid encryption** combines both, which is what TLS does: use the peer's public key (asymmetric) to agree on a fresh symmetric key, then encrypt the actual traffic with that symmetric key (fast). You get the key-distribution benefits of asymmetric crypto and the speed of symmetric.
+
+```python
+# Symmetric AEAD encryption with AES-GCM (authenticated encryption)
+import os
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+key = AESGCM.generate_key(bit_length=256)   # store this in a KMS, not in code
+aesgcm = AESGCM(key)
+
+nonce = os.urandom(12)                        # 96-bit nonce, UNIQUE per message
+ciphertext = aesgcm.encrypt(nonce, b"transfer $500 to Bob", b"account:1234")
+# The second arg to encrypt() is "associated data": authenticated but not encrypted.
+
+plaintext = aesgcm.decrypt(nonce, ciphertext, b"account:1234")
+# If the ciphertext OR the associated data is altered, decrypt() raises InvalidTag.
+```
+
+#### AEAD, Nonces, and IVs
+
+AES-GCM and ChaCha20-Poly1305 are **AEAD** (Authenticated Encryption with Associated Data) modes: they encrypt *and* authenticate in one step, so tampering is detected on decryption. Always prefer AEAD over older unauthenticated modes (like AES-CBC without a separate MAC), which are vulnerable to padding-oracle and bit-flipping attacks.
+
+The critical rule is **never reuse a nonce/IV with the same key**. For AES-GCM, reusing a nonce with the same key is catastrophic: it leaks the XOR of the two plaintexts and lets an attacker forge messages. Generate a fresh random nonce (`os.urandom(12)`) per message, or use a deterministic counter that is guaranteed never to repeat. The nonce is not secret -- store/transmit it alongside the ciphertext -- it just must be unique.
+
+#### HMAC and Constant-Time Comparison
+
+An **HMAC** is a keyed hash: `HMAC(key, message)`. Only someone with the secret key can compute or verify it, which makes it the standard tool for message authentication -- most commonly verifying that an inbound webhook genuinely came from the provider (Stripe, GitHub, etc.) and was not forged or replayed.
+
+```python
+import hmac
+import hashlib
+
+def verify_webhook(payload: bytes, signature_header: str, secret: bytes) -> bool:
+    expected = hmac.new(secret, payload, hashlib.sha256).hexdigest()
+    # MUST use compare_digest, NOT ==, to avoid leaking the answer via timing.
+    return hmac.compare_digest(expected, signature_header)
+```
+
+```text
+>>> import hmac, hashlib
+>>> sig = hmac.new(b"whsec_test", b'{"event":"paid"}', hashlib.sha256).hexdigest()
+>>> sig
+'4c8f...e1a9'
+>>> hmac.compare_digest(sig, sig)        # valid signature
+True
+>>> hmac.compare_digest(sig, "0000...")  # forged signature
+False
+```
+
+**How to read this output:** `compare_digest` returns the same boolean a naive `==` would -- the difference is invisible in the output but decisive in security. A normal `==` short-circuits at the first differing byte, so an attacker who can time your responses can recover the correct signature one byte at a time. `compare_digest` always examines the full length in constant time, closing that side channel. In an interview, "I verify the HMAC with `hmac.compare_digest`" signals you understand timing attacks; "I check `sig == expected`" is the wrong answer even though it's functionally correct.
+
+#### Digital Signatures
+
+A **digital signature** uses asymmetric crypto in reverse: the holder of the *private* key signs, and anyone with the *public* key can verify. This proves both authenticity (it came from the private-key holder) and integrity (it wasn't modified). Unlike HMAC -- where verifier and signer share the same secret -- signatures let you publish the public key freely, so many parties can verify without being able to forge.
+
+This is exactly the difference between JWT `HS256` (HMAC: same secret signs and verifies -- fine within one service) and `RS256`/`ES256` (RSA/ECDSA signatures: an auth service holds the private key, every other service verifies with the published public key and can never mint tokens). Package signing, code signing, and TLS certificate chains all rely on the same private-sign / public-verify model.
+
+#### Cryptographically Secure Randomness (CSPRNG)
+
+Anything security-sensitive -- session tokens, password-reset tokens, API keys, salts, nonces -- must come from a **cryptographically secure** RNG. Python's `random` module is a Mersenne Twister: fast, statistically uniform, and *completely predictable* once an attacker observes enough output. Use the `secrets` module instead.
+
+```python
+import secrets
+
+token = secrets.token_urlsafe(32)   # ~43-char URL-safe token, CSPRNG-backed
+reset_code = secrets.randbelow(10**6)  # 6-digit code, no modulo bias
+api_key = "sk_live_" + secrets.token_hex(24)
+```
+
+```text
+>>> import secrets
+>>> secrets.token_urlsafe(32)
+'xJ3kZ9-Qf2pL8mNvR1tWcA7sB4dE6hG0yU5iO2nK1w'
+>>> import random; random.seed(0); random.random()   # DON'T: reproducible
+0.8444218515250481
+```
+
+**How to read this output:** the `secrets` token is unpredictable even to someone who has seen millions of prior tokens. The `random` example shows the failure mode -- seed it the same way and you get the identical "random" number every time, which means an attacker who learns or guesses the seed can predict every token you'll ever issue. The rule is mechanical: if a value protects something, use `secrets` (or `os.urandom`); `random` is only for simulations, sampling, and tests.
+
+#### Key Management
+
+The hardest part of applied cryptography is not encrypting -- it's protecting the keys. Principles:
+
+- **Store keys in a KMS or HSM** (AWS KMS, GCP KMS, HashiCorp Vault Transit, hardware security modules), not in source code, config files, or environment variables you can `cat`.
+- **Envelope encryption**: don't encrypt your data directly with the master key. Instead, the KMS holds a **Key-Encryption Key (KEK)** that never leaves it; you generate a per-object **Data-Encryption Key (DEK)**, encrypt the data locally with the DEK (fast, symmetric), then ask the KMS to encrypt the DEK with the KEK and store that wrapped DEK next to the ciphertext. Rotating the KEK then only re-wraps DEKs instead of re-encrypting petabytes of data.
+- **Rotate keys** on a schedule and immediately on suspected compromise. Design so old keys can still *decrypt* legacy data while new writes use the new key.
+- **Separate duties and limit access**: the people/services that can use a key to decrypt should be a tiny, audited set, distinct from those who manage it.
+
+> **Key Takeaway:** Pick the primitive that matches the goal -- hash for integrity, encrypt for confidentiality, HMAC/signature for authenticity, encoding for transport (never for security). Default to AEAD (AES-GCM/ChaCha20-Poly1305) with a unique nonce per message, generate all secrets with a CSPRNG, compare secrets in constant time, and keep keys in a KMS with envelope encryption and rotation. Don't roll your own crypto; misuse, not math, is what gets breached.

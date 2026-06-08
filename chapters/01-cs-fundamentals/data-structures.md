@@ -328,6 +328,81 @@ Adding Server D between A and B:
 
 **Real-world use:** Amazon DynamoDB, Apache Cassandra, Memcached (client-side), Nginx upstream consistent hashing, load balancers.
 
+#### Cuckoo Hashing
+
+Standard open addressing degrades as the table fills: a lookup may probe many slots before finding (or failing to find) a key, so worst-case lookup is O(n). **Cuckoo hashing** trades a more expensive insert for a *guaranteed* worst-case **O(1) lookup**. It uses **two hash functions** and (conceptually) two tables. Every key lives in exactly one of two candidate buckets — `h1(key)` or `h2(key)` — so a lookup checks at most two locations, full stop.
+
+```
+Cuckoo hashing — key "X" can only ever be in slot h1(X) or slot h2(X):
+
+  Table 1 (via h1)            Table 2 (via h2)
+  +----+----+----+----+       +----+----+----+----+
+  | A  |    | X  | C  |       |    | B  | D  |    |
+  +----+----+----+----+       +----+----+----+----+
+
+  get("X"):  check Table1[h1(X)] -> hit. (Worst case: also check Table2[h2(X)].)
+             Never more than 2 reads, regardless of load.
+```
+
+The cost is on insert. To insert a key, you place it in `h1(key)`. If that bucket is occupied, you **kick out** the resident key (the "cuckoo" behavior — like a cuckoo chick evicting eggs from the nest) and re-home the evicted key in *its* other bucket, which may evict yet another key, and so on. This eviction chain usually settles quickly, but at high load factors it can enter a **rehash cycle** — keys keep displacing each other without converging. When a cycle (or a length limit) is detected, the table is rebuilt with new hash functions. Because of this, cuckoo hashing is kept at a moderate load factor (~50% for two tables, higher with more hash functions or a small "stash").
+
+```python
+# Illustrative insert logic (not production-grade — omits resize/stash):
+def cuckoo_insert(t1, t2, h1, h2, key, max_kicks=32):
+    for _ in range(max_kicks):
+        i = h1(key)
+        if t1[i] is None:
+            t1[i] = key
+            return True
+        key, t1[i] = t1[i], key      # kick out resident, take its place
+        j = h2(key)                   # try the evicted key in its OTHER bucket
+        if t2[j] is None:
+            t2[j] = key
+            return True
+        key, t2[j] = t2[j], key
+    return False  # cycle suspected -> caller must rehash with new h1/h2
+```
+
+```text
+insert "apple"  -> placed in t1[3]
+insert "grape"  -> t1[3] full, evict "apple", place "grape"; "apple" -> t2[5]
+insert "mango"  -> t1[3] is "grape", evict, place "mango"; "grape" -> t2[1]
+...
+insert "kiwi"   -> 32 kicks without settling -> returns False (rehash needed)
+```
+
+**How to read this output:** Most inserts touch only one or two slots, but the last line is the failure mode that defines cuckoo hashing in practice: a long eviction chain that never finds an empty home. Returning `False` is the signal to rehash the whole table with fresh hash functions. In an interview the key point is the *asymmetry* — you accept occasional expensive inserts (and a capped load factor) to buy a hard ceiling of two reads per lookup, which is why cuckoo hashing shows up where predictable, bounded lookup latency matters (hardware routers, the **cuckoo filter** mentioned later in this chapter, some in-memory caches).
+
+#### Hash Flooding (Algorithmic Complexity Attack)
+
+A hash table's O(1) guarantee is only an *average* over a good hash distribution. If an adversary can make many keys collide into the same bucket, every operation on that bucket degrades to a linear scan: **O(1) collapses to O(n)** (or O(n²) to insert n colliding keys). This is a **hash flooding** or **algorithmic complexity attack**. Any service that builds a dict/set from *untrusted* input is exposed — classically, web frameworks that parse POST form fields or JSON object keys straight into a dictionary. In 2011 this took down major frameworks (PHP, Python, Ruby, Java, Node) with a single small crafted request that pinned a CPU at 100%.
+
+```python
+# The attack shape: thousands of distinct keys engineered to share one bucket.
+# Parsing them into a dict turns an O(n) operation into O(n^2):
+#
+#   data = {crafted_key_1: 1, crafted_key_2: 1, ...}   # all collide
+#   -> each insert scans the growing collision chain -> request never returns
+```
+
+The standard mitigation is a **randomized, keyed hash**: seed the string hash function with a secret random value chosen at process start, so an attacker cannot precompute colliding keys offline. Python enables exactly this by default for `str`/`bytes` hashing (**SipHash** with a per-process random seed). You can observe it:
+
+```python
+# Run twice in two SEPARATE processes:
+print(hash("attacker-controlled-key"))
+```
+
+```console
+$ python -c 'print(hash("attacker-controlled-key"))'
+-4814886218878000218
+$ python -c 'print(hash("attacker-controlled-key"))'
+ 6921321756752984419
+```
+
+**How to read this output:** The *same string* hashes to a *different* value in each process — that randomization is the defense. Because the seed is secret and changes per process, an attacker can no longer construct a set of keys guaranteed to collide. The flip side is the operational gotcha: do **not** rely on `hash()` (or dict iteration order derived from it) being stable across runs — that is why you cannot persist or shard on raw `hash()` values, and why reproducible tests set `PYTHONHASHSEED=0` to pin the seed. (Note the seed protects only hashing of `str`/`bytes`; ints hash to themselves, so integer-keyed dicts are not covered — but integer keys are rarely attacker-shaped.)
+
+> **Common pitfall:** Treating `hash()` as a stable fingerprint — using it as a cache key written to disk, a shard selector, or a value compared across processes. SipHash randomization means it changes every run. Use an explicit, stable hash (`hashlib.sha256`, `zlib.crc32`) for anything that must survive a restart or be consistent across machines.
+
 > **Key Takeaway:** Hash tables provide O(1) average-case operations, making them the backbone of almost every high-performance system. Understanding collision resolution, load factors, and Python's dict internals helps you reason about performance. For distributed systems, consistent hashing is essential knowledge for designing scalable caches and databases.
 
 ---

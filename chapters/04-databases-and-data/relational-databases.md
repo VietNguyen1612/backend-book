@@ -2,6 +2,97 @@
 
 # 4.1 Relational Databases (PostgreSQL Focus)
 
+### Storage Internals & Durability
+
+Before tuning queries, it helps to understand how PostgreSQL physically stores and protects data. Almost every performance and durability trade-off in a relational database traces back to these mechanics.
+
+#### Pages and the Buffer Pool
+
+PostgreSQL reads and writes data in fixed-size **pages** (blocks), 8 KB by default. A table or index is just a sequence of such pages on disk. Crucially, the engine never operates on a row directly from disk -- it first loads the whole page into a shared in-memory cache called the **buffer pool**, sized by the `shared_buffers` setting. On top of that, the operating system's page cache provides a second tier of caching. The practical consequence is that almost all query tuning is really about keeping your *working set* (the hot pages a query touches) resident in these caches so that reads are served from RAM instead of disk.
+
+```sql
+-- See how much of each table is currently cached in shared_buffers
+-- (requires the pg_buffercache extension)
+CREATE EXTENSION IF NOT EXISTS pg_buffercache;
+
+SELECT c.relname,
+       count(*) AS buffers,
+       pg_size_pretty(count(*) * 8192) AS cached,
+       pg_size_pretty(pg_relation_size(c.oid)) AS total
+FROM pg_buffercache b
+JOIN pg_class c ON b.relfilenode = pg_relation_filenode(c.oid)
+GROUP BY c.relname, c.oid
+ORDER BY buffers DESC
+LIMIT 5;
+```
+
+```text
+   relname   | buffers |  cached  |  total
+-------------+---------+----------+---------
+ orders      |   31204 | 244 MB   | 612 MB
+ order_items |   18550 | 145 MB   | 1208 MB
+ users       |    4096 | 32 MB    | 32 MB
+ sessions    |     980 | 7664 kB  | 410 MB
+```
+
+**How to read this output:** Compare `cached` against `total` per table. `users` is 100% cached (32 MB of 32 MB) -- every query against it is served from RAM. `order_items` has only 145 MB of 1.2 GB resident, so range scans over it will trigger disk reads and run inconsistently depending on what got evicted. This view is the concrete way to answer "is `shared_buffers` big enough for my working set?" -- if your hot tables are chronically under-cached and the box has spare RAM, that is your signal to raise `shared_buffers` (a common starting point is ~25% of system memory, leaving the rest for the OS page cache). Sizing it to fit the working set, not the whole database, is the real goal.
+
+#### Write-Ahead Log (WAL)
+
+Durability -- the "D" in ACID -- comes from the **Write-Ahead Log**. The rule is simple and absolute: every change is first written as a record to the WAL and `fsync`'d to durable storage *before* the corresponding data pages are modified in place. WAL writes are sequential appends, which are far faster than the random I/O of updating scattered heap pages, so the commit path stays fast. On a crash, PostgreSQL replays the WAL from the last **checkpoint** to bring the data files back to a consistent state. This same WAL stream is what feeds streaming replication and Point-in-Time Recovery.
+
+A **checkpoint** periodically flushes all dirty buffer-pool pages to the data files and records a marker in the WAL; recovery only needs to replay WAL written after the most recent checkpoint. Tuning checkpoint frequency is a balance: frequent checkpoints mean fast recovery but more constant I/O; infrequent checkpoints mean less steady-state I/O but longer recovery and larger WAL.
+
+```sql
+-- Inspect WAL and checkpoint activity
+SELECT pg_current_wal_lsn() AS current_wal_position;
+
+SELECT checkpoints_timed, checkpoints_req,
+       buffers_checkpoint, buffers_clean, buffers_backend
+FROM pg_stat_bgwriter;
+```
+
+```text
+ checkpoints_timed | checkpoints_req | buffers_checkpoint | buffers_clean | buffers_backend
+-------------------+-----------------+--------------------+---------------+-----------------
+            14820  |            3120 |           48201334 |       2104998 |        18044510
+```
+
+**How to read this output:** `checkpoints_timed` (triggered by `checkpoint_timeout`) versus `checkpoints_req` (forced because `max_wal_size` filled up first) is the headline. Here ~17% of checkpoints are *requested* rather than timed, which means write bursts are filling the WAL faster than the timeout fires -- raising `max_wal_size` would smooth the I/O into fewer, scheduled checkpoints. The `buffers_backend` number being high (dirty pages flushed by ordinary backends rather than the background writer or checkpointer) is a classic sign that foreground queries are doing flush work they should not, hurting latency. `fsync = off` would make all of this faster and is a guaranteed way to corrupt your database on a crash -- never do it on real data.
+
+#### Heap, TIDs, and the Clustered-Index Contrast
+
+PostgreSQL stores table rows in an unordered **heap** -- rows live wherever there is free space, in no particular order. Every index (including the primary key) is a separate structure whose leaf entries point back to heap rows via a **TID** (tuple identifier: a `(page number, item offset)` pair). So an index lookup in PostgreSQL is two steps: walk the index to get TIDs, then fetch those rows from the heap.
+
+This is fundamentally different from MySQL's InnoDB, which uses a **clustered index**: the table *is* the primary-key B-tree, with full rows stored in the leaf nodes. Secondary indexes in InnoDB store the primary-key value (not a physical pointer), so a secondary-index lookup costs two B-tree traversals. The trade-offs fall out directly from this layout:
+
+- InnoDB primary-key lookups and range scans are very fast (rows are physically ordered by PK and stored in the leaf). PostgreSQL needs the extra heap fetch, which is why **index-only scans** and the visibility map matter so much there.
+- A fat or randomly-distributed primary key is more expensive in InnoDB because its value is duplicated into every secondary index. This is one reason monotonic (time-sorted) keys like a `BIGINT` or UUIDv7 are preferred over random UUIDv4 for InnoDB primary keys.
+- PostgreSQL can `CLUSTER` a table to physically reorder it by an index, but unlike InnoDB the ordering is not maintained automatically after writes.
+
+#### MVCC Storage: Heap Bloat vs Undo Log
+
+Both PostgreSQL and InnoDB use MVCC so readers never block writers, but they store old row versions differently -- and this single design choice drives very different operational behavior:
+
+- **PostgreSQL** keeps old versions *in the heap itself*. An UPDATE writes a brand-new tuple and marks the old one dead (via `xmax`). Dead tuples accumulate and must be reclaimed by **VACUUM**; left unchecked they cause table and index **bloat**. The upside is that ROLLBACK is essentially free (the new tuple is simply never made visible).
+- **InnoDB** keeps old versions in a separate **undo log** (rollback segments). The main B-tree holds only the current row; readers reconstruct older versions by walking undo records. There is no equivalent of heap bloat from dead tuples, but ROLLBACK must actively undo changes, and a long-running read transaction forces the undo log to grow to preserve the versions that transaction can still see (the analog of PostgreSQL's "long transactions block VACUUM" problem).
+
+The lesson for both engines is the same: long-running transactions are the enemy. In PostgreSQL they pin dead tuples and prevent VACUUM from reclaiming them; in InnoDB they balloon the undo log. Keep transactions short.
+
+#### B-tree vs LSM Storage Engines
+
+The B-tree is the dominant on-disk index structure for relational databases (PostgreSQL, InnoDB): it supports reads, range scans, and in-place updates well, with O(log n) lookups. But it is not the only choice, and picking a database is partly picking a storage engine.
+
+A **Log-Structured Merge-tree (LSM)** -- used by Cassandra, RocksDB, ScyllaDB, and as an option in some engines -- optimizes for write throughput. Writes go to an in-memory **memtable** plus a sequential commit log, then are flushed to immutable on-disk files (**SSTables**); background **compaction** merges and rewrites these files to keep reads efficient and discard deleted/overwritten data. The trade-offs:
+
+- LSM excels at high-volume, append-heavy write workloads because every write is a fast sequential append rather than a random in-place page update.
+- Reads can be slower (a key may live in the memtable or any of several SSTable levels, mitigated by bloom filters and caching), and compaction consumes background I/O and CPU.
+- Deletes are not in-place either; they write a **tombstone** marker that is only physically removed during compaction -- which is why tombstone buildup is a real operational concern in LSM systems (revisited under Cassandra in the NoSQL chapter).
+
+> **Key Takeaway:** The shape of a relational database's performance and durability comes from its storage layer: pages cached in the buffer pool, durability guaranteed by WAL-before-data, heap-plus-TID vs clustered layout determining lookup cost, MVCC version storage dictating whether you fight bloat or undo growth, and B-tree vs LSM choosing whether you optimize for balanced reads/writes or raw write throughput. Knowing these internals is what turns "add an index" into informed tuning.
+
+---
+
 ### Query Optimization
 
 #### EXPLAIN ANALYZE: Reading Execution Plans
@@ -531,6 +622,55 @@ with connection.cursor() as cursor:
     cursor.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
     # ... perform queries ...
 ```
+
+#### Concurrency Anomalies: Lost Update and Write Skew
+
+The isolation levels above are defined by *which anomalies they prevent*. Two of these anomalies cause subtle, expensive bugs in production and come up constantly in interviews, so they deserve a closer look.
+
+**Lost update** happens when two transactions read the same row, each computes a new value from what it read, and then both write back -- the second write silently clobbers the first. The classic case is a read-modify-write in application code:
+
+```sql
+-- Transaction A                          -- Transaction B
+BEGIN;                                     BEGIN;
+SELECT balance FROM accounts              SELECT balance FROM accounts
+  WHERE id = 1;  -- reads 100               WHERE id = 1;  -- also reads 100
+-- app computes 100 - 30 = 70             -- app computes 100 - 50 = 50
+UPDATE accounts SET balance = 70          UPDATE accounts SET balance = 50
+  WHERE id = 1;                             WHERE id = 1;
+COMMIT;                                    COMMIT;  -- final balance = 50, the 30 withdrawal vanished
+```
+
+Read Committed does *not* prevent this; both transactions read 100 and the second commit wins. There are three standard fixes:
+
+- **Atomic update** -- let the database do the arithmetic so there is no read-then-write gap: `UPDATE accounts SET balance = balance - 30 WHERE id = 1;`. In Django, this is `F('balance') - 30`.
+- **Pessimistic lock** -- `SELECT ... FOR UPDATE` so the second transaction blocks until the first commits, then reads the updated value.
+- **Optimistic concurrency** -- a version column checked in the WHERE clause (covered under Optimistic vs Pessimistic Locking below).
+
+**Write skew** is more insidious. Two transactions read an *overlapping* set of rows, each makes a decision that is valid given what it read, and each writes a *different* row -- so no lost update occurs, yet a global invariant is violated. The textbook example is an on-call rule that requires at least one doctor on shift:
+
+```sql
+-- Invariant: at least one doctor must remain on call.
+-- Currently Alice and Bob are both on call.
+
+-- Transaction A (Alice going off)            -- Transaction B (Bob going off)
+BEGIN;                                          BEGIN;
+SELECT count(*) FROM doctors                    SELECT count(*) FROM doctors
+  WHERE on_call = true;  -- sees 2, OK            WHERE on_call = true;  -- sees 2, OK
+UPDATE doctors SET on_call = false              UPDATE doctors SET on_call = false
+  WHERE name = 'Alice';                           WHERE name = 'Bob';
+COMMIT;                                          COMMIT;
+-- Result: ZERO doctors on call -- invariant violated
+```
+
+Each transaction's logic was correct in isolation, and they updated different rows, so locking the row each one writes would not have helped. **Snapshot isolation (PostgreSQL's Repeatable Read) does NOT prevent write skew** -- each transaction reads its own consistent snapshot showing two doctors. Only **Serializable** isolation catches it: PostgreSQL's Serializable Snapshot Isolation tracks the read/write dependencies between the transactions, detects the dangerous cycle, and aborts one with a serialization failure for the application to retry.
+
+```text
+ERROR:  could not serialize access due to read/write dependencies among transactions
+DETAIL:  Reason code: Canceled on identification as a pivot, during commit attempt.
+HINT:  The transaction might succeed if retried.
+```
+
+**How to read this output:** This is the error your application must be prepared to catch under `SERIALIZABLE`. The HINT is the key operational instruction -- a serialization failure is *not* a bug, it is the database telling you it prevented an anomaly and you should simply retry the transaction. Any code path running at Serializable must wrap its transaction in a retry loop (with a small bounded number of attempts); forgetting that retry loop is the most common mistake when teams reach for Serializable to fix write skew. The alternative, if you want to stay at a weaker isolation level, is to *materialize the conflict* -- e.g. `SELECT ... FOR UPDATE` the rows you counted, so the two transactions actually contend on the same locks.
 
 #### MVCC (Multi-Version Concurrency Control)
 

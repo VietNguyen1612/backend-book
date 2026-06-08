@@ -336,3 +336,5 @@ A long career is a marathon, and burnout ends marathons early. The myth that pro
 The skills described in this chapter -- clear writing, stakeholder communication, systematic debugging, mentoring, systems thinking, and technical leadership -- are not "soft" in the sense of being less important than technical skills. They are the skills that determine whether your technical abilities translate into career impact. An engineer with outstanding technical skills and poor communication will be perpetually undervalued. An engineer with strong (not necessarily outstanding) technical skills and excellent communication, ownership, and leadership will advance steadily and have outsized impact on their organization.
 
 > **Key Takeaway -- Soft Skills and Career Growth**: Invest in these skills deliberately. Write an RFC for your next project, even if your team does not require it. Volunteer to write the post-incident report after the next outage. Mentor a junior engineer. Present a technical topic to your team. Each of these activities builds the skills that will define the trajectory of your career.
+
+*Last reviewed: 2026-06-08*

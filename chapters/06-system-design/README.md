@@ -9,7 +9,9 @@ This chapter covers the core principles and practical patterns of system design 
 ## Table of Contents
 
 ### [6.1 Scalability](scalability.md)
+
 Foundations of building systems that grow with demand.
+
 - Horizontal vs Vertical Scaling, Stateless Services, Auto-Scaling
 - Load Balancing (L4/L7, algorithms, health checks, SSL termination)
 - Caching Patterns (cache-aside, write-through, write-behind, read-through)
@@ -18,7 +20,9 @@ Foundations of building systems that grow with demand.
 - CAP Theorem, PACELC, Eventual Consistency, Conflict Resolution (LWW, Vector Clocks, CRDTs)
 
 ### [6.2 Distributed Systems](distributed-systems.md)
+
 Coordination, communication, and observability in multi-service architectures.
+
 - Consensus & Coordination (Raft leader election and log replication, split-brain prevention)
 - etcd, ZooKeeper, Consul
 - Service Communication (synchronous vs asynchronous, service discovery)
@@ -26,18 +30,32 @@ Coordination, communication, and observability in multi-service architectures.
 - Observability (logs, metrics, traces), RED/USE methods, SLI/SLO/SLA, error budgets
 
 ### [6.3 Real-World System Design Examples](real-world-examples.md)
+
 End-to-end architecture walkthroughs for common interview and production systems.
+
 - URL Shortener (key generation, storage, caching, analytics pipeline)
 - Distributed Rate Limiter (token bucket, sliding window log, fixed window counter)
 - Chat System (WebSocket connections, message routing, presence tracking)
 - Notification System (multi-channel delivery, user preferences, deduplication, reliability)
 
 ### [6.4 Back-of-Envelope Calculations](back-of-envelope.md)
+
 Quantitative reasoning to guide architecture decisions before writing code.
+
 - Reference latency, throughput, and storage numbers
 - Walkthrough: URL Shortener scale estimation
 - Walkthrough: Chat System scale estimation
 - Walkthrough: Notification System scale estimation
+
+### [6.5 Caching & CDN Deep-Dive](caching-and-cdn.md)
+
+Going a level deeper than the caching patterns in 6.1, into the mechanics you tune in production.
+
+- The cache hierarchy and effective-latency math (why hit ratio dominates)
+- HTTP caching semantics (Cache-Control, ETag/validators, stale-while-revalidate, Vary)
+- How CDNs work (PoPs, origin shield, cache keys, purge vs versioned URLs, signed URLs)
+- Cache invalidation strategies and negative caching
+- Cache stampede defenses (single-flight, probabilistic early expiration) and hot-key mitigation
 
 ---
 

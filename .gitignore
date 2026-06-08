@@ -10,6 +10,12 @@ _site/
 .jekyll-cache/
 .jekyll-metadata
 
+# --- Python tooling artifacts (homework skeletons, linters) ---
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.pytest_cache/
+
 # --- OS / editor noise ---
 .DS_Store
 Thumbs.db

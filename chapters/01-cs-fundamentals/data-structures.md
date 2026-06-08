@@ -47,15 +47,15 @@ for i in range(1, len(sizes)):
 Running this prints something like (exact byte counts vary by Python version and 32- vs 64-bit build):
 
 ```text
-At length 1: size changed from 56 to 88 bytes
-At length 5: size changed from 88 to 120 bytes
-At length 9: size changed from 120 to 184 bytes
-At length 17: size changed from 184 to 248 bytes
-At length 25: size changed from 248 to 312 bytes
-At length 33: size changed from 312 to 376 bytes
+At length 4: size changed from 88 to 120 bytes
+At length 8: size changed from 120 to 184 bytes
+At length 16: size changed from 184 to 248 bytes
+At length 24: size changed from 248 to 312 bytes
+At length 32: size changed from 312 to 376 bytes
+At length 40: size changed from 376 to 472 bytes
 ```
 
-**How to read this output:** The size jumps happen in chunks (at length 1, 5, 9, 17, 25...), not on every single `append`. Each jump is the moment Python's internal buffer filled up and was reallocated to a larger one — the growth pattern (roughly 0, 4, 8, 16, 25, 35...) is the amortized over-allocation in action. Between jumps, `append` is touching pre-reserved slots and costs O(1). This is why `list.append` in a hot loop is cheap: you pay the occasional O(n) copy, but it is spread thin across many appends. In production, if you already know the final size, building via a list comprehension or pre-sizing avoids these intermediate reallocations entirely.
+**How to read this output:** The size jumps happen in chunks (here at lengths 4, 8, 16, 24, 32, 40), not on every single `append`. Each jump is the moment Python's internal buffer filled up and was reallocated to a larger one — the backing buffer's capacity grows geometrically (4, 8, 16, 24, 32, 40, 52, ... on this 64-bit build) as the amortized over-allocation in action. Between jumps, `append` is touching pre-reserved slots and costs O(1). This is why `list.append` in a hot loop is cheap: you pay the occasional O(n) copy, but it is spread thin across many appends. In production, if you already know the final size, building via a list comprehension or pre-sizing avoids these intermediate reallocations entirely.
 
 **Cache locality** is another critical advantage of arrays. Because elements are stored contiguously, accessing sequential elements loads them into the CPU cache together (a single cache line is typically 64 bytes). This makes iterating over arrays significantly faster in practice than iterating over linked lists, even when the theoretical Big-O is the same.
 
@@ -182,6 +182,7 @@ rb.write("event_5")  # Reuses the slot freed by the read
 #### How Hash Tables Work
 
 A hash table maps keys to values using a **hash function** that converts a key into an array index. A good hash function must be:
+
 - **Deterministic**: same input always produces the same output.
 - **Uniform distribution**: spreads keys evenly across buckets to minimize collisions.
 - **Fast to compute**: hash computation happens on every operation.
@@ -527,6 +528,7 @@ With a branching factor of 500, a 3-level B-Tree can index
 ```
 
 **B+ Trees** are a variant where:
+
 - Internal nodes store only keys (no data), maximizing the branching factor.
 - All data resides in the **leaf nodes**.
 - Leaf nodes are linked together in a **linked list**, enabling efficient range scans.
@@ -922,7 +924,7 @@ for city, dist in sorted(distances.items(), key=lambda x: x[1]):
 
 **Bellman-Ford** handles **negative weights** (Dijkstra cannot) and detects negative cycles. It relaxes all edges V-1 times, running in O(VE). Use it for currency arbitrage detection (negative cycle = arbitrage opportunity) or any graph with negative edges.
 
-**A* Search** extends Dijkstra with a **heuristic function** that estimates the remaining distance to the goal. It expands the node with the smallest `f(n) = g(n) + h(n)` where g(n) is the cost so far and h(n) is the heuristic estimate. With an admissible heuristic (never overestimates), A* finds the optimal path while exploring fewer nodes than Dijkstra. Used in game pathfinding, GPS route planning, and robotics.
+**A\* Search** extends Dijkstra with a **heuristic function** that estimates the remaining distance to the goal. It expands the node with the smallest `f(n) = g(n) + h(n)` where g(n) is the cost so far and h(n) is the heuristic estimate. With an admissible heuristic (never overestimates), A* finds the optimal path while exploring fewer nodes than Dijkstra. Used in game pathfinding, GPS route planning, and robotics.
 
 #### Topological Sort
 
@@ -1118,6 +1120,7 @@ print(is_username_available("zephyr"))   # True  (definitely not in set)
 ```
 
 **Real-world use:**
+
 - **Databases:** PostgreSQL and Cassandra use Bloom filters to avoid reading SSTables/pages that definitely do not contain the queried key.
 - **Web caching:** CDNs use Bloom filters to decide whether to cache a URL (cache on second hit — the Bloom filter tracks first-hit URLs).
 - **Spell checkers:** Quick check if a word is in the dictionary before expensive lookup.
@@ -1314,3 +1317,5 @@ print(f"MST edges: {mst}, Total cost: {cost}")
 **Count-Min Sketch:** A probabilistic data structure for frequency estimation in streaming data. Like a Bloom filter but for counts instead of membership. Uses multiple hash functions and a 2D array. Estimates are always greater than or equal to the true count (overestimates possible, underestimates impossible). Used in network monitoring (heavy-hitter detection), NLP (approximate word counts), and stream processing.
 
 > **Key Takeaway:** Advanced data structures solve specific problems that general-purpose structures handle poorly. Bloom filters save disk I/O, HyperLogLog counts unique items in constant space, LRU caches speed up repeated lookups, and Union-Find handles dynamic connectivity. You do not need to implement these from scratch in production (use Redis, database features, or well-tested libraries), but understanding how they work helps you choose the right tool and configure it properly.
+
+*Last reviewed: 2026-06-08*

@@ -495,3 +495,5 @@ Prometheus + Grafana is the standard open-source metrics stack. Two frameworks g
 - **Error Budgets**: If your SLO is 99.9% availability, your error budget is 0.1% -- roughly 43 minutes of downtime per month. As long as you have error budget remaining, you can take risks (deploy new features, run experiments). When the budget is exhausted, the team focuses exclusively on reliability improvements. This creates a healthy tension between velocity and reliability.
 
 > **Key Takeaway**: Observability is not about installing tools -- it is about building a culture where every service emits structured logs with correlation IDs, exposes standard metrics (RED/USE), and participates in distributed tracing. Without all three pillars working together, debugging a production incident across 50 microservices is like finding a needle in a haystack while blindfolded.
+
+*Last reviewed: 2026-06-08*

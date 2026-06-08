@@ -13,7 +13,7 @@
 
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "myproject"
@@ -832,3 +832,5 @@ a1b2c3d
 For configuration and CLIs: `argparse` (stdlib) handles command-line parsing (or `click`/`typer` for richer interfaces); `tomllib` (stdlib, 3.11+) reads TOML config (read-only), and `configparser` reads INI-style files. Use `os`/`shutil` for environment variables and high-level file operations (`shutil.copy`, `shutil.rmtree`), and `tempfile` for scratch files that clean themselves up.
 
 > **Key Takeaway:** Replace `print` with a configured `logging` setup (module loggers, lazy `%s` formatting, `logger.exception()` for tracebacks, structured logs in prod, no secrets). Use `pathlib.Path` over `os.path`, call external programs with `subprocess.run([...], check=True)` and never `shell=True` on untrusted input, and make file writes crash-safe with a temp file plus atomic `os.replace`.
+
+*Last reviewed: 2026-06-08*

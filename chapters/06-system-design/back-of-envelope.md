@@ -42,7 +42,7 @@ SCALE:
   1 billion requests/day .............  ~12,000 requests/second
 ```
 
-The two latency numbers worth internalizing above all others: an SSD read (~150 us) is roughly **1,000x faster** than an HDD read (~10 ms), and a same-datacenter round-trip (~0.5 ms) is roughly **300x faster** than a cross-ocean one (~150 ms). In an interview these ratios are what let you say "this should be served from a replica in-region, not over a trans-Atlantic call" without reaching for exact figures.
+The two latency numbers worth internalizing above all others: an SSD read (~150 us) is roughly **65x faster** than an HDD read (~10 ms), and a same-datacenter round-trip (~0.5 ms) is roughly **300x faster** than a cross-ocean one (~150 ms). In an interview these ratios are what let you say "this should be served from a replica in-region, not over a trans-Atlantic call" without reaching for exact figures.
 
 > **Common pitfall:** Mixing up the unit prefixes is the single most common way these estimates go wrong. 1 us = 1,000 ns, 1 ms = 1,000 us = 1,000,000 ns, and 1 GB/s = 1,000 MB/s. A misplaced factor of 1,000 turns "fits on one box" into "needs a cluster," so write the units next to every number and check that the powers of ten line up before you trust the verdict.
 
@@ -207,3 +207,5 @@ The interesting result is how cheap the workers are: even at a 5x flash-sale pea
 > **Key Takeaway:** Throughput per worker is dominated by per-item latency and batch size, not by raw request volume. When a queue backs up, first ask whether the downstream call can be batched -- it is usually cheaper than adding servers.
 
 > **Key Takeaway**: Back-of-envelope calculations are not about getting exact numbers. They are about getting the right order of magnitude. The difference between 100 requests/second and 100,000 requests/second determines whether you need a single server or a distributed cluster. Always start with the daily active users, derive the operations per second, estimate storage per record, multiply out over your retention period, and then determine how many servers/instances each component needs. Present your assumptions clearly -- they matter more than the final numbers.
+
+*Last reviewed: 2026-06-08*

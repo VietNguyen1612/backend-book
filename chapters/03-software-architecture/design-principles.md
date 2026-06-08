@@ -1056,3 +1056,5 @@ A practical progression:
 3. **Scale:** Views -> Use Cases -> Domain Models + Repository Interfaces -> ORM Adapters (full hexagonal)
 
 > **Key Takeaway:** Clean Architecture and Hexagonal Architecture are about protecting your business logic from infrastructure details. Dependencies point inward. The domain defines ports (interfaces); the infrastructure provides adapters (implementations). Start simple and introduce these patterns as complexity demands it.
+
+*Last reviewed: 2026-06-08*

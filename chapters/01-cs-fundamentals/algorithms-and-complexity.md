@@ -146,7 +146,7 @@ def two_sum_sorted(nums, target):
             hi -= 1      # need a smaller sum -> move right pointer down
     return None
 
-print(two_sum_sorted([1, 3, 4, 6, 8, 11], 10))  # (1, 4)  -> 3 + 8
+print(two_sum_sorted([1, 3, 4, 6, 8, 11], 10))  # (2, 3)  -> 4 + 6
 ```
 
 The key insight: because the array is sorted, each comparison lets you *discard* a whole side, so each element is visited at most once.
@@ -250,7 +250,7 @@ def max_non_overlapping(intervals):
             last_end = end
     return count
 
-print(max_non_overlapping([(1, 3), (2, 5), (4, 7), (6, 8)]))  # 3
+print(max_non_overlapping([(1, 3), (2, 5), (4, 7), (6, 8)]))  # 2  -> picks (1,3) and (4,7)
 ```
 
 > **Common pitfall:** Greedy *feels* right far more often than it *is* right. Sorting by start time (instead of end time) above gives a wrong answer; many "obvious" greedy strategies fail on adversarial inputs. Before trusting a greedy solution, either prove the greedy-choice property or test it against a brute-force/DP solution on random inputs — a silently-wrong greedy is a classic production bug.
@@ -800,6 +800,7 @@ print(tsp(dist))  # 80 (0->1->3->2->0)
 ```
 
 **Practical DP applications in backend systems:**
+
 - Rate limiting with sliding windows
 - Resource allocation in cloud scheduling
 - Route optimization in delivery systems
@@ -915,11 +916,11 @@ def kmp_search(text, pattern):
     return matches
 
 text = "ABABDABACDABABCABAB"
-print(kmp_search(text, "ABABCABAB"))  # [9]
-print(kmp_search(text, "ABAB"))       # [0, 9, 14]
+print(kmp_search(text, "ABABCABAB"))  # [10]
+print(kmp_search(text, "ABAB"))       # [0, 10, 15]
 ```
 
-**How to read this output:** The returned lists are the 0-based start indices of every match. The second search is the interesting one: `"ABAB"` matches at index 14, then *again* at... no — indices 0, 9, 14 are non-overlapping here, but note KMP deliberately resets `j = failure[j - 1]` after a hit rather than to 0, so it *can* report overlapping matches (searching `"AA"` in `"AAAA"` returns `[0, 1, 2]`). That single-pass, no-backtracking behavior is the whole point: KMP never re-examines a text character, giving the guaranteed O(n + m) that naive `text.find` in a loop cannot promise on adversarial inputs like `"AAAA...AAB"`.
+**How to read this output:** The returned lists are the 0-based start indices of every match. The second search is the interesting one: `"ABAB"` matches at index 15, then *again* at... no — indices 0, 10, 15 are non-overlapping here, but note KMP deliberately resets `j = failure[j - 1]` after a hit rather than to 0, so it *can* report overlapping matches (searching `"AA"` in `"AAAA"` returns `[0, 1, 2]`). That single-pass, no-backtracking behavior is the whole point: KMP never re-examines a text character, giving the guaranteed O(n + m) that naive `text.find` in a loop cannot promise on adversarial inputs like `"AAAA...AAB"`.
 
 #### Rabin-Karp
 
@@ -1014,3 +1015,5 @@ Randomized algorithms come in two flavors, and the distinction is a common inter
 A useful mnemonic: **Monte Carlo gambles on the answer; Las Vegas gambles on the time.** In production, randomization most often appears as the Las Vegas kind — random pivots, randomized hash seeds, jittered retry backoff — used specifically to make worst-case-triggering inputs (whether accidental or adversarial) astronomically unlikely.
 
 > **Key Takeaway:** When data is unbounded or too large to store, switch from "compute the exact answer" to "approximate it in one pass with bounded memory." Reservoir sampling gives uniform samples without knowing the length; Misra-Gries finds heavy hitters in tiny space; and knowing the Monte Carlo / Las Vegas distinction explains *why* the randomization in everyday tools (quicksort pivots, retry jitter, SipHash) is there — to convert worst cases into vanishingly rare cases.
+
+*Last reviewed: 2026-06-08*

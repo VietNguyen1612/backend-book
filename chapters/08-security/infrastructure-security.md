@@ -712,6 +712,7 @@ grype sbom:./sbom.json
 Third-party dependencies are a major attack vector. A single vulnerable library can compromise your entire application. Automated scanning and updating is essential.
 
 {% raw %}
+
 ```bash
 # Python: Safety (checks for known vulnerabilities in installed packages)
 pip install safety
@@ -748,6 +749,7 @@ requests==2.31.0
 #   env:
 #     SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 ```
+
 {% endraw %}
 
 A `pip-audit` run against an environment with a known-vulnerable package prints something like:
@@ -959,3 +961,5 @@ spec:
 ```
 
 > **Key Takeaway:** Security is not a feature you add at the end -- it is a discipline applied at every layer, from code to infrastructure. Use defense in depth: parameterized queries, output encoding, security headers, secrets management, encrypted communications, dependency scanning, automated security testing, and zero-trust architecture. The cost of building security in from the start is always lower than the cost of a breach.
+
+*Last reviewed: 2026-06-08*

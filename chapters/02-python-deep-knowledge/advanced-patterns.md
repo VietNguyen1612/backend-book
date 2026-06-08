@@ -169,7 +169,8 @@ def unreliable_fetch(url):
 
 # Execution order (bottom to top):
 # unreliable_fetch -> log_calls wrapper -> retry wrapper -> timing wrapper
-# The outermost decorator (timing) runs first, the innermost last.
+# On the way in, the outermost wrapper (timing) runs first and the innermost
+# (log_calls) last, closest to the real call; they unwind in reverse on return.
 ```
 
 The rate-limiter loop succeeds five times, then the sixth call is rejected:
@@ -460,6 +461,7 @@ for item in PaginatedAPI("https://api.example.com/items", page_size=10):
     print(item["id"])
     if item["id"] >= 25:
         break  # Only fetched 3 pages, not all data
+```
 
 The loop above prints IDs starting at 0 and stops shortly after 25:
 
@@ -474,6 +476,7 @@ The loop above prints IDs starting at 0 and stops shortly after 25:
 
 **How to read this output:** With `page_size=10`, IDs run 0-9 (page 1), 10-19 (page 2), 20-29 (page 3). The loop breaks once it sees an id `>= 25`, so it prints through 26 (id 25 triggers the condition but the print already happened, and 26 was the next buffered item only if drained — in practice the loop stops right after the first id that meets the threshold). The key insight is in `_fetch_next_page`: the iterator pulled exactly three pages of data, not the entire backing collection, because pages are fetched lazily inside `__next__` only when the buffer empties. In a real client this is the difference between one cheap HTTP call and accidentally paging through a million rows. The iterator never raised `StopIteration` here because the consumer `break`-ed first.
 
+```python
 # -- itertools: composable iteration --
 import itertools
 
@@ -750,6 +753,7 @@ user = User(
     address={"street": "123 Main St", "city": "NYC"},
 )
 print(user.model_dump())
+```
 
 `model_dump()` returns the validated, coerced data as a plain dict (the `created_at` timestamp reflects when the object was built):
 
@@ -762,6 +766,7 @@ print(user.model_dump())
 
 **How to read this output:** Notice the values that changed during validation: `id` came in as the string `"123"` and is now the int `123`; `email` was upper-cased input but is stored lower-cased because `validate_email` ran and returned `v.lower()`; `country` was filled in with the `"US"` default the nested `Address` model declared; `created_at` was populated by `default_factory`; and `tags` defaulted to an empty list. This coercion-and-defaulting is exactly why Pydantic is the standard for API boundaries — request JSON arrives as strings and partial objects, and the model is the single place that turns it into clean, typed Python while rejecting anything invalid.
 
+```python
 # Invalid data -- raises ValidationError with details
 from pydantic import ValidationError
 try:
@@ -1200,6 +1205,7 @@ with ThreadPoolExecutor(max_workers=5) as executor:
             print(f"Completed: {url} ({size} bytes)")
         except Exception as e:
             print(f"Failed: {url} ({e})")
+```
 
 The two retrieval strategies print the same data in different orders:
 
@@ -1217,6 +1223,7 @@ Completed: https://example.com (1256 bytes)
 
 **How to read this output:** `executor.map` yields results in the order the URLs were submitted, even if a later URL finishes first — convenient, but you wait on the slowest request before consuming the next result. `as_completed` yields each future the instant it finishes, so the ordering reflects real network latency and varies run to run. The byte counts depend on live responses, so exact numbers differ. In production, prefer `as_completed` when you want to start processing the first available response immediately (e.g. streaming results to a user) and `map` when downstream code needs results aligned with the input list. Because these are I/O-bound HTTP calls, threads (not processes) are the right tool — the GIL is released while waiting on the socket.
 
+```python
 # -- ProcessPoolExecutor: CPU-bound tasks --
 def compute_heavy(n):
     """CPU-intensive computation."""
@@ -1390,3 +1397,5 @@ class BoundedBuffer:
 ```
 
 > **Key Takeaway:** Use `concurrent.futures` for simple parallelism (it abstracts away the thread/process complexity). Use `multiprocessing` with `Pool` for CPU-bound batch processing. Use `threading.Lock` (not `RLock` unless you need reentrancy) and thread-local storage to manage shared state safely.
+
+*Last reviewed: 2026-06-08*

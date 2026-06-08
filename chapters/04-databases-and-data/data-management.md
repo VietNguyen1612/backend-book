@@ -664,12 +664,13 @@ with DAG(
         task_id='validate_data',
         postgres_conn_id='warehouse',
         sql="""
-            SELECT CASE
-                WHEN COUNT(*) = 0 THEN RAISE EXCEPTION 'No rows loaded'
-                ELSE 1
-            END
-            FROM dim_users
-            WHERE load_date = CURRENT_DATE;
+            DO $$
+            BEGIN
+                IF (SELECT COUNT(*) FROM dim_users
+                    WHERE load_date = CURRENT_DATE) = 0 THEN
+                    RAISE EXCEPTION 'No rows loaded';
+                END IF;
+            END $$;
         """,
     )
 
@@ -769,6 +770,7 @@ When one expectation fails -- say a handful of `user_id` values are null -- `res
 > **Common pitfall:** Treating any failed expectation as a hard stop. Some checks (an unusual row count, a slightly stale timestamp) warrant a warning, not a pipeline halt -- wiring every expectation to `raise` causes alert fatigue and tempts on-call engineers to disable validation entirely. Separate blocking expectations (null primary keys, broken foreign keys) from advisory ones.
 
 Data quality dimensions to monitor include:
+
 - **Completeness**: Are required fields populated? What percentage of rows have null values?
 - **Freshness**: Is the data current? When was the last update?
 - **Volume**: Is the row count within expected bounds? A sudden drop may indicate a broken pipeline.
@@ -920,3 +922,5 @@ CREATE TABLE dim_customer (
 **How to read this output:** Both rows are the *same* customer (`customer_id = C-1007`) but two **versions**, each with its own surrogate `customer_key`. A sale recorded in February 2025 references key `501` (Berlin); a sale in May references key `892` (Munich) -- so when you aggregate revenue by city, each sale is correctly attributed to where Alice lived *at the time*, which a Type 1 overwrite would have falsified by moving all her history to Munich. The `valid_to IS NULL` / `is_current = true` row is the live version new facts attach to. This versioned-row pattern is the canonical interview answer to "how do you preserve history when a dimension attribute changes?"
 
 > **Key Takeaway:** Model analytics dimensionally: a central fact table of measurable events at a clearly-defined grain, surrounded by descriptive dimension tables (star schema). Prefer star over snowflake unless a dimension is large and volatile. Declare the grain before anything else -- it is the decision everything else depends on. And choose your SCD type by whether history matters: Type 1 overwrites and forgets, Type 2 versions rows to preserve full history (the usual choice), Type 3 keeps just the previous value.
+
+*Last reviewed: 2026-06-08*

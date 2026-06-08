@@ -1,0 +1,52 @@
+# markdownlint-cli2 configuration, tuned to this book's deliberate style.
+# Rationale for each disabled rule is given inline. Everything not listed here
+# keeps its default, so the linter still catches real structural defects
+# (broken fences, duplicate heading anchors, hard tabs, etc.).
+config:
+  # Long-form prose lines, wide SQL/code samples and aligned ASCII diagrams are
+  # intentional and must not be hard-wrapped at 80 columns.
+  MD013: false # line-length
+
+  # Compact pipe tables ("|---|---|") are the house style across every README.
+  MD060: false # table-column-style
+
+  # Section files intentionally open with a
+  # "[Back to Chapter](README.md) | [Back to Book](../../README.md)" navigation
+  # line rather than a top-level heading.
+  MD041: false # first-line-heading
+
+  # The book uses **bold lead-ins** as lightweight sub-sub-headings by design
+  # (e.g. "**Hash Tables**" inside a section). This is a deliberate device.
+  MD036: false # no-emphasis-as-heading
+
+  # Occasional inline HTML is used for anchors/spacing.
+  MD033: false # no-inline-html
+
+  # ASCII diagrams and plain tabular command output are intentionally placed in
+  # bare ``` fences (no language) throughout the book.
+  MD040: false # fenced-code-language
+
+  # Sections deliberately use an H1 title followed by H3/H4 bodies (skipping H2),
+  # a consistent hierarchy across all 34 section files.
+  MD001: false # heading-increment
+
+  # Consecutive callout blockquotes (e.g. a "Key Takeaway" right after a
+  # "Common pitfall") are intentionally separated by a blank line.
+  MD028: false # no-blanks-blockquote
+
+  # Real `sysctl`/`dig`/etc. command output inside code fences is tab-separated;
+  # those tabs are accurate and must be preserved.
+  MD010: # no-hard-tabs
+    code_blocks: false
+
+  # Notations like "A* search" inside **bold** are misread as emphasis markers;
+  # this rule is a false positive here (and its auto-fix mangles the text).
+  MD037: false # no-space-in-emphasis
+
+globs:
+  - "**/*.md"
+
+ignores:
+  - "self-notes/**"
+  - "node_modules/**"
+  - ".obsidian/**"

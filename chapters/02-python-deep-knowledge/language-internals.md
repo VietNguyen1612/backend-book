@@ -104,6 +104,7 @@ tracemalloc.stop()
 Descriptors are objects that define any of `__get__`, `__set__`, or `__delete__`. They control what happens when an attribute is accessed on an instance. Descriptors are the foundation of `property`, `classmethod`, `staticmethod`, and ORM field definitions. Understanding descriptors means understanding how Python attribute access actually works.
 
 There are two kinds:
+
 - **Data descriptors**: define both `__get__` and `__set__` (or `__delete__`). They take priority over instance `__dict__`.
 - **Non-data descriptors**: define only `__get__`. Instance `__dict__` takes priority over them.
 
@@ -538,14 +539,14 @@ gc.collect()  # Force a full collection
 Running this prints something like (object counts depend on what your process has already imported):
 
 ```text
-Collected 4 objects
+Collected 2 objects
 (700, 10, 10)
 Gen 0: 312 objects
 Gen 1: 1894 objects
 Gen 2: 28571 objects
 ```
 
-**What's happening:** `gc.collect()` returns the number of unreachable objects it freed -- here `4` (the two `Node` instances plus the dict/internal bookkeeping for the cycle). This is the proof that refcounting alone left them alive: their refcounts never hit zero because each held a reference to the other. The threshold tuple `(700, 10, 10)` is the tuning knob -- gen-0 runs after 700 net allocations, and each higher generation runs only after 10 collections of the one below it, so the oldest (mostly long-lived) objects are scanned least often. The lopsided per-generation counts are normal: a steady-state web worker accumulates thousands of long-lived objects (modules, route tables, connection pools) in gen 2, which is exactly why scanning gen 2 rarely keeps GC pauses small.
+**What's happening:** `gc.collect()` returns the number of unreachable objects it freed -- here `2`, the two `Node` instances that formed the cycle. This is the proof that refcounting alone left them alive: their refcounts never hit zero because each held a reference to the other. The threshold tuple `(700, 10, 10)` is the tuning knob -- gen-0 runs after 700 net allocations, and each higher generation runs only after 10 collections of the one below it, so the oldest (mostly long-lived) objects are scanned least often. The lopsided per-generation counts are normal: a steady-state web worker accumulates thousands of long-lived objects (modules, route tables, connection pools) in gen 2, which is exactly why scanning gen 2 rarely keeps GC pauses small.
 
 > **Common pitfall:** Defining `__del__` on objects that participate in reference cycles used to make them *uncollectable* (Python parked them in `gc.garbage` instead of freeing them). Since Python 3.4 the collector can finalize most such cycles, but the ordering of `__del__` calls is still undefined -- never rely on `__del__` for critical cleanup; use `contextlib`/`with` or `weakref.finalize` instead.
 
@@ -912,9 +913,11 @@ Threaded I/O: 0.34s
 Starting with Python 3.13, an experimental free-threaded build is available that removes the GIL entirely. This is a major change with a gradual transition plan.
 
 ```python
-# Check if running free-threaded Python
-import sys
-print(sys.flags.nogil)  # True if running free-threaded build
+# Check whether this interpreter is a free-threaded build (3.13+)
+import sysconfig
+print(bool(sysconfig.get_config_var("Py_GIL_DISABLED")))  # True on a free-threaded build
+# At runtime you can also ask whether the GIL is currently active (3.13+):
+# import sys; print(sys._is_gil_enabled())  # False when free-threaded
 
 # In free-threaded Python, CPU-bound threads truly run in parallel.
 # But: all your code and libraries must be thread-safe!
@@ -1147,3 +1150,5 @@ The `getsizeof` probes and the growth loop print something like (sizes are for 6
 **How to read this output:** The integers `0` and `1` both report `28` bytes (a fixed object header plus one machine word of value), while `2**30` needs `32` -- CPython's `int` is arbitrary-precision, so larger magnitudes simply use more digit-words. The list output is the more important lesson: notice the resizes do **not** happen on every append. The list jumps capacity in chunks (1, then 5, then 9, then 17 ...), over-allocating headroom so that most appends just write into already-reserved space. That over-allocation is *why* `list.append` is amortized O(1) -- the occasional expensive reallocation is spread across many cheap appends. This is also why preallocating with `[None] * n` (or using `array`/NumPy for numeric data) beats repeated `append` when the final size is known: you skip the intermediate copies entirely.
 
 > **Key Takeaway:** CPython compiles your code to bytecode, executes it on a stack-based VM, and uses a specialized memory allocator for small objects. Use `dis` to understand what Python is actually doing, and understand that list comprehensions, set lookups, and local variable access are fast because of how bytecode works.
+
+*Last reviewed: 2026-06-08*

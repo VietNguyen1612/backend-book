@@ -2379,7 +2379,10 @@ class Lease:
         if holder is None or holder["expires"] < now:      # free or expired
             self.store[self.key] = {"node": node_id, "expires": now + self.ttl}
             return True
-        return holder["node"] == node_id                   # already mine -> renew
+        if holder["node"] == node_id:                      # already mine -> renew the lease
+            holder["expires"] = now + self.ttl
+            return True
+        return False
 
 
 store: dict = {}
@@ -2396,3 +2399,5 @@ node-B acquires: False
 **How to read this output:** Only `node-A` won the lease; `node-B` was refused because the lock is held and unexpired -- so a cron job guarded by this lease runs on exactly one node even though both are alive. The TTL is the safety mechanism that distinguishes a lease from a plain lock: if node-A crashes without releasing it, the `expires` timestamp lapses and node-B's next `try_acquire` succeeds, so leadership fails over automatically instead of being stuck forever on a dead node. Production systems use the atomic primitives that make this race-free -- Redis `SET NX PX`, etcd/ZooKeeper leases, Kubernetes `Lease` objects, or PostgreSQL advisory locks -- because the naive read-then-write shown here has a check-then-act race that a real distributed lock must close.
 
 > **Key Takeaway:** Reliability patterns assume failure is normal. Bound everything -- worker pools, queues (backpressure), retries (caps + timeout budgets). Fail fast on dead dependencies (circuit breaker) and isolate them (bulkhead) so one failure does not cascade. Make operations idempotent so retries and redeliveries are safe, and use leases when exactly one instance must act. These patterns are what separate a system that degrades gracefully from one that collapses under its first dependency failure.
+
+*Last reviewed: 2026-06-08*

@@ -564,3 +564,5 @@ Psychological safety is created mostly by what high-status people do, not by wha
 > **Key Takeaway -- Collaboration & Mentorship**: Optimize for the strength of the team, not the visibility of your individual heroics. Spread context so no system depends on one person; grow others so your impact outlives your own keyboard time; trade feedback honestly in both directions; and protect the psychological safety that makes all of it possible. The engineers who get promoted fastest are usually the ones who made the people around them better.
 
 ---
+
+*Last reviewed: 2026-06-08*

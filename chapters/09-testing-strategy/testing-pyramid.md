@@ -273,7 +273,7 @@ def decode(encoded: str) -> str:
 
 
 # Property: decode(encode(x)) == x for all strings of alphabetic characters
-@given(st.text(alphabet=st.characters(whitelist_categories=("L",)), min_size=0, max_size=50))
+@given(st.text(alphabet=st.characters(categories=("L",)), min_size=0, max_size=50))
 @settings(max_examples=500)
 def test_encode_decode_roundtrip(text):
     """Encoding and then decoding must return the original string."""
@@ -462,7 +462,7 @@ class BookDatabaseTest(TransactionTestCase):
             Book.objects.create(title="Free Book", isbn="0000000000000", price=-5.00)
 ```
 
-#### Test Doubles: Stubs, Mocks, Fakes, and Spies
+#### Test Doubles: Dummies, Stubs, Mocks, Fakes, and Spies
 
 Understanding the vocabulary of test doubles is essential for writing clean tests. A **dummy** is an object passed only to satisfy a parameter list -- it is never actually used by the code path under test (for example, a placeholder `logger` you must supply to a constructor but whose calls you do not care about). A **stub** returns canned data and has no assertions on how it was called -- you use it to control the indirect inputs to the code under test. A **mock** goes further: it records how it was called and you assert on those interactions (e.g., "was `send_email` called exactly once with this recipient?"). A **fake** is a lightweight but working implementation -- an in-memory database, a local SMTP server -- that behaves realistically but avoids heavy infrastructure. A **spy** wraps the real implementation, allowing it to execute normally while recording calls for later inspection.
 
@@ -568,7 +568,7 @@ tests/test_currency.py::test_currency_conversion_uses_live_rate PASSED   [100%]
 
 > **Common pitfall:** record-replay can mask a real breakage. If the vendor changes their response shape but your cassette still holds the old payload, the test stays green while production fails. Pair a large replayed suite with a *small* set of sandbox/live "smoke" tests run on a schedule (not on every commit) so contract drift is caught somewhere.
 
-> **Key Takeaway:** Integration tests catch the bugs that unit tests cannot -- mismatched SQL, serialization errors, broken authentication flows, and constraint violations. Use testcontainers for disposable real databases, Django's `TestCase`/`APIClient` for API-level verification, and understand the four types of test doubles so you choose the right tool for each situation.
+> **Key Takeaway:** Integration tests catch the bugs that unit tests cannot -- mismatched SQL, serialization errors, broken authentication flows, and constraint violations. Use testcontainers for disposable real databases, Django's `TestCase`/`APIClient` for API-level verification, and understand the five types of test doubles so you choose the right tool for each situation.
 
 ---
 
@@ -697,3 +697,5 @@ test_fibonacci_benchmark 4.21    18.93     4.58    0.91     4.39  218.1K   42153
 **How to read this output:** Unlike a normal `pytest` run, the `benchmark` fixture calls `fibonacci(100)` thousands of times (`Rounds=42153`) so the statistics are stable rather than a single noisy timing. Focus on `Median` and `Min`, not `Max` -- `Max` is usually an outlier caused by the OS scheduler or GC pausing the process, whereas the median reflects steady-state cost. The reason to commit these numbers is regression detection: `pytest-benchmark` can save this run as a baseline (`--benchmark-autosave`) and fail CI if a later commit makes the median regress beyond a threshold, catching the slow change at the exact commit that introduced it.
 
 > **Key Takeaway:** Performance testing is not optional for production systems. Use Locust for realistic load simulation, measure percentile latencies (not just averages), and automate regression detection in CI so you never ship a slow change unknowingly.
+
+*Last reviewed: 2026-06-08*

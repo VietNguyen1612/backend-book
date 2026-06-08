@@ -38,7 +38,7 @@ OK
 3) "admin"
 ```
 
-**Hashes** store field-value pairs, like a dictionary. They are memory-efficient for representing objects because Redis optimizes small hashes using a ziplist encoding.
+**Hashes** store field-value pairs, like a dictionary. They are memory-efficient for representing objects because Redis stores small hashes with a compact **listpack** encoding (this was called a *ziplist* before Redis 7.0).
 
 ```
 > HSET user:1 name "Alice" email "alice@example.com" age 30
@@ -56,7 +56,7 @@ OK
 (integer) 31
 ```
 
-**Lists** are doubly-linked lists of strings. They support push/pop from both ends in O(1), making them suitable for queues, stacks, and recent-items lists.
+**Lists** are implemented as a **quicklist** -- a linked list of compact *listpack* nodes -- so they behave like a doubly-linked list of strings. They support push/pop from both ends in O(1), making them suitable for queues, stacks, and recent-items lists.
 
 ```
 > LPUSH queue:emails "email1" "email2" "email3"
@@ -117,10 +117,10 @@ OK
 
 -- Range by score
 > ZRANGEBYSCORE leaderboard 1000 1600 WITHSCORES
-1) "bob"
-2) "1600"
-3) "alice"
-4) "1500"
+1) "alice"
+2) "1500"
+3) "bob"
+4) "1600"
 
 -- Count members in score range
 > ZCOUNT leaderboard 1000 1600
@@ -564,7 +564,7 @@ PUT /_ilm/policy/logs_policy
         "phases": {
             "hot":    { "actions": { "rollover": { "max_size": "50gb", "max_age": "1d" } } },
             "warm":   { "min_age": "7d",  "actions": { "shrink": { "number_of_shards": 1 } } },
-            "cold":   { "min_age": "30d", "actions": { "freeze": {} } },
+            "cold":   { "min_age": "30d", "actions": { "searchable_snapshot": { "snapshot_repository": "backups" } } },
             "delete": { "min_age": "90d", "actions": { "delete": {} } }
         }
     }
@@ -884,3 +884,5 @@ ORDER BY total DESC;
 **How to read this output:** The `Elapsed` and throughput line is the headline -- 1.35 *billion* rows aggregated in 0.214 seconds, because ClickHouse read only the three columns the query references (compressed), used the `PARTITION BY toYYYYMM` to skip months outside the date filter, and parallelized the scan across cores. The same query on a row-oriented OLTP database would read every full row and take orders of magnitude longer. `LowCardinality(String)` for `event_type` is a deliberate modeling choice: it dictionary-encodes the handful of distinct event names, shrinking storage and speeding the `GROUP BY`. Note the trade-off ClickHouse makes for this speed -- updates and deletes are awkward and expensive (mutations rewrite parts), which is exactly why it is an analytics sink fed from your OLTP system, never the system of record.
 
 > **Key Takeaway:** Match the storage layout to the workload. OLTP (small row-level reads/writes) wants a row-oriented primary like PostgreSQL; OLAP (large scans over few columns) wants column-oriented storage -- Parquet/ORC files in a lake, or a columnar engine like ClickHouse -- where column pruning, compression, and predicate pushdown deliver 10-1000x speedups. The recurring discipline is to keep the two apart: ship transactional data to an analytics store rather than running heavy analytics on the database your users depend on.
+
+*Last reviewed: 2026-06-08*

@@ -354,7 +354,7 @@ Route requests at the proxy/API gateway level. Both the old and new systems run 
 
 #### Conway's Law
 
-> "Any organization that designs a system will produce a design whose structure is a copy of the organization's communication structure." -- Melvin Conway, 1967
+> "Any organization that designs a system will produce a design whose structure is a copy of the organization's communication structure." -- Melvin Conway, 1968
 
 Conway's Law observes that software architecture inevitably mirrors the communication structure of the teams that build it. Three teams will, left to their own devices, produce three components with the seams falling exactly where the team boundaries are -- because the cross-team interfaces are expensive to change while the within-team code is cheap. This is why microservice boundaries that cut across team boundaries produce a distributed monolith: every feature requires coordinating multiple teams, and the chatty coupling between services reflects the constant cross-team negotiation.
 
@@ -1413,3 +1413,5 @@ FaaS is not a universal replacement for servers; its constraints are real and sh
 FaaS shines for **event processing** (react to a queue/storage/database event), **scheduled tasks** (cron), **webhooks**, **light or spiky APIs**, and **glue code** between managed services -- workloads that are bursty, short, stateless, and benefit from scale-to-zero economics. It is a poor fit for **sustained high-traffic** services (always-on containers are cheaper once utilization is high), **long-running or complex workflows**, **latency-critical** user paths (cold starts), and anything needing persistent connections. The honest framing: FaaS trades operational simplicity and per-use pricing for execution constraints and less control. Use it where those constraints are irrelevant; reach for containers/servers where they bite.
 
 > **Key Takeaway:** Serverless/FaaS runs stateless, event-triggered functions that scale to zero, billing per invocation. Its defining constraints -- cold-start latency, execution-time and payload limits, no persistent connections, and database connection exhaustion under high concurrency -- make it ideal for bursty event processing, scheduled jobs, webhooks, and glue code, and ill-suited to sustained high-traffic, long-running, or latency-critical workloads. Design handlers stateless and idempotent, and protect databases with a connection proxy.
+
+*Last reviewed: 2026-06-08*

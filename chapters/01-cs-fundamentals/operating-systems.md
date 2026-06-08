@@ -493,6 +493,7 @@ Found at offset 48213: b'Jun  4 09:12:01 host app[1234]: error: connection refus
 When Linux runs out of memory, the **OOM killer** selects and kills a process to free RAM. It chooses based on an OOM score (higher = more likely to be killed) influenced by memory usage and `oom_score_adj`. In containerized environments, **cgroups** set hard memory limits per container — exceeding the limit kills the container, not a random process.
 
 Key memory metrics:
+
 - **RSS (Resident Set Size):** actual physical memory currently used
 - **VSZ (Virtual Size):** total virtual address space mapped (includes shared libraries, mmap'd files)
 - **USS (Unique Set Size):** memory unique to this process (not shared)
@@ -722,6 +723,7 @@ I/O Multiplexing (epoll):
 | `kqueue` | O(1) per event | No practical limit | BSD/macOS, similar to epoll |
 
 **epoll** is the workhorse of Linux high-performance servers. It has two trigger modes:
+
 - **Level-triggered** (default): keeps notifying as long as the fd is ready (like poll). Simpler but generates more events.
 - **Edge-triggered**: notifies only when the fd state changes (not ready -> ready). More efficient but you must drain all available data on each notification or you will miss events.
 
@@ -847,6 +849,7 @@ Dirty pages: pages modified in the cache but not yet written to disk. The kernel
 **Journaling** protects against corruption from crashes (power loss, kernel panic). Before modifying the filesystem's main data structures, the changes are first written to a journal (write-ahead log). If a crash occurs, the filesystem replays the journal on mount to reach a consistent state.
 
 **ext4** supports three journaling modes:
+
 - **journal**: logs both data and metadata (safest but slowest)
 - **ordered** (default): writes data to its final location first, then journals metadata
 - **writeback**: journals only metadata, data may be written after metadata (fastest but data may be stale after crash)
@@ -1039,3 +1042,5 @@ Packet Flow through Netfilter:
 ```
 
 > **Key Takeaway:** Linux fundamentals are essential for production backend work. Signals for graceful shutdown, cgroups/namespaces for containerization, systemd for service management, and debugging tools for production troubleshooting. These are not just "ops" skills — every backend developer needs them for debugging production issues, writing Dockerfiles, configuring deployment, and understanding why their application behaves differently in production than in development.
+
+*Last reviewed: 2026-06-08*

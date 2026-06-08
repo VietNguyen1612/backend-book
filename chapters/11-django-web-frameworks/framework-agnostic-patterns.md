@@ -1030,6 +1030,7 @@ Server-side rendering (SSR) uses a template engine to produce HTML on the server
 ```
 
 {% raw %}
+
 ```html
 <!-- templates/base.html -->
 <!DOCTYPE html>
@@ -1047,9 +1048,11 @@ Server-side rendering (SSR) uses a template engine to produce HTML on the server
 </body>
 </html>
 ```
+
 {% endraw %}
 
 {% raw %}
+
 ```html
 <!-- templates/books/book_list.html -->
 {% extends "base.html" %}
@@ -1081,6 +1084,7 @@ Server-side rendering (SSR) uses a template engine to produce HTML on the server
     {% endif %}
 {% endblock %}
 ```
+
 {% endraw %}
 
 Context processors inject variables that are available in every template (the logged-in user, site settings, etc.), which is Django's equivalent of global template variables in other frameworks.
@@ -1099,3 +1103,5 @@ Key concepts for API-only backends:
 - **API versioning**: URL-based (`/api/v1/`, `/api/v2/`), header-based (`Accept: application/vnd.myapp.v2+json`), or query-parameter-based (`?version=2`). URL-based is the most common and the simplest to understand.
 
 > **Key Takeaway:** The choice between server-side rendering and API-only architecture depends on your application's needs. SSR is simpler for content-heavy sites and better for SEO. API-only backends are the right choice when you have a JavaScript frontend, a mobile app, or multiple clients consuming the same data. Most new projects choose API-only. Regardless of which you choose, the principles of separation (data layer, logic layer, presentation layer) remain the same.
+
+*Last reviewed: 2026-06-08*

@@ -50,10 +50,10 @@ Same as above, but instead of a client_secret (which cannot be
 safely stored in a browser/mobile app), the client:
 
 1. Generates a random code_verifier
-2. Derives code_challenge = SHA256(code_verifier)
+2. Derives code_challenge = BASE64URL(SHA256(ASCII(code_verifier)))
 3. Sends code_challenge with the authorization request
 4. Sends code_verifier when exchanging the code for tokens
-5. The server verifies SHA256(code_verifier) == code_challenge
+5. The server verifies BASE64URL(SHA256(ASCII(code_verifier))) == code_challenge
 
 This prevents authorization code interception attacks.
 ```
@@ -285,6 +285,7 @@ SIGNATURE:
 ```
 
 Signing algorithms:
+
 - **HS256** (HMAC-SHA256) -- Symmetric: the same secret key signs and verifies. Simple but requires sharing the secret between issuer and verifier.
 - **RS256** (RSA-SHA256) -- Asymmetric: private key signs, public key verifies. Preferred for distributed systems because verifiers only need the public key.
 - **ES256** (ECDSA-SHA256) -- Asymmetric like RS256 but with smaller keys and faster signing.
@@ -293,6 +294,7 @@ JWTs are stateless -- the server does not need to store session data. This makes
 
 ```python
 # jwt_auth.py -- JWT authentication with FastAPI
+import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -325,6 +327,7 @@ def create_refresh_token(user_id: str) -> str:
     payload = {
         "sub": user_id,
         "type": "refresh",
+        "jti": str(uuid.uuid4()),  # unique ID so rotation can mark this token used
         "iat": now,
         "exp": now + timedelta(days=7),
         "iss": ISSUER,
@@ -476,6 +479,7 @@ Store refresh tokens in HttpOnly, Secure, SameSite cookies for browser-based app
 API keys are a simple authentication mechanism suited for server-to-server communication. They are not appropriate for user authentication because they provide no identity context and are often long-lived.
 
 Best practices for API keys:
+
 - **Hash before storing** -- Store only the hash in the database, like passwords. If the database is breached, the keys are useless.
 - **Prefix for identification** -- Use a recognizable prefix like `sk_live_` (secret key, production) or `pk_test_` (public key, test) so keys can be visually identified and routed.
 - **Rate limit per key** -- Associate rate limits with each key to prevent abuse.
@@ -923,3 +927,5 @@ In practice, this means:
 - Service accounts with minimal scope: each microservice should have credentials that access only the resources it needs.
 
 > **Key Takeaway:** Start with RBAC -- it covers 80% of use cases with simple, auditable role assignments. Graduate to ABAC or a policy engine like OPA when you need fine-grained, context-aware decisions. Row-level security in PostgreSQL is a powerful safety net for multi-tenant data isolation. Always default to deny and grant the minimum access required.
+
+*Last reviewed: 2026-06-08*

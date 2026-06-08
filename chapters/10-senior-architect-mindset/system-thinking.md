@@ -162,16 +162,19 @@ Back-of-envelope estimation is the ability to quickly approximate the scale of a
 Memorize these reference points. They do not need to be exact -- order of magnitude is what matters.
 
 **Time conversions:**
+
 - 1 day = 86,400 seconds (round to ~100,000 for estimation)
 - 1 month = ~2.5 million seconds
 - 1 year = ~31.5 million seconds (round to ~30 million)
 
 **Request rate conversions:**
+
 - 1 million requests/day = ~12 requests/second
 - 100 million requests/day = ~1,200 requests/second
 - 1 billion requests/day = ~12,000 requests/second
 
 **Latency reference points (order of magnitude):**
+
 - L1 cache access: ~1 nanosecond
 - L2 cache access: ~10 nanoseconds
 - Main memory (RAM) access: ~100 nanoseconds
@@ -181,6 +184,7 @@ Memorize these reference points. They do not need to be exact -- order of magnit
 - HDD disk seek: ~10 milliseconds
 
 **Storage reference points:**
+
 - 1 ASCII character = 1 byte
 - A typical database row (user profile) = 500 bytes to 2 KB
 - A typical JSON API response = 1-10 KB
@@ -188,6 +192,7 @@ Memorize these reference points. They do not need to be exact -- order of magnit
 - 1 minute of HD video = 100-150 MB
 
 **Powers of 2 (essential for quick math):**
+
 - 2^10 = 1,024 ~ 1 Thousand (1 KB)
 - 2^20 = 1,048,576 ~ 1 Million (1 MB)
 - 2^30 = ~1 Billion (1 GB)
@@ -743,3 +748,5 @@ PoC rules:
 5. **PoC code is throwaway**: Make this explicit. PoC code is written to learn, not to ship. It will not have tests, error handling, or production-quality structure, and that is fine. Do not let PoC code leak into production.
 
 > **Key Takeaway:** Technology decisions should be deliberate, not accidental. Evaluate technologies systematically using a scorecard that weights criteria by your actual priorities. Run PoCs for high-stakes decisions. Maintain a Technology Radar so the whole team knows what is adopted, what is being evaluated, and what is off-limits. The best technology choice is not the best technology in the abstract -- it is the best technology for your team, your context, and your constraints.
+
+*Last reviewed: 2026-06-08*

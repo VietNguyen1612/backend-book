@@ -344,3 +344,5 @@ _____________________________________________________________________________
 > **Key Takeaway:** Code review is not a gate to slow people down -- it is a collaborative practice that improves code quality, spreads knowledge, and builds team cohesion. Invest in making your review process efficient (small PRs, automated style checks, clear checklists) and humane (constructive tone, clear severity levels, praise for good work).
 
 ---
+
+*Last reviewed: 2026-06-08*

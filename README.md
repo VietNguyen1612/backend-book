@@ -2,6 +2,8 @@
 
 **Mid → Senior → Architect Level · Python/Django Flavored · Framework-Agnostic Principles**
 
+**[🔎 Search this book](search.md)**
+
 ---
 
 ## Table of Contents
@@ -58,13 +60,14 @@ Everything about storing and querying data. PostgreSQL deep dive: storage intern
 
 ### [5. API Design & Integration](chapters/05-api-design/README.md)
 
-Building and consuming APIs the right way. RESTful API design (versioning, pagination, error handling, idempotency), GraphQL, gRPC, WebSocket/SSE, message queues (RabbitMQ, Kafka, Celery). Authentication (OAuth 2.0, JWT, sessions) and authorization (RBAC, ABAC, policy engines).
+Building and consuming APIs the right way. RESTful API design (versioning, pagination, error handling, idempotency), GraphQL, gRPC, WebSocket/SSE, message queues (RabbitMQ, Kafka, Celery). Authentication (OAuth 2.0, JWT, sessions) and authorization (RBAC, ABAC, policy engines), plus passwordless auth with WebAuthn and passkeys.
 
 | Section | Deep Dive |
 |---|---|
 | 5.1 RESTful APIs | [restful-apis.md](chapters/05-api-design/restful-apis.md) |
 | 5.2 Beyond REST | [beyond-rest.md](chapters/05-api-design/beyond-rest.md) |
 | 5.3 Authentication & Authorization | [authentication-and-authorization.md](chapters/05-api-design/authentication-and-authorization.md) |
+| 5.4 WebAuthn & Passkeys | [webauthn-and-passkeys.md](chapters/05-api-design/webauthn-and-passkeys.md) |
 
 ---
 
@@ -78,6 +81,7 @@ Thinking at scale. Horizontal/vertical scaling, load balancing algorithms, cachi
 | 6.2 Distributed Systems | [distributed-systems.md](chapters/06-system-design/distributed-systems.md) |
 | 6.3 Real-World Examples | [real-world-examples.md](chapters/06-system-design/real-world-examples.md) |
 | 6.4 Back-of-Envelope Estimation | [back-of-envelope.md](chapters/06-system-design/back-of-envelope.md) |
+| 6.5 Caching & CDN Deep-Dive | [caching-and-cdn.md](chapters/06-system-design/caching-and-cdn.md) |
 
 ---
 

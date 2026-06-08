@@ -310,7 +310,7 @@ The consumer test generates a Pact JSON file in `./pacts/`. The provider team th
 ```bash
 # Provider side: verify the contract
 pact-verifier --provider-base-url=http://localhost:8000 \
-    --pact-url=./pacts/bookstorebeb-bookservice.json \
+    --pact-url=./pacts/bookstoreweb-bookservice.json \
     --provider-states-setup-url=http://localhost:8000/_pact/setup
 ```
 
@@ -410,3 +410,5 @@ Two numbers define your disaster-recovery target. **RPO (Recovery Point Objectiv
 The crucial discipline is that **an untested backup is not a backup.** Teams discover during a real incident that their backups were corrupt, encrypted with a lost key, missing a critical table, or that the documented restore procedure no longer matches the current schema. The only way to trust your DR plan is to rehearse it: periodically restore a backup into a clean environment and verify the data, and run a failover drill (often as a game day) to confirm you actually meet your stated RTO. Measuring the *real* restore time against the *promised* RTO is the test, and the gap between them is almost always larger than anyone expected.
 
 > **Key Takeaway:** Testing in production is a controlled discipline, not a shortcut. Feature flags and canary releases shrink the blast radius of every change; shadow traffic and synthetic monitoring validate new code and critical paths against real conditions; chaos engineering and game days prove your resilience and your team's response before a real outage does. None of it is responsible without the safety net underneath: observability to detect problems in seconds and a fast, rehearsed rollback to contain them -- and a disaster-recovery plan you have actually restored from, not merely written down.
+
+*Last reviewed: 2026-06-08*

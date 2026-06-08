@@ -1,0 +1,17 @@
+# Ruff configuration.
+#
+# The only Python files in this repository are teaching *skeletons* under
+# chapters/**/homework/. They intentionally contain unused imports (hints for
+# which stdlib modules the reader will need) and placeholder variables that the
+# reader is asked to use when implementing the TODOs. Flagging those as errors
+# would punish the intended scaffolding, so we relax exactly those rules for
+# homework files while keeping the full default rule set everywhere else.
+
+target-version = "py311"
+
+[lint.per-file-ignores]
+"chapters/**/homework/**" = [
+    "F401", # imported but unused  -> intentional "you will need this" hints
+    "F841", # local variable assigned but never used -> scaffolding to be used
+    "E401", # multiple imports on one line -> compact skeleton imports
+]

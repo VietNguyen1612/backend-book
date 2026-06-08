@@ -189,17 +189,20 @@ curl -X DELETE http://localhost:8000/users/2
 HTTP status codes communicate the outcome of a request. They are grouped by category, and choosing the correct code is critical for client-side error handling:
 
 *2xx -- Success:*
+
 - **200 OK** -- The request succeeded. Used for successful GET, PUT, PATCH.
 - **201 Created** -- A new resource was created. Used for successful POST. Should include a `Location` header pointing to the new resource.
 - **204 No Content** -- Success with no response body. Typically used for DELETE.
 
 *3xx -- Redirection:*
+
 - **301 Moved Permanently** -- Resource permanently moved. Clients should update bookmarks.
 - **302 Found** -- Temporary redirect (historically ambiguous about method change).
 - **307 Temporary Redirect** -- Like 302 but guarantees the method is not changed.
 - **308 Permanent Redirect** -- Like 301 but guarantees the method is not changed.
 
 *4xx -- Client Errors:*
+
 - **400 Bad Request** -- Malformed syntax, invalid request body.
 - **401 Unauthorized** -- Authentication required or failed. Should include `WWW-Authenticate` header.
 - **403 Forbidden** -- Authenticated but not authorized for the resource.
@@ -209,6 +212,7 @@ HTTP status codes communicate the outcome of a request. They are grouped by cate
 - **429 Too Many Requests** -- Rate limit exceeded. Should include `Retry-After` header.
 
 *5xx -- Server Errors:*
+
 - **500 Internal Server Error** -- Unexpected server failure.
 - **502 Bad Gateway** -- Upstream server returned an invalid response.
 - **503 Service Unavailable** -- Server overloaded or down for maintenance. Should include `Retry-After` header.
@@ -285,18 +289,21 @@ Vary: Accept, Accept-Encoding
 APIs evolve over time, and breaking changes are inevitable. Versioning strategies let you introduce new behavior without disrupting existing clients. The three most common approaches are:
 
 1. **URL path versioning** (most common and most visible):
+
    ```
    GET /api/v1/users/123
    GET /api/v2/users/123
    ```
 
 2. **Header versioning** (cleaner URLs, harder to test in a browser):
+
    ```bash
    curl -H "Accept: application/vnd.myapi.v2+json" \
         http://localhost:8000/users/123
    ```
 
 3. **Query parameter versioning** (simple but can pollute caching):
+
    ```
    GET /users/123?version=2
    ```
@@ -868,3 +875,5 @@ Documentation that drifts from the actual implementation is worse than no docume
 - Including clear descriptions, realistic request/response examples, error codes, and authentication requirements on every endpoint.
 
 > **Key Takeaway:** REST APIs succeed or fail based on consistency. Pick conventions for URL structure, error format, pagination, and versioning -- then enforce them across every endpoint. Use OpenAPI as the single source of truth, and validate it automatically in CI.
+
+*Last reviewed: 2026-06-08*

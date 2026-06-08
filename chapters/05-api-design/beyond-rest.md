@@ -238,10 +238,10 @@ schema = strawberry.Schema(query=Query)
 When a client runs `{ posts { title author { name } } }` against this schema, the three posts reference only two distinct authors (IDs 1 and 2, since Post A and Post C share author 1). The server log shows a single batched call:
 
 ```text
-Batch loading users: [1, 2, 1]
+Batch loading users: [1, 2]
 ```
 
-**How to read this output:** The line prints exactly once even though three `author` resolvers fired -- that is the whole point. DataLoader gathers every `.load()` call made during one tick of the event loop, deduplicates and batches the keys, then invokes `batch_load_users` a single time with `[1, 2, 1]` (it passes the keys in request order and lets per-request caching collapse the duplicate fetch for ID 1). Without DataLoader you would instead see three separate "Batch loading users" lines -- the N+1 pattern. In production this is the difference between 1 `SELECT ... WHERE id IN (...)` and 50 round-trips per request; it is also the single most common GraphQL question in system-design interviews.
+**How to read this output:** The line prints exactly once even though three `author` resolvers fired -- that is the whole point. DataLoader gathers every `.load()` call made during one tick of the event loop, deduplicates and batches the keys, then invokes `batch_load_users` a single time with `[1, 2]` (per-request caching collapses the duplicate request for ID 1, so the batch carries only the distinct keys). Without DataLoader you would instead see three separate "Batch loading users" lines -- the N+1 pattern. In production this is the difference between 1 `SELECT ... WHERE id IN (...)` and 50 round-trips per request; it is also the single most common GraphQL question in system-design interviews.
 
 > **Common pitfall:** A DataLoader caches and batches only within one request, so you must create a fresh loader per request (as `get_context` does here). Sharing one loader instance across requests leaks stale data between users and is a real-world correctness bug, not just an optimization miss.
 
@@ -660,7 +660,6 @@ Here is a WebSocket server and client implemented with FastAPI:
 ```python
 # websocket_server.py -- FastAPI WebSocket example
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from typing import list
 
 app = FastAPI()
 
@@ -913,24 +912,29 @@ connection = pika.BlockingConnection(
 )
 channel = connection.channel()
 
-# Declare exchange and queue
+# Declare the dead-letter exchange and the failed-messages queue, and bind the
+# DLQ to the DLX so dead-lettered messages actually land somewhere.
+channel.exchange_declare(exchange="orders_dlx", exchange_type="direct", durable=True)
+channel.queue_declare(queue="order_processing_failed", durable=True)
+channel.queue_bind(
+    exchange="orders_dlx",
+    queue="order_processing_failed",
+    routing_key="order.created",  # dead-lettered msgs keep their original routing key
+)
+
+# Declare the main exchange and processing queue. The x-dead-letter-exchange
+# argument belongs on the SOURCE queue, so messages nacked or expired here are
+# routed to orders_dlx (and on to order_processing_failed).
 channel.exchange_declare(exchange="orders", exchange_type="topic", durable=True)
-channel.queue_declare(queue="order_processing", durable=True)
+channel.queue_declare(
+    queue="order_processing",
+    durable=True,
+    arguments={"x-dead-letter-exchange": "orders_dlx"},
+)
 channel.queue_bind(
     exchange="orders",
     queue="order_processing",
     routing_key="order.created",
-)
-
-# Declare dead letter exchange for failed messages
-channel.exchange_declare(exchange="orders_dlx", exchange_type="direct", durable=True)
-channel.queue_declare(
-    queue="order_processing_failed",
-    durable=True,
-    arguments={
-        "x-dead-letter-exchange": "orders_dlx",
-        "x-message-ttl": 300000,  # 5 minutes
-    },
 )
 
 # Publish a message
@@ -1178,7 +1182,9 @@ async def complex_workflow():
     # Chain: tasks run sequentially, output of one feeds into the next
     workflow_chain = chain(
         generate_report.s("monthly", 1),
-        send_email.s("admin@example.com", "Report Ready"),
+        # .si() = immutable signature: ignore the previous task's return value, so
+        # generate_report's dict is NOT injected as send_email's first argument.
+        send_email.si("admin@example.com", "Report Ready", "Your report is ready."),
     )
 
     # Group: tasks run in parallel
@@ -1322,3 +1328,5 @@ async def receive_webhook(request: Request):
 AsyncAPI is the OpenAPI equivalent for asynchronous APIs. It provides a specification format for documenting message channels, schemas, and operations for event-driven architectures. You can define your Kafka topics, RabbitMQ exchanges, and WebSocket channels in a machine-readable format and auto-generate documentation and code from it.
 
 > **Key Takeaway:** Choose your async pattern based on the use case. Celery is the go-to for Python background tasks with retry and workflow support. RabbitMQ is best for complex routing and traditional work queues. Kafka is best for high-throughput event streaming and event replay. Always sign webhooks with HMAC and implement retry with exponential backoff.
+
+*Last reviewed: 2026-06-08*

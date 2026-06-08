@@ -39,7 +39,7 @@ LIMIT 5;
 
 #### Write-Ahead Log (WAL)
 
-Durability -- the "D" in ACID -- comes from the **Write-Ahead Log**. The rule is simple and absolute: every change is first written as a record to the WAL and `fsync`'d to durable storage *before* the corresponding data pages are modified in place. WAL writes are sequential appends, which are far faster than the random I/O of updating scattered heap pages, so the commit path stays fast. On a crash, PostgreSQL replays the WAL from the last **checkpoint** to bring the data files back to a consistent state. This same WAL stream is what feeds streaming replication and Point-in-Time Recovery.
+Durability -- the "D" in ACID -- comes from the **Write-Ahead Log**. The rule is simple and absolute: the WAL record describing a change must be flushed (`fsync`'d) to durable storage *before* the modified ("dirty") data page is allowed to be written back to disk. Note the ordering carefully -- the in-memory page in the buffer pool is updated *first*; what the WAL protocol guarantees is that the corresponding WAL record is durable before that dirty page is *flushed to disk* (and, separately, that the WAL up to the commit record is durable before COMMIT is acknowledged). WAL writes are sequential appends, which are far faster than the random I/O of updating scattered heap pages, so the commit path stays fast. On a crash, PostgreSQL replays the WAL from the last **checkpoint** to bring the data files back to a consistent state. This same WAL stream is what feeds streaming replication and Point-in-Time Recovery.
 
 A **checkpoint** periodically flushes all dirty buffer-pool pages to the data files and records a marker in the WAL; recovery only needs to replay WAL written after the most recent checkpoint. Tuning checkpoint frequency is a balance: frequent checkpoints mean fast recovery but more constant I/O; infrequent checkpoints mean less steady-state I/O but longer recovery and larger WAL.
 
@@ -47,6 +47,9 @@ A **checkpoint** periodically flushes all dirty buffer-pool pages to the data fi
 -- Inspect WAL and checkpoint activity
 SELECT pg_current_wal_lsn() AS current_wal_position;
 
+-- NOTE: this view shape is for PostgreSQL <= 16. In PG 17+ these columns were split out:
+-- checkpoints_* / buffers_checkpoint moved to pg_stat_checkpointer, and buffers_backend
+-- moved to pg_stat_io. (buffers_clean stays in pg_stat_bgwriter.)
 SELECT checkpoints_timed, checkpoints_req,
        buffers_checkpoint, buffers_clean, buffers_backend
 FROM pg_stat_bgwriter;
@@ -520,9 +523,10 @@ class User(models.Model):
 
     class Meta:
         indexes = [
-            # Expression index
+            # Expression index (passing an expression like Lower('email') to Index
+            # requires Django 4.0+)
             Index(Lower('email'), name='idx_user_email_lower'),
-            # Partial index (Django 5.0+)
+            # Partial index (the condition= argument has been supported since Django 2.2)
             Index(
                 fields=['email'],
                 name='idx_user_email_active',
@@ -770,8 +774,10 @@ SELECT pg_advisory_xact_lock(12345);
 
 ```python
 # Django: advisory lock pattern
+import contextlib
 from django.db import connection
 
+@contextlib.contextmanager
 def with_advisory_lock(lock_id):
     with connection.cursor() as cursor:
         cursor.execute("SELECT pg_advisory_lock(%s)", [lock_id])
@@ -779,6 +785,10 @@ def with_advisory_lock(lock_id):
             yield
         finally:
             cursor.execute("SELECT pg_advisory_unlock(%s)", [lock_id])
+
+# Usage:
+# with with_advisory_lock(12345):
+#     ...  # exclusive work keyed by 12345
 ```
 
 **Deadlock detection** is automatic in PostgreSQL. When two transactions each wait for a lock held by the other, PostgreSQL detects the cycle (typically within 1 second, controlled by `deadlock_timeout`) and aborts one of the transactions. To prevent deadlocks, always acquire locks in a consistent order (e.g., by ascending ID).
@@ -1299,8 +1309,11 @@ PgBouncer is an external connection pooler that sits between your application an
 ```
 
 PgBouncer supports three pooling modes:
+
 - **Session pooling**: a server connection is assigned for the entire client session. Safest but least efficient.
 - **Transaction pooling**: a server connection is assigned only for the duration of a transaction. Most common mode. Prepared statements and session-level features (SET, LISTEN/NOTIFY) do not work across transactions.
 - **Statement pooling**: a server connection is assigned for each individual statement. Only works for simple, autocommit queries.
 
 > **Key Takeaway:** PostgreSQL's advanced features -- partitioning, window functions, CTEs, JSONB, full-text search, and logical replication -- can eliminate the need for many external tools. Master these features before reaching for additional infrastructure. Use connection pooling (PgBouncer) in production to manage connection overhead.
+
+*Last reviewed: 2026-06-08*

@@ -96,6 +96,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 ```
 
 Additional tips for maximizing cache hits:
+
 - Combine related `RUN` commands with `&&` to reduce layer count, but do not combine unrelated ones (that would unnecessarily invalidate caches).
 - Use `--no-cache-dir` with pip to avoid storing the download cache inside the image layer.
 - Use `--mount=type=cache` (BuildKit feature) for persistent build caches across builds.
@@ -250,8 +251,7 @@ Docker Compose defines multi-container applications in a single YAML file. It is
 
 ```yaml
 # docker-compose.yml
-version: "3.9"
-
+# (Compose v2 ignores the top-level "version" key, so it is omitted.)
 services:
   # ---- Reverse Proxy ----
   nginx:
@@ -365,6 +365,7 @@ A container is not a virtual machine. There is no guest kernel and no hardware e
 The **OCI (Open Container Initiative)** standardizes the pieces so the ecosystem is not locked to Docker. It defines an **image spec** (the layered filesystem + manifest format every registry and runtime understands), a **runtime spec** (how to actually start a container from an unpacked bundle), and a **distribution spec** (the registry push/pull API). Because of these standards, an image built by Docker runs unchanged under Podman, containerd, or CRI-O.
 
 The runtime stack is layered:
+
 - **`runc`** is the low-level OCI runtime that does the actual `clone()`/`setns()`/cgroup syscalls to spawn the process. It runs one container and exits.
 - **`containerd`** (and the Red Hat alternative **CRI-O**) is the high-level runtime/daemon that manages image pulls, storage, and the lifecycle of many containers, delegating the final spawn to `runc`.
 - **Docker** today is a developer-facing tool that sits on top of `containerd` — when you `docker run`, Docker hands off to containerd, which calls runc. Kubernetes dropped its direct Docker integration ("Dockershim") in v1.24 and now talks to `containerd`/CRI-O directly over the **CRI (Container Runtime Interface)**, which is why "Docker is deprecated in Kubernetes" caused confusion — images still work fine; only the redundant Docker daemon was removed from the node.
@@ -644,6 +645,7 @@ Every container in Kubernetes should declare resource `requests` and `limits`. W
 CPU is measured in millicores: `1000m` equals 1 full CPU core; `250m` is one quarter of a core. Memory is measured in bytes with standard suffixes: `128Mi` (mebibytes), `1Gi` (gibibytes).
 
 Kubernetes assigns a QoS (Quality of Service) class based on how requests and limits are configured:
+
 - **Guaranteed:** requests equal limits for all containers. Highest priority; last to be evicted under pressure.
 - **Burstable:** requests set but lower than limits. Medium priority.
 - **BestEffort:** no requests or limits set. Lowest priority; first to be evicted.
@@ -773,6 +775,7 @@ startupProbe:
 StatefulSets are designed for applications that need stable, persistent identity: databases (PostgreSQL, MySQL), distributed systems (Kafka, ZooKeeper, Cassandra), and other stateful workloads.
 
 Unlike Deployments, where Pods are interchangeable, StatefulSet Pods have:
+
 - **Stable network identity:** Each Pod gets a predictable hostname like `mydb-0`, `mydb-1`, `mydb-2`, accessible via a Headless Service.
 - **Ordered deployment and scaling:** Pods are created in order (0, 1, 2...) and terminated in reverse order (2, 1, 0). This is critical for leader election and data replication protocols.
 - **Persistent Volume per Pod:** Each Pod gets its own PersistentVolumeClaim that follows the Pod across rescheduling. If `mydb-1` is rescheduled to a different Node, it reattaches the same volume.
@@ -987,3 +990,5 @@ apps   Deployment  production  myapp  OutOfSync  Healthy
 > **Key Takeaway:** Beyond the core objects, production Kubernetes is about controlling placement and disruption (affinity, taints, topology spread, PDBs), durable state (PV/PVC/StorageClass with dynamic provisioning), multi-dimensional autoscaling (HPA for Pods, VPA for requests, Cluster Autoscaler/Karpenter for Nodes, KEDA for events), and managing manifests at scale (Helm/Kustomize, Operators for stateful lifecycles, GitOps for Git-as-source-of-truth reconciliation).
 
 > **Key Takeaway:** Kubernetes provides a declarative, self-healing platform for running containerized applications at scale. The core abstractions -- Pods, Deployments, Services, Ingress -- handle networking, scaling, and rolling updates. ConfigMaps/Secrets externalize configuration, HPA provides autoscaling, and probes ensure traffic only reaches healthy instances. Always set resource requests/limits, always configure probes, and always use RBAC and Network Policies for security.
+
+*Last reviewed: 2026-06-08*

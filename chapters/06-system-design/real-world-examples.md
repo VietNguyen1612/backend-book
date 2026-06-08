@@ -451,6 +451,7 @@ PRESENCE TRACKING:
 **Message Storage**: Messages are stored in a database partitioned by `conversation_id` and sorted by timestamp. This makes fetching the message history for a conversation (the most common query) efficient. Recent messages (the last N per conversation) are cached in Redis for fast loading when a user opens a chat. Media attachments (images, videos, files) are uploaded to object storage (S3) and only a reference URL is stored in the message record.
 
 **Features**:
+
 - **Online Presence**: Each client sends a periodic heartbeat (every 30 seconds) via the WebSocket connection. The server writes a Redis key with a TTL slightly longer than the heartbeat interval (e.g., 45 seconds). If the heartbeat stops, the key expires and the user is considered offline.
 - **Read Receipts**: Store a `last_read_message_id` per user per conversation. When a user reads messages, the client sends an update. The unread count for a conversation is computed as the number of messages after `last_read_message_id`.
 - **Typing Indicators**: Ephemeral events that are broadcast to other participants in a conversation but never persisted to the database. They flow through the WebSocket/message routing layer just like messages but are discarded after delivery.
@@ -553,6 +554,7 @@ NOTIFICATION FLOW (example: order shipped):
 ```
 
 **Channels**: Each notification channel has different characteristics and delivery APIs:
+
 - **Email** (Amazon SES, SendGrid, Mailgun): Supports rich HTML content, attachments, and analytics (open tracking, click tracking). High throughput but relatively high latency (seconds to minutes for delivery).
 - **Push Notifications** (Firebase Cloud Messaging for Android, Apple Push Notification Service for iOS): Short messages with a title and body. Platform-specific payload formats. Token management (device tokens can change or become invalid).
 - **SMS** (Twilio, AWS SNS): Expensive per message. Character limits. Use only for high-value notifications (2FA codes, payment confirmations).
@@ -560,6 +562,7 @@ NOTIFICATION FLOW (example: order shipped):
 - **Webhooks** (Slack, Microsoft Teams, custom integrations): HTTP POST to a configured URL. Useful for system-to-system notifications.
 
 **User Preferences** are critical for notification systems. Users should be able to:
+
 - Opt in or out of each notification type per channel (e.g., "I want order updates via email but not SMS").
 - Set quiet hours (e.g., "Do not disturb between 10 PM and 8 AM in my timezone").
 - Set frequency caps (e.g., "No more than 5 push notifications per hour").
@@ -813,8 +816,11 @@ ARCHITECTURE (the hash ring):
 **Eviction and freshness.** As a *cache*, each node runs an eviction policy when memory fills -- **LRU** (evict least-recently-used) or **LFU** (least-frequently-used) -- and TTLs bound staleness. As a *durable* KV store, data persists and these knobs matter less, but TTLs are still common for expiring data.
 
 **Failure handling -- the parts that make it highly available:**
+
 - **Replica failover**: if a node on the preference list is down, reads/writes still succeed as long as R/W replicas respond. Availability does not require *all* replicas, only a quorum.
 - **Hinted handoff**: if a target replica is temporarily down during a write, a healthy node *temporarily* accepts the write on its behalf along with a "hint" of who it really belongs to, and replays it to the proper owner once that node returns. This keeps writes available through transient failures instead of rejecting them.
 - **Read-repair and anti-entropy**: replicas drift (missed writes, hinted handoff catch-up). On a read that returns divergent versions, the system writes the newest version back to the stale replicas (**read-repair**). In the background, an **anti-entropy** process (often using Merkle trees to compare replica contents efficiently) finds and reconciles differences that reads alone wouldn't catch. Conflicts from concurrent writes are resolved with the mechanisms from 6.1 -- last-write-wins, vector clocks to detect concurrency, or CRDTs.
 
 > **Key Takeaway:** The Dynamo design is consistent hashing (with virtual nodes) for partitioning, replication to N nodes for durability, and quorum reads/writes (`W + R > N`) for *tunable* consistency, all wrapped in availability mechanisms -- failover, hinted handoff, and read-repair/anti-entropy -- that keep the store serving through node failures. It is the reference architecture for any distributed cache or key-value store, and its genius is letting each workload dial its own point on the consistency-vs-latency curve rather than baking one choice in.
+
+*Last reviewed: 2026-06-08*

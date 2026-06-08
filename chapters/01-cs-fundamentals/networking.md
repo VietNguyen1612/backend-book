@@ -261,6 +261,7 @@ HTTP/1.1 vs HTTP/2:
 ```
 
 Key features:
+
 - **Binary framing layer**: HTTP messages are split into frames, transmitted interleaved, and reassembled. More efficient to parse than text-based HTTP/1.1.
 - **Multiplexing**: multiple streams over a single TCP connection. No head-of-line blocking at the HTTP level (but TCP HOL blocking still exists — if a TCP packet is lost, all streams wait for retransmission).
 - **HPACK header compression**: compresses headers using a dynamic table. HTTP/1.1 headers can be 500-800 bytes per request; HPACK reduces this dramatically.
@@ -330,6 +331,7 @@ def product_detail(request, pk):
 ```
 
 Key caching headers:
+
 - **`Cache-Control: max-age=300`**: cache for 300 seconds without revalidation
 - **`Cache-Control: no-cache`**: always revalidate with server (can still be stored)
 - **`Cache-Control: no-store`**: never cache (sensitive data)
@@ -761,3 +763,5 @@ ping: local error: message too long, mtu=1492
 > **Common pitfall:** The exact byte arithmetic differs by OS. The `-s` size is the ICMP *payload*; macOS/BSD `ping` also needs `-D` instead of `-M do`, and on Windows the flag is `ping -f -l 1472`.
 
 > **Key Takeaway:** Network debugging is an essential skill for backend engineers. Use `curl -w` for HTTP timing analysis, `ss` for connection state inspection, `tcpdump` for packet-level debugging, and `mtr` for path analysis. Most production networking issues come down to: DNS misconfiguration, certificate problems, firewall blocking, connection exhaustion (TIME_WAIT), or MTU issues. Having these tools in your toolkit lets you quickly identify which layer the problem is at.
+
+*Last reviewed: 2026-06-08*

@@ -369,6 +369,7 @@ scrape_configs:
 ```
 
 {% raw %}
+
 ```yaml
 # prometheus/rules/alerts.yml
 groups:
@@ -377,7 +378,7 @@ groups:
       # High error rate
       - alert: HighErrorRate
         expr: |
-          sum(rate(http_requests_total{status=~"5.."}[5m])) by (service)
+          sum(rate(http_requests_total{status_code=~"5.."}[5m])) by (service)
           /
           sum(rate(http_requests_total[5m])) by (service)
           > 0.05
@@ -421,6 +422,7 @@ groups:
         annotations:
           summary: "Disk usage above 85% on {{ $labels.instance }}"
 ```
+
 {% endraw %}
 
 #### Grafana and PromQL
@@ -430,6 +432,7 @@ Grafana is the standard visualization tool for Prometheus metrics. You build das
 Below are practical PromQL queries organized by the type of insight they provide. These can be directly used as Grafana panel queries.
 
 **Request Rate (throughput):**
+
 ```promql
 # Total requests per second across all instances
 sum(rate(http_requests_total[5m]))
@@ -442,6 +445,7 @@ sum(rate(http_requests_total[5m])) by (status_code)
 ```
 
 **Error Rate:**
+
 ```promql
 # Error rate as a percentage (5xx responses / total responses)
 sum(rate(http_requests_total{status_code=~"5.."}[5m]))
@@ -455,6 +459,7 @@ sum(rate(http_requests_total[5m])) by (path)
 ```
 
 **Latency Distribution:**
+
 ```promql
 # P50 (median) latency
 histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
@@ -485,6 +490,7 @@ Run in Grafana's Explore view (or `curl` against Prometheus's `/api/v1/query`), 
 **How to read this output:** Values are in seconds, so `/api/v1/search` has a P99 of ~1.87s — one in a hundred search requests takes that long, even though the median is likely far lower. This is exactly the tail that an average would hide, and it is the number you compare against your SLO. In an interview, the key point is that `histogram_quantile` interpolates *within* the bucket that crosses the target quantile, so your percentile is only as precise as your bucket boundaries: if your largest finite bucket is `le="1.0"` but real latency reaches 5s, everything piles into `+Inf` and P99 is reported as effectively unbounded. Choose buckets that bracket your expected latency range.
 
 **Resource Utilization:**
+
 ```promql
 # CPU usage per pod (percentage of requested CPU)
 sum(rate(container_cpu_usage_seconds_total{namespace="production"}[5m])) by (pod)
@@ -501,6 +507,7 @@ sum(kube_pod_container_resource_limits{resource="memory", namespace="production"
 ```
 
 **Application-Specific Metrics:**
+
 ```promql
 # Database connection pool utilization
 db_pool_active_connections / db_pool_max_connections
@@ -597,6 +604,7 @@ Observability only pays off if a human can act on it at 3 a.m. That requires ope
 **Runbooks.** A runbook is a concise, step-by-step document for handling a specific alert: what the alert means, how to confirm the impact, the first diagnostic commands to run, common causes, the remediation/mitigation steps, and when to escalate. Crucially, **every alert links directly to its runbook** (the `runbook_url` annotation on the Prometheus alert). The goal is that a tired engineer who has never seen this alert before can still take correct first actions. Runbooks should be living documents — updated after every incident with what was actually learned.
 
 {% raw %}
+
 ```yaml
 # A production alert carries everything the responder needs, including the runbook
 annotations:
@@ -605,6 +613,7 @@ annotations:
   dashboard_url: "https://grafana.example.com/d/abc/service-overview"
   runbook_url: "https://runbooks.example.com/high-error-rate"
 ```
+
 {% endraw %}
 
 This connects to the **blameless postmortem** culture: after a significant incident, the team writes up the timeline, root cause, and action items without assigning individual blame — the focus is on fixing the *system* (better alerts, a missing runbook step, a fragile dependency) so the same incident cannot recur.
@@ -625,3 +634,5 @@ Understand the **cost of your architecture**, too: a chatty microservice mesh ge
 > **Key Takeaway:** Production operation extends observability into action. Error tracking (Sentry) groups exceptions and tracks release health; APM/tracing (Datadog, Honeycomb, OpenTelemetry) breaks down per-request latency into spans — both join your metrics and logs via `trace_id`. Back it with operational structure: clear ownership, on-call rotations with escalation, and runbooks linked from every alert. Finally, treat capacity and cost as first-class signals — right-size from observed usage, scale with demand, and make the cost of your architecture as visible as its latency.
 
 > **Key Takeaway:** Observability is the combination of logs, metrics, and traces that lets you understand your system's behavior. Use Prometheus for metrics collection, Grafana for visualization, and structured logging for operational insight. Apply the RED method for services and the USE method for resources. Alert on user-facing symptoms, not internal causes. Make every alert actionable and include enough context for rapid diagnosis.
+
+*Last reviewed: 2026-06-08*

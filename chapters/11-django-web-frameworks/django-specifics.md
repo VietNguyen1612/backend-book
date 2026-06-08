@@ -758,11 +758,11 @@ Book.objects.bulk_update(books, ["price"], batch_size=1000)
 # queryset .update(): a single SQL UPDATE for every matching row, no Python loop
 Book.objects.filter(genre=Book.Genre.FICTION).update(is_available=True)
 
-# queryset .delete(): a single SQL DELETE for every matching row
+# queryset .delete(): one SQL DELETE statement removing all matching rows
 Book.objects.filter(is_available=False, published_date__year__lt=2000).delete()
 ```
 
-> **Common pitfall:** Bulk operations bypass the model's `save()` method, do **not** send `pre_save`/`post_save`/`pre_delete`/`post_delete` signals (with the exception that `queryset.delete()` does send delete signals and cascades, while `bulk_create`/`bulk_update`/`queryset.update()` send nothing), and skip `auto_now` timestamp updates for `update()`. If your `Author.save()` slug-generation logic or a `post_save` cache-invalidation receiver is essential, `bulk_create` will silently skip it. Use bulk methods for raw throughput; fall back to per-instance `save()` when you depend on that side-effecting logic, or replicate the logic explicitly.
+> **Common pitfall:** Bulk operations bypass the model's `save()` method, do **not** send `pre_save`/`post_save`/`pre_delete`/`post_delete` signals (with the exception that `queryset.delete()` does send `pre_delete`/`post_delete` signals for every object Django's collector deletes -- including those it cascades via `on_delete=CASCADE` -- though not for rows removed by a database-level `ON DELETE` constraint, while `bulk_create`/`bulk_update`/`queryset.update()` send nothing), and skip `auto_now` timestamp updates for `update()`. If your `Author.save()` slug-generation logic or a `post_save` cache-invalidation receiver is essential, `bulk_create` will silently skip it. Use bulk methods for raw throughput; fall back to per-instance `save()` when you depend on that side-effecting logic, or replicate the logic explicitly.
 
 #### Transactions
 
@@ -1340,7 +1340,7 @@ DATABASES = {
 }
 ```
 
-`CONN_MAX_AGE` makes each Django **worker** reuse its own connection across requests -- persistent connections. But it does not pool across workers: 4 gunicorn workers × 50 threads can still open hundreds of connections, and PostgreSQL has a hard `max_connections` ceiling (often ~100). The production answer is an external pooler, **PgBouncer**, which sits between Django and Postgres and multiplexes a small pool of real database connections across a large number of client connections.
+`CONN_MAX_AGE` makes each Django **worker** reuse its own connection across requests -- persistent connections. But it does not pool across workers: 4 gunicorn workers × 50 threads can still open hundreds of connections, and PostgreSQL has a finite `max_connections` ceiling (default 100, often raised to a few hundred in production). The production answer is an external pooler, **PgBouncer**, which sits between Django and Postgres and multiplexes a small pool of real database connections across a large number of client connections.
 
 ```text
 [ gunicorn worker 1 ]\
@@ -1498,3 +1498,5 @@ System check identified 4 issues (0 silenced).
 > **Key Takeaway:** Django gives you SQL-injection, XSS, CSRF, and clickjacking protection for free -- do not disable them (no raw string SQL, sparing use of `|safe`, leave CSRF on for cookie-auth forms). The vulnerabilities that remain are almost all configuration: `DEBUG=False`, a correct `ALLOWED_HOSTS`, `SECRET_KEY` from the environment, secure cookie flags, and Argon2 hashing. Make `manage.py check --deploy` part of your deploy pipeline.
 
 ---
+
+*Last reviewed: 2026-06-08*

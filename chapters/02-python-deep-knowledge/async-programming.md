@@ -670,3 +670,5 @@ async def test_database_query(db_pool):
 ```
 
 > **Key Takeaway:** Always use connection pools, never create connections per-request. Use bounded queues and semaphores for backpressure. Handle cancellation with `try/except CancelledError` and always clean up in `finally`. Use `pytest-asyncio` and `AsyncMock` for testing.
+
+*Last reviewed: 2026-06-08*

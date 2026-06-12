@@ -4,8 +4,6 @@
 
 ### Decorators & Context Managers
 
-To understand decorators, imagine a VIP room in a club (representing your original function). If you want to log everyone who enters the room or verify their invitations, you could modify the room itself. However, a cleaner design is to place a security guard at the door (representing the decorator). When a guest wants to enter, the guard intercepts them, checks their credentials, notes the time of entry, lets them inside to enjoy the room, and then logs their departure on the way out. In Python, a decorator is a wrapper that sits around a function. It allows you to execute extra code before and after the original function runs—such as logging, timing, validation, or access control—without modifying the function's own code.
-
 > [!NOTE]
 > **Beginner's Mental Model — Decorators:**
 > Think of a decorator like a security guard standing outside a VIP room. The VIP room is your original function. Instead of changing the room itself to check guest IDs or log who enters, you place a guard (the decorator) at the door. When someone calls the function, the guard runs some code first (e.g., checks credentials, starts a timer, or logs the entry), lets the caller in to execute the original function, and then runs code on their way out (e.g., stops the timer).
@@ -284,8 +282,6 @@ Result: 499999500000, Time: 0.0182s
 ---
 
 ### Generators & Iterators
-
-Imagine you buy a bag of a thousand candies and pour them all onto a table. They take up a lot of space and require a large surface to hold them—this is similar to how a standard Python list stores all its elements in memory at once. Now imagine a Pez dispenser. The dispenser holds the potential to give you a thousand candies, but it only delivers exactly one candy at a time when you click it. It occupies almost no space in your hand, regardless of how many candies are waiting inside. This is how a generator works. Instead of calculating and storing a massive list of values all at once, a generator is a lightweight object that produces values on demand, yielding one item at a time and pausing its execution until you ask for the next one. This makes generators incredibly memory-efficient when processing large datasets or infinite streams of data.
 
 > [!NOTE]
 > **Beginner's Mental Model — Generators:**

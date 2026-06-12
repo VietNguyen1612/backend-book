@@ -439,8 +439,6 @@ print(Serializable._versions)
 
 ### Memory & Garbage Collection
 
-To keep a computer's memory from filling up, Python must constantly clean up objects that are no longer being used. It does this using two primary systems: reference counting and a generational garbage collector. Think of reference counting as a sign-in sheet attached to a library book. Every time a part of your program takes a reference to an object, its count goes up by one. When a reference is deleted, the count goes down by one. If the count hits zero, the book is instantly thrown away. However, sometimes Person A and Person B are holding hands (representing a circular reference where Object A points to Object B, and Object B points to Object A). Even if everyone else has left the library, their sign-in count will never hit zero because they are holding onto each other. To solve this, Python uses a generational garbage collector. This acts like a periodic cleaning crew that walks through the library, identifies isolated groups of objects that are only holding onto each other in a closed circle, and sweeps them out of memory together.
-
 #### Reference Counting
 
 Python's primary garbage collection mechanism is **reference counting**. Every object maintains a count of how many references point to it. When the count drops to zero, the object is deallocated immediately. This gives Python deterministic cleanup behavior -- resources are freed as soon as the last reference disappears.
@@ -798,8 +796,6 @@ print(a is b)  # True -- guaranteed same object
 
 ### GIL (Global Interpreter Lock)
 
-Imagine a classroom filled with students (representing threads) and one teacher (representing the Python interpreter). Even though all the students are ready to speak and work at the same time, the teacher only has one "talking stick" (representing the Global Interpreter Lock, or GIL). To speak or ask a question, a student must hold this talking stick. Consequently, only one student can talk at any given split second, even if the room is crowded. However, if a student needs to look up a word in a dictionary or wait for a phone call (representing an I/O operation like a network request), they hand the talking stick back to the teacher so other students can talk while they wait. This is how the GIL manages execution in Python: it keeps CPython's memory management safe by ensuring only one thread executes code at a time, allowing threads to run concurrently during I/O waits but preventing them from utilizing multiple CPU cores for heavy calculation in parallel.
-
 The GIL is a mutex that protects access to Python objects, ensuring only one thread executes Python bytecode at a time. This simplifies CPython's memory management (reference counting is not thread-safe without it) but means that **CPU-bound** multithreaded programs cannot use multiple cores.
 
 ```python
@@ -956,8 +952,6 @@ print(bool(sysconfig.get_config_var("Py_GIL_DISABLED")))  # True on a free-threa
 > Think of Python source code as a complex recipe written in English ("Bake a chocolate cake"). Before cooking, the CPython compiler translates this recipe into a series of simple, numbered instructions (bytecode) like: "1. Load flour," "2. Load sugar," "3. Mix." The Python Virtual Machine is the chef that reads these simple bytecode steps one-by-one and executes them. This translation happens once when the script is loaded, so the chef doesn't have to keep re-reading the complex English recipe.
 
 ### CPython Internals
-
-Think of Python source code as a complex recipe written in English, such as "Bake a chocolate cake." If a chef had to read and interpret this complex recipe line-by-line while also trying to cook in a busy kitchen, it would slow them down. To solve this, a kitchen coordinator first translates the recipe into a simple, numbered sequence of basic instructions, like: "1. Get flour," "2. Get sugar," "3. Mix." The chef (representing the Python Virtual Machine) then reads and executes these basic instructions one-by-one. This translation process is what happens when CPython compiles your Python code into bytecode. Bytecode is a simplified, low-level representation of your code that is easy for the computer's internal interpreter to execute quickly without having to constantly parse the complex rules of the Python language.
 
 #### Bytecode Compilation and Execution
 

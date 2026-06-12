@@ -2,13 +2,19 @@
 
 # 6.2 Distributed Systems
 
-When building software that runs across multiple physical servers, we must navigate the fundamental trade-offs of distributed systems. The CAP Theorem is a rule that describes these trade-offs using three properties: Consistency, Availability, and Partition Tolerance.
-
-To understand how this works, imagine a bank with two physical branches, each keeping its own paper ledger of customer account balances. Under normal conditions, the branches communicate immediately via a telephone line to sync their ledgers whenever a transaction occurs. However, if the phone line goes down (a network partition), the bank faces a tough decision. One option is **Availability (AP)**: the bank keeps both branches open, allowing customers to deposit or withdraw money. Because the branches cannot talk to each other to update their ledgers, the balances will diverge and become stale, sacrificing consistency. The other option is **Consistency (CP)**: the bank chooses to close the branches or refuse transactions until the telephone line is fixed. While the account balances remain perfectly correct, the bank is now unavailable to its customers. The CAP Theorem states that you cannot have both consistency and availability when a network partition cuts off communication between your servers.
+> [!NOTE]
+> **Beginner's Mental Model — CAP Theorem (The Phone Line):**
+> Imagine a bank that has two branches, each with a paper ledger of accounts. If the phone line between the branches goes down (a network partition), the bank faces a choice:
+>
+> - **Availability (AP):** Keep both branches open. Customers can deposit or withdraw money, but since the branches can't talk to update the ledger, the balances will diverge (stale data).
+> - **Consistency (CP):** Close the branches or refuse transactions until the phone line is fixed. The balances remain perfectly correct, but customers are turned away (unavailable).
+> You can't have both when the phone line is cut.
 
 ### Consensus & Coordination
 
-To keep data consistent across multiple servers, distributed databases rely on consensus algorithms. Think of Raft as a group of friends trying to decide what movie to watch tonight, but they can only communicate using walkie-talkies. Because they cannot all speak at once, they must follow a structured process. First, they elect a coordinator (Leader Election) by holding a quick vote. Once elected, this leader makes the decision on which movie to watch and tells everyone to write it down in their notebooks (Log Replication). However, the decision is not official yet. The leader waits until a majority of the friends (a Quorum) reply to confirm they have written it down before declaring the decision final (Commit). If a few walkie-talkies fail or some friends lose connection, the group can still safely make decisions as long as a majority of them can still talk to each other. Those who were disconnected will catch up once their connection is restored.
+> [!NOTE]
+> **Beginner's Mental Model — Raft Consensus:**
+> Think of Raft as a group of friends trying to decide what movie to watch, but they can only talk via walkie-talkies. First, they elect a coordinator (Leader Election) by voting. Once elected, the leader decides the movie name and tells everyone to write it down (Log Replication). The leader waits for a majority of friends to say "I've written it down" (Quorum) before saying "Okay, it's final!" (Commit). If some walkie-talkies fail, as long as a majority of friends can still talk to each other, they can safely make decisions without the rest.
 
 **Raft** is a consensus algorithm designed to be understandable (in contrast to Paxos, which is notoriously difficult to implement correctly). Raft ensures that a cluster of nodes agrees on a sequence of operations (a replicated log), even if some nodes fail. It is used by etcd (which powers Kubernetes), Consul, CockroachDB, and TiKV.
 
@@ -217,7 +223,9 @@ Because fencing is hard to retrofit, the pragmatic guidance is: **prefer making 
 
 **Asynchronous Communication** (message brokers like Kafka, RabbitMQ, SQS) decouples services in time. The producer publishes a message and immediately continues. The consumer processes it whenever it is ready. This provides natural retry semantics (failed messages can be redelivered), load leveling (bursts of messages are buffered), and fault isolation (a consumer being down does not affect the producer). The trade-off is increased complexity: you need to reason about eventual consistency, message ordering, idempotency, and dead letter queues.
 
-In a microservices architecture, server instances are constantly starting up, shutting down, or moving to different IP addresses. To communicate, services need a dynamic way to find each other. Imagine a large corporate office where employees (representing microservices) frequently move to different desks. Instead of trying to guess where everyone is sitting on any given day, the company sets up a live digital directory at the front desk (a Service Registry). Whenever an employee moves to a new desk, they register their new location with the directory. When you need to talk to the accountant (such as the `payment-service`), you check the directory to get their current desk number and then walk straight to them. This system is known as service discovery, and it prevents services from having to hardcode the network locations of their dependencies.
+> [!NOTE]
+> **Beginner's Mental Model — Service Discovery:**
+> Imagine a large office where employees (microservices) frequently move desks. Instead of trying to guess where everyone is sitting, the company sets up a live digital directory at the front desk (Service Registry). Whenever an employee moves, they register their new desk number. When you need to find the accountant (e.g. `payment-service`), you check the directory to get their current desk number, then walk straight to them.
 
 **Service Discovery** is how services find each other in a dynamic environment where instances come and go:
 

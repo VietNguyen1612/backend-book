@@ -128,7 +128,9 @@ router.register(r"users", UserViewSet)
 urlpatterns = router.urls
 ```
 
-To understand how web services communicate, it helps to imagine a busy restaurant. When a customer interacts with the kitchen, they do not just shout random requests; they use specific actions. In the REST architectural style, HTTP methods act as these actions, defining exactly what you want to do to a resource. Think of a resource—like a user account or a product in an online store—as a dish in this restaurant. If you want to view the recipe for a dish without changing anything, you use `GET`. If you want to place a completely new order, that is a `POST` request. If you need to replace the entire dish on a tray with a different one, you use `PUT`. If you only want to make a minor modification, such as adding a pinch of salt to the existing dish, you use `PATCH`. Finally, if you want to throw the dish away, you use `DELETE`. Each of these methods establishes a clear, predictable contract between the client making the request and the server serving the resource.
+> [!NOTE]
+> **Beginner's Mental Model — HTTP Methods:**
+> Think of HTTP methods as the verbs in a kitchen order. `GET` is asking the chef to show you a recipe (read-only, doesn't change anything). `POST` is placing a brand-new order on the kitchen ticket (creates something new). `PUT` is replacing a whole dish on the tray with a different one (full replace). `PATCH` is just adding a pinch of salt to a dish that's already there (partial update). `DELETE` is throwing a ruined dish in the trash.
 
 **HTTP Methods as Verbs**
 
@@ -186,7 +188,14 @@ curl -X DELETE http://localhost:8000/users/2
 # Response: 204 No Content
 ```
 
-Once a request is sent, the server needs a quick, standardized way to tell the client what happened. Imagine a flight attendant responding to a passenger's request using quick hand signals. HTTP status codes serve as these signals, categorized by three-digit numbers to represent the outcome of your request. A code in the 2xx range is like a reassuring thumbs-up; it means your request succeeded, whether because the server successfully retrieved your data (200 OK) or cooked up a brand-new resource (201 Created). A 3xx code acts like the attendant pointing you to a different seat, redirecting your request to another location. If you see a 4xx code, the attendant is pointing a finger at you because you made a mistake—perhaps you tried to open a locked cabin door (403 Forbidden) or ordered an item not on the menu (404 Not Found). Finally, a 5xx code is like the flight attendant looking panicked because the engine is acting up; it indicates that the server had an internal technical failure (500 Internal Server Error) and could not complete your request. These status codes allow the client to instantly understand how to handle the server's response.
+> [!NOTE]
+> **Beginner's Mental Model — HTTP Status Codes:**
+> Think of HTTP status codes as the hand signals a flight attendant gives you after a request:
+>
+> - **2xx (Success):** A thumbs-up. Your meal is here (`200 OK`) or was freshly cooked (`201 Created`).
+> - **3xx (Redirection):** Pointing you to another seat. "Please go to seat 12B instead."
+> - **4xx (Client Error):** The attendant pointing at you because you made a mistake. "You can't open the cockpit door (`403 Forbidden`) or you asked for a non-existent item (`404 Not Found`)."
+> - **5xx (Server Error):** The attendant looking panicked. "The engine is smoking, we have a technical issue (`500 Internal Server Error`)."
 
 **Status Codes**
 

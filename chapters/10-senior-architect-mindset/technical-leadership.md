@@ -4,7 +4,9 @@
 
 ### Architecture Decision Records (ADR)
 
-To understand Architecture Decision Records (ADRs), imagine a captain keeping a detailed logbook on a long ocean voyage. Instead of just writing down a brief note like "Turned the ship 45 degrees north" (which only records the final decision), the captain writes: "Turned the ship 45 degrees north because a massive storm was developing to our east, and our fuel levels were too low to sail around it. We considered staying anchored, but the anchor chain is starting to rust." Two years later, when a new captain takes over the helm and wonders why the ship took such a strange route, they read the logbook and immediately understand the exact constraints, risks, and rationale that led to that specific choice. An ADR serves as this exact type of log for software systems, documenting the reasoning behind critical architecture decisions so future developers don't have to guess.
+> [!NOTE]
+> **Beginner's Mental Model — Architecture Decision Records (ADRs):**
+> Think of an ADR as a **captain's log entry on a ship**. Instead of just writing down "Turned the ship 45 degrees north" (the decision), the captain writes: "Turned the ship 45 degrees north because a massive storm was developing to our east, and our fuel levels were too low to sail around it. We considered staying anchored, but the anchor chain is starting to rust." Two years later, when a new captain takes over and wonders why the ship is off-course, they read the log and understand exactly why that choice was made under those specific constraints.
 
 An Architecture Decision Record is a short document that captures a single significant architectural decision along with its full context. The most important aspect of an ADR is that it records **why** a decision was made, not merely what was decided. Teams that only document the "what" find themselves relitigating the same debates months later because nobody remembers the constraints, trade-offs, and reasoning that shaped the original choice.
 
@@ -159,11 +161,12 @@ The most common failure mode is writing the doc *after* the code is already writ
 
 ---
 
-To understand technical debt, imagine you are moving into a new house and have one hundred cardboard boxes to unpack.
-
-If you do it the right way, you unbox every item, organize them neatly on shelves, and label all the cabinets. This takes a few days of high initial effort, but for the next year, you can find any tool or ingredient you need in five seconds.
-
-If you take on debt, because you are in a rush to go out, you simply stack all one hundred boxes in a massive pile in the middle of the living room. This takes only ten minutes of low initial effort, but for the next year, finding a clean pair of socks takes you twenty minutes of frustrating digging through cardboard. That extra twenty minutes is the interest you pay on your clutter. In software engineering, taking on technical debt means choosing a quick, messy shortcut to meet a deadline. While a small amount of debt can be a useful business tool, if you never take the time to clean it up, the interest compounds, and your system eventually becomes unmaintainable.
+> [!NOTE]
+> **Beginner's Mental Model — Technical Debt:**
+> Imagine you are **moving into a new house** and need to put away 100 boxes:
+>
+> - **Doing it right:** You unbox everything, put things neatly on shelves, and label the cabinets. It takes a few days (high initial effort), but for the next year, you can find any item in 5 seconds.
+> - **Taking on debt:** Because you are in a rush, you stack all the boxes in the middle of the living room. It takes only 10 minutes (low initial effort), but for the next year, finding a clean pair of socks takes you 20 minutes of digging through cardboard. That extra 20 minutes is the **interest** you pay on your clutter (technical debt). A little debt is fine to meet a deadline, but if you never clean up, your house eventually becomes unlivable.
 
 ### Technical Debt Management
 

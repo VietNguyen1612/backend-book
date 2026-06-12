@@ -4,7 +4,9 @@
 
 ### Secrets Management
 
-To understand secrets management, imagine a high-security digital bank vault that uses one-time, dynamic access cards. In a traditional setup, you might print your house keys (representing API keys, database passwords, and private tokens) on postcards and share them with your team, which makes them visible to anyone who glances at the mail—this is the equivalent of hardcoding secrets in your code or committing them to a Git repository. With a secrets manager, you place these physical keys inside the secure vault instead. When an application service needs to access a database or external API, it must authenticate at the vault door. The vault then issues a temporary, single-use keycard that automatically expires after its specific task is complete. This keeps the actual keys safely hidden, tracks exactly who accessed them and when, and allows you to replace or rotate a key without needing to change the locks on every door in your system.
+> [!NOTE]
+> **Beginner's Mental Model — Secrets Management:**
+> Think of secrets management as a **secure digital bank vault with one-time, dynamic access cards**. Instead of printing your house keys (API keys, database passwords) on postcards and sharing them with everyone (hardcoding them in your code or committing them to Git), you place the physical keys inside the vault. When an employee (an application service) needs to get inside, they must authenticate at the vault door, which issues them a temporary, single-use keycard that automatically expires after its task is complete. This keeps the keys safe, tracks who used them and when, and makes it easy to replace a key without changing the locks on every door.
 
 Secrets -- API keys, database credentials, encryption keys, certificates -- are the crown jewels of your infrastructure. A single leaked secret can lead to a full system compromise. Proper secrets management means storing secrets securely, rotating them regularly, auditing access, and ensuring they never appear in source code or logs.
 

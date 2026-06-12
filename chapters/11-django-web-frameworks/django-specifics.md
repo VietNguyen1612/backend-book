@@ -316,7 +316,9 @@ FBVs are easier to understand and debug; CBVs reduce repetition when you have ma
 
 ### ORM & Database Layer
 
-To understand the role of an Object-Relational Mapper (ORM), imagine you are a tourist traveling in a foreign country where every local resident speaks SQL, but you only know Python. Communication would be incredibly difficult without help. An ORM acts as your personal, highly skilled translator. Instead of forcing you to write complex, database-specific SQL query phrases by hand, you talk to the ORM using familiar Python objects and methods, such as writing `Book.objects.filter(genre="FIC")`. The ORM automatically translates your Python instructions into perfect SQL syntax, sends that query to the database, receives the database's tabular response, and translates it back into Python objects for you to use.
+> [!NOTE]
+> **Beginner's Mental Model — ORM Translator (Object-Relational Mapping):**
+> Imagine you are a tourist in a foreign country where everyone speaks **SQL**, but you only speak **Python**. An ORM is your **personal translator**. Instead of learning how to write complex SQL query phrases by hand, you speak to the ORM in familiar Python objects and methods (like `Book.objects.filter(genre="FIC")`). The ORM automatically translates your Python instructions into perfect SQL commands, sends them to the database, and translates the database's responses back into Python objects for you.
 
 #### Model Definitions and Patterns
 
@@ -481,7 +483,9 @@ This concept applies universally: Alembic for SQLAlchemy, Flyway for Java, Knex 
 
 #### QuerySet Evaluation and the N+1 Problem
 
-To understand lazy evaluation in database queries, imagine you are shopping with a highly efficient personal assistant. You hand them a shopping list one item at a time: "Get milk," then "Get eggs," and finally "Get bread." A lazy assistant will not run to the supermarket three separate times. Instead, they wait patiently until you say, "I am ready, cook breakfast!"—which represents evaluating the list. Only at that exact moment do they make a single, consolidated trip to the supermarket to get all the ingredients at once. In Django, when you write code to filter or order a QuerySet, the framework does not contact the database immediately. It waits until you actually attempt to iterate over, print, slice, or consume the data. This delay allows Django to combine all your filter steps into a single, optimized trip to the database.
+> [!NOTE]
+> **Beginner's Mental Model — Lazy Evaluation:**
+> Imagine you are shopping with a **highly efficient personal assistant**. You hand them a shopping list: "Get milk, get eggs, get bread." A "lazy" assistant won't run to the store three separate times. Instead, they wait until you say, "I'm ready, cook breakfast!" (evaluating the list). Only then do they make a single trip to the supermarket to get everything at once. In Django, when you filter a QuerySet, Django doesn't call the database immediately. It waits until you actually try to print, iterate, or use the data, allowing it to combine all your filters into a single, optimized database trip.
 
 Django QuerySets are lazy: constructing a queryset does not execute any SQL. The query only hits the database when you iterate over the queryset, call `len()`, slice it, or explicitly evaluate it with `.exists()`, `.count()`, etc. This laziness lets you chain filters and build queries incrementally without performance cost.
 

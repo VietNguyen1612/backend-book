@@ -136,8 +136,6 @@ uv run pytest
 
 #### Virtual Environments
 
-Suppose you are a chef working on two different recipes simultaneously. One recipe (Project A) requires a specific version of a sauce (like Django version 4), while the other recipe (Project B) requires a newer, incompatible version of the same sauce (like Django version 5). If you only have one main kitchen counter (representing your computer's global environment), you cannot have both versions on the counter at the same time; installing one will overwrite the other, causing one of your recipes to fail. A virtual environment solves this by creating a private, completely isolated test kitchen for each individual project. In Project A's kitchen, you install Django 4 on its shelves, and in Project B's kitchen, you install Django 5. Because these kitchens are separated by solid walls, their ingredients and dependencies never clash, allowing you to develop and run multiple projects with different requirements on the same computer without any interference.
-
 ```python
 # -- Always use virtual environments! --
 

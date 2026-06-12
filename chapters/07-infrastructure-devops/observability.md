@@ -2,13 +2,13 @@
 
 # 7.3 Observability
 
-To understand the three pillars of observability—metrics, logs, and traces—imagine your application is a high-speed delivery truck transporting cargo across the country.
-
-Metrics are like the gauges on the truck's dashboard, such as the speedometer, fuel level, and engine temperature. They tell you how the truck is performing overall at any given second, showing you that the engine temperature is at 98°C or that the truck is running at 80% capacity. They are very cheap to monitor, always active, and serve as your first line of defense to let you know if a problem exists, though they do not explain why it happened.
-
-Logs are like the driver's detailed logbook or diary. The driver writes down major events as they occur, such as stopping at a gas station at 10:15 AM or getting a flat tire on Route 5 at 10:30 AM. Logs do not tell you the engine temperature second-by-second, but when a problem occurs, they give you the exact, detailed context of what went wrong at that specific moment.
-
-Traces are like a GPS breadcrumb trail tracking a single package's journey from the moment it leaves the warehouse, through the sorting facility, into the delivery truck, and finally to the customer's doorstep. Traces show you exactly how much time the package spent at each stage of its multi-step route, helping you pinpoint where delays or failures occurred along the entire journey.
+> [!NOTE]
+> **Beginner's Mental Model — Logs vs. Metrics vs. Traces:**
+> Imagine your application is a **high-speed delivery truck**:
+>
+> - **Metrics (The Dashboard):** These are the gauges on the truck's dashboard—speedometer, fuel level, engine temperature. They tell you *how* the truck is performing overall (e.g., "The engine temperature is at 98°C", "We are running at 80% capacity"). They are cheap to watch, always active, and let you know *if* there is a problem.
+> - **Logs (The Driver's Diary):** This is a detailed logbook where the driver writes down major events (e.g., "10:15 AM: Stopped at gas station", "10:30 AM: Flat tire on route 5"). They don't tell you the engine temperature second-by-second, but when a problem occurs, they give you the exact context of *what* happened at that specific moment.
+> - **Traces (The GPS Breadcrumb Trail):** This is a detailed map tracing the exact route a single package took through the sorting facility, the delivery truck, and to the customer's door, showing exactly how long it spent at each step. It helps you see *where* the delays or failures occurred along a multi-step journey.
 
 ### Logging
 

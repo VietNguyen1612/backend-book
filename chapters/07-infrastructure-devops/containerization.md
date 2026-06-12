@@ -4,7 +4,9 @@
 
 ### Docker
 
-To understand the difference between a Docker image and a container, imagine a cake recipe in a cookbook. The recipe is a read-only blueprint: it describes all the ingredients, measurements, and steps required to make a cake, but you cannot eat the recipe itself. This is the Docker image. A container is the actual cake you bake from that recipe. You can bake multiple identical cakes (containers) from a single recipe (image). If you frost one cake or cut it into slices, you modify that specific cake (the container), but the cookbook page containing the recipe (the image) remains completely unchanged.
+> [!NOTE]
+> **Beginner's Mental Model — Docker Image vs. Container:**
+> Think of a Docker **image** as a cake recipe (a read-only blueprint), and a **container** as the actual cake baked from that recipe (the running instance). You can use one recipe to bake as many identical cakes as you want. If you frost or cut one cake (modify a container), the recipe (image) remains completely unchanged.
 
 #### Multi-Stage Builds
 
@@ -380,7 +382,9 @@ Because a container is just a process, the operational rules follow directly: ke
 
 ### Kubernetes
 
-To grasp the concept of a Kubernetes Pod, imagine a hotel room. In this analogy, a container is a single guest staying in the room, representing your application. The hotel room itself is the Pod. The room provides a shared space where one or more guests can live together, sharing the same address, phone line, and bathroom. In the digital world, this translates to containers in the same Pod sharing the same network namespace (IP address and ports) and storage volumes. Most of the time, a hotel room has just one guest (a single-container Pod), but sometimes a guest needs a personal assistant (a helper or "sidecar" container) staying in the same room to help them with tasks like carrying logs or monitoring security.
+> [!NOTE]
+> **Beginner's Mental Model — Kubernetes Pods:**
+> Imagine a Pod as a **hotel room**. While a container is like a single guest (your application), the room (the Pod) can accommodate one or more guests who share the same address, phone line, and bathroom (network namespace and storage). Most of the time, a room has just one guest, but sometimes a guest needs a helper (a sidecar container) in the same room to assist them.
 
 #### Pods
 
@@ -497,7 +501,9 @@ spec:
             name: myapp-config-files
 ```
 
-To understand Kubernetes Services, imagine a corporate reception desk or a single central phone number for a company department. In a busy office, individual employees (representing Pods) might be hired, resign, or move to different desks (representing Pods being rescheduled, scaled up, or replaced). If you try to call an employee's personal extension directly, you might find they no longer work there or are at a different desk. Instead, you call the department's central reception desk—the Service. The receptionist knows exactly who is at work today and automatically forwards your call to whichever employee (Pod) is currently active and available. This ensures that callers from the outside can always reach the department without needing to track individual employee desk movements.
+> [!NOTE]
+> **Beginner's Mental Model — Kubernetes Services:**
+> Think of a Service as a **reception desk or a single phone number for a department**. Since individual employees (Pods) might be hired, fired, or move desks (get rescheduled or replaced), calling their personal extensions directly is unreliable. Instead, you call the department's reception desk (the Service), which automatically forwards your call to whichever employee (Pod) is currently available.
 
 #### Services
 

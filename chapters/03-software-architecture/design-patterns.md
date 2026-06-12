@@ -239,8 +239,6 @@ In a Django project, you see the Builder pattern in Django's `QuerySet` API itse
 
 #### Singleton
 
-Imagine a small office with dozens of employees. Instead of buying every single employee their own personal heavy-duty printer—which would be expensive, waste space, and require massive maintenance—the office has one single, shared printer. Every computer in the office is wired to send print jobs to this exact same machine. In software, a Singleton works the same way. It is a design pattern that guarantees a specific class will only ever have one single instance active in your running application. Any part of your code that needs to print a log, read a configuration file, or talk to a database connection pool will share that exact same single object, preventing your application from wasting resources by spinning up duplicate connections or config readers.
-
 The Singleton pattern ensures a class has only one instance and provides a global access point to it. Common uses include database connection pools, configuration managers, and logging instances.
 
 In Python, the simplest Singleton is a **module-level instance**. Python modules are only loaded once, so a module-level variable is naturally a singleton.
@@ -415,8 +413,6 @@ Structural patterns deal with object composition -- how classes and objects are 
 > Think of an Adapter like a physical travel plug adapter. If you travel from the US to Europe, your laptop plug (with flat pins) won't fit into the European wall outlet (with round holes). An adapter doesn't change how your laptop works, nor does it change the electricity in the wall; it simply sits in the middle and translates the connection so they can work together.
 
 #### Adapter
-
-If you have ever traveled to another country with your laptop, you have likely run into a socket compatibility issue. Your plug might have flat pins, but the wall outlet has round holes. You cannot change the wiring of the building, and you cannot redesign your laptop charger. Instead, you use a travel adapter. The adapter sits in the middle: it accepts your flat-pin plug on one side and fits into the round-hole outlet on the other, translating the physical connection without altering the electrical current. In software engineering, the Adapter pattern does exactly the same job. When you have two parts of a system that need to talk to each other but speak different languages—such as your code expecting a standard payment format but a third-party service like Stripe or PayPal requiring its own custom function arguments—you write an adapter class. This adapter translates the inputs and outputs, allowing incompatible interfaces to work together seamlessly without modifying either side.
 
 The Adapter pattern converts the interface of a class into another interface that clients expect. It lets classes work together that otherwise could not because of incompatible interfaces. This is especially common when integrating third-party libraries or legacy systems.
 
@@ -913,8 +909,6 @@ Behavioral patterns deal with algorithms and the assignment of responsibilities 
 > Think of the Observer pattern like subscribing to a YouTube channel or a newsletter. Instead of you (the viewer) constantly refreshing the channel's page to check for new videos (polling), you hit the "Subscribe" button. When a new video is uploaded, the channel automatically sends a notification to all subscribers at once.
 
 #### Observer
-
-Imagine you are waiting for a popular sneaker release at a local store. You could walk to the store every single hour, peek through the window, and ask the cashier if the shoes have arrived. This is called "polling," and it is a massive waste of your time and energy. Alternatively, the store could place a sign-up sheet on the counter. You write down your email address, subscribing to updates. When the sneakers finally arrive, the store manager walks down the list and blasts an email to everyone who signed up. This is the Observer pattern. Instead of having various parts of your system constantly check ("poll") whether an object has changed state, the object itself maintains a list of interested dependents (observers) and automatically broadcasts a message to all of them the moment something happens. This keeps the parts of your application decoupled, as the main object doesn't need to know the details of *who* is listening or *why*, only that it needs to notify them.
 
 The Observer pattern defines a one-to-many dependency between objects so that when one object changes state, all its dependents are notified and updated automatically. This decouples the subject (publisher) from its observers (subscribers).
 

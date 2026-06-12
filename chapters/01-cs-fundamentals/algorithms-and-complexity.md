@@ -8,8 +8,6 @@
 
 ### Big-O Analysis
 
-Imagine you are planning how to travel to a destination. If your destination is just next door, walking is extremely fast and takes almost no preparation. If you need to travel to another city, walking would take forever, so you might choose to take a flight instead. Boarding a plane requires a lot of overhead—packing, traveling to the airport, and going through security—which might take hours even if the flight itself is short. However, if you are traveling across the entire globe, that fixed boarding time becomes negligible compared to the days or weeks it would take to walk. In computer science, Big-O notation works exactly like comparing travel methods. It does not measure the exact milliseconds a computer takes to run a program. Instead, it describes how the program's running time or memory usage scales as the amount of input data (the distance of your trip) grows larger. It helps you decide whether a particular algorithm is built for a short walk or a cross-country flight.
-
 #### Understanding Complexity Classes
 
 Big-O notation describes how an algorithm's resource usage (time or space) scales with input size. It captures the **growth rate** and ignores constant factors, because at large enough scale, the growth rate dominates.
@@ -304,8 +302,6 @@ print(single_number([4, 1, 2, 1, 2]))  # 4
 
 ### Sorting
 
-Imagine you are handed a giant, messy stack of student exams and asked to sort them alphabetically by last name. One approach is to divide the stack in half, hand each half to an assistant to sort, and then combine the two sorted piles by looking at the top sheet of each pile and placing the alphabetically earlier name into a new single pile (this is the merge sort strategy). Another approach is to pick a random exam from the stack as a benchmark, put all exams with names earlier than the benchmark on the left, all exams with later names on the right, and then repeat this process on the smaller piles until the whole stack is sorted (this is the quicksort strategy). Sorting algorithms are simply different strategies for putting items in order. Depending on the size of the stack, the amount of workspace you have, and whether you are sorting physical papers or virtual database records, choosing the right strategy can mean the difference between a few minutes of work and a few hours.
-
 #### Comparison-Based Sorts
 
 All comparison-based sorting algorithms have a theoretical lower bound of **Omega(n log n)** — you cannot do better if your only operation is comparing two elements. The three main comparison sorts each have different strengths:
@@ -581,8 +577,6 @@ print(top_k_stream(stream, 3))         # [89, 78, 67]
 > Imagine I write `1 + 1 + 1 + 1 + 1` on a board and ask you what it equals. You count them up and say "5". If I write another `+ 1` at the end, you don't recount all the ones from the beginning. You remember that the first part was "5" and simply add 1 to get "6". Dynamic Programming is just that: writing down the answers to sub-problems so you never have to recalculate them.
 
 ### Dynamic Programming
-
-Suppose someone writes the equation 1 + 1 + 1 + 1 + 1 on a chalkboard and asks you for the sum. You count the ones and answer "five." If the person then writes another + 1 at the end of the line and asks for the new total, you do not start over and count the ones from the beginning. Instead, you remember that the previous part summed to five, and you simply add one to that stored result to get "six." This concept of remembering past calculations to save work on future ones is the core of dynamic programming. In programming, many complex problems can be broken down into smaller, repetitive sub-problems. Rather than solving the exact same sub-problem over and over again—which wastes valuable computer processing power—dynamic programming writes down the answers to those sub-problems the first time they are solved and looks them up whenever they are needed again.
 
 #### Core Concepts
 

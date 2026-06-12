@@ -2,15 +2,14 @@
 
 # 9.1 Testing Pyramid
 
-To understand the testing pyramid—which divides tests into unit, integration, and end-to-end (E2E) layers—imagine building a new house.
-
-Unit tests are like testing the individual bricks before you lay them down. You check if each brick is solid, properly baked, and does not crumble under pressure. These tests are extremely fast, simple, and cheap to run.
-
-Integration tests are like testing the plumbing and electrical wiring once the structural walls are up. You test if the water pipes connect to the boiler without leaking and if flipping a wall switch turns on the correct light fixture. These checks take more time and effort to set up because they involve real connections between different parts.
-
-End-to-end (E2E) tests are like actually living in the house. You walk through the front door, turn on the TV, flush the toilet, and cook a full meal to see if the entire home functions together smoothly for a resident. This walkthrough is highly realistic, but it is slow, expensive, and difficult to perform for every single corner of the house.
-
-The testing pyramid recommends building a massive foundation of brick tests (unit), a solid middle tier of plumbing tests (integration), and only a few comprehensive walkthroughs (E2E) at the very top.
+> [!NOTE]
+> **Beginner's Mental Model — The Testing Pyramid:**
+> Imagine building a **new house**:
+>
+> - **Unit Tests (Testing individual bricks):** Before laying a single brick, you test if each brick is solid and doesn't crumble under pressure. These tests are extremely fast and cheap to perform.
+> - **Integration Tests (Testing plumbing and wiring):** Once the walls are up, you test if the pipes connect to the boiler without leaking and if the switches turn on the correct lights. These take more time and effort to set up because they involve real connections.
+> - **End-to-End/E2E Tests (Living in the house):** You walk through the front door, turn on the TV, flush the toilet, and cook a meal to see if the whole house works together for a resident. This is highly realistic but slow, expensive, and difficult to do for every single corner of the house.
+> The pyramid says you should have a massive foundation of brick-tests (unit), a good amount of plumbing-tests (integration), and only a few walkthroughs (E2E) on top.
 
 The testing pyramid is a model that guides how you distribute your automated tests across different layers. At the base sits a large number of fast, isolated unit tests. In the middle are integration tests that verify how components work together with real dependencies. At the top are fewer, slower end-to-end and performance tests. The goal is to catch as many bugs as possible at the lowest (cheapest) layer while still verifying that the entire system works when assembled.
 
@@ -474,11 +473,12 @@ class BookDatabaseTest(TransactionTestCase):
 
 #### Test Doubles: Dummies, Stubs, Mocks, Fakes, and Spies
 
-To understand the distinction between mocks and stubs, imagine you are directing a play that features a detective.
-
-A stub is like a helpful bystander or an informant on stage. When the detective walks up and asks, "Where did the suspect go?", the stub simply replies with a pre-scripted answer: "They ran down Elm Street." The stub does not care who is asking or how many times they ask; its sole purpose is to supply the necessary information so that the detective can continue their investigation. Stubs are used to feed input to the code you are testing.
-
-A mock is like a wiretap or a spy log hidden on the detective's person. It does not just help the detective along; instead, it sits quietly during the play, recording everything. After the scene ends, you check the mock's logs to verify specific behaviors: Did the detective make exactly one phone call to the chief of police? Did they pass the correct suspect name during that call? The mock's primary job is to verify actions and behavior, ensuring that the code under test interacted with its dependencies in the correct way.
+> [!NOTE]
+> **Beginner's Mental Model — Mocks vs. Stubs:**
+> Imagine you are testing a **detective script** in a play:
+>
+> - **A Stub is like a helpful bystander (an informant):** When the detective asks, "Where did the suspect go?", the stub simply replies with a pre-scripted answer: "They ran down Elm Street." The stub doesn't care who is asking or how many times; it just supplies the necessary information so the detective can continue their investigation.
+> - **A Mock is like a wiretap or a spy log:** It sits quietly during the play, but at the end, you check its records to verify: "Did the detective make exactly one phone call to the chief of police, and did they pass the correct suspect name?" The mock's job is to verify *actions and behavior*, not just supply answers.
 
 Understanding the vocabulary of test doubles is essential for writing clean tests. A **dummy** is an object passed only to satisfy a parameter list -- it is never actually used by the code path under test (for example, a placeholder `logger` you must supply to a constructor but whose calls you do not care about). A **stub** returns canned data and has no assertions on how it was called -- you use it to control the indirect inputs to the code under test. A **mock** goes further: it records how it was called and you assert on those interactions (e.g., "was `send_email` called exactly once with this recipient?"). A **fake** is a lightweight but working implementation -- an in-memory database, a local SMTP server -- that behaves realistically but avoids heavy infrastructure. A **spy** wraps the real implementation, allowing it to execute normally while recording calls for later inspection.
 

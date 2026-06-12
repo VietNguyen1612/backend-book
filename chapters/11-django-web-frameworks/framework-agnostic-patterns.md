@@ -4,7 +4,9 @@
 
 ### Middleware / Interceptors
 
-To understand middleware, think of airport security checkpoints. When you travel by plane (representing making an HTTP request), you do not simply walk straight from the airport entrance onto the airplane (representing the final view or controller). First, you must pass through passport control (authentication), then baggage screening (request validation and security checks), and perhaps security metal detectors (rate limiting). When returning from your trip (representing the HTTP response traveling back to the client), you must pass through customs (injecting response headers and logging). If you fail to pass any checkpoint along the way, the security guards turn you away immediately (short-circuiting the response) without ever letting you reach the plane.
+> [!NOTE]
+> **Beginner's Mental Model — Middleware:**
+> Think of middleware like **airport security checkpoints**. When you fly (make an HTTP request), you don't go straight from the entrance to the airplane (the view/controller). First, you pass through passport check (authentication), then baggage screening (request validation/security), and maybe metal detectors (rate limiting). When returning (the HTTP response), you pass back through customs (response headers/logging). If any checkpoint fails, you are turned away (short-circuited response) without ever reaching the plane.
 
 Middleware is the mechanism by which cross-cutting concerns are handled in web applications. A cross-cutting concern is something that affects many parts of the application but does not belong in any single view or controller: logging, authentication, CORS headers, compression, rate limiting, request ID injection, and exception handling are all classic examples.
 
@@ -521,7 +523,9 @@ You can refine what the introspection cannot infer with the `@extend_schema` dec
 
 ### Background Task Processing
 
-To understand background tasks and task queues (like Celery), imagine you are working as a waiter at a busy restaurant. A customer sits down at a table, orders a steak, and asks you for a printed receipt. You would not walk into the kitchen, stand next to the stove for thirty minutes watching the chef cook the steak, and force the customer to wait at their table for thirty minutes before you finally print their receipt. Instead, you write the order down on a slip of paper (enqueue a task) and stick it onto the kitchen's ticket wheel (the message broker). You then immediately print the customer's receipt, hand it to them, and move on to take orders from other tables (returning the HTTP response). Meanwhile, in the kitchen, the chef (the background worker) reads the ticket wheel and cooks the steak at their own pace.
+> [!NOTE]
+> **Beginner's Mental Model — Background Tasks (e.g., Celery):**
+> Imagine you are a **waiter at a busy restaurant**. A customer orders a steak and asks for a printed receipt. You don't walk into the kitchen, stand there for 30 minutes watching the chef cook the steak, and make the customer wait before printing their receipt. Instead, you write down the order (enqueue a task) and stick it on the kitchen ticket wheel (the message broker). You immediately print their receipt and move on to serve other tables (return the HTTP response). Meanwhile, the chef (the background worker) cooks the steak at their own pace.
 
 Many web applications need to perform work that is too slow or too unreliable to do inside an HTTP request/response cycle: sending emails, generating reports, processing images, calling third-party APIs, or running data pipelines. Background task processing offloads this work to separate worker processes that consume tasks from a message broker (like Redis or RabbitMQ).
 

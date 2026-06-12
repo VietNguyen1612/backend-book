@@ -585,7 +585,6 @@ Serverless functions (AWS Lambda, Cloud Functions) break the pooling model: the 
 > [!NOTE]
 > **Beginner's Mental Model — ETL vs. ELT:**
 > Imagine you run a juice company importing oranges from different farms:
->
 > - **ETL (Extract, Transform, Load)** is like squeezing the oranges into juice at a factory *before* shipping the cartons to your retail stores. The stores receive ready-to-sell juice, saving space and weight, but if they later decide they wanted orange marmalade instead, they are out of luck because the raw oranges were already processed.
 > - **ELT (Extract, Load, Transform)** is like shipping the whole, raw oranges directly to a massive warehouse store first. Once inside the warehouse, you can squeeze them into juice, make marmalade, or slice them up on demand using the warehouse's advanced kitchen. This keeps the raw data available for any future use, but requires a powerful, modern warehouse to handle the processing.
 

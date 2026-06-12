@@ -164,7 +164,6 @@ The most common failure mode is writing the doc *after* the code is already writ
 > [!NOTE]
 > **Beginner's Mental Model — Technical Debt:**
 > Imagine you are **moving into a new house** and need to put away 100 boxes:
->
 > - **Doing it right:** You unbox everything, put things neatly on shelves, and label the cabinets. It takes a few days (high initial effort), but for the next year, you can find any item in 5 seconds.
 > - **Taking on debt:** Because you are in a rush, you stack all the boxes in the middle of the living room. It takes only 10 minutes (low initial effort), but for the next year, finding a clean pair of socks takes you 20 minutes of digging through cardboard. That extra 20 minutes is the **interest** you pay on your clutter (technical debt). A little debt is fine to meet a deadline, but if you never clean up, your house eventually becomes unlivable.
 

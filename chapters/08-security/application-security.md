@@ -1305,7 +1305,6 @@ You should almost never implement a cryptographic primitive yourself -- the job 
 > [!NOTE]
 > **Beginner's Mental Model — Hashing vs. Encryption vs. Encoding:**
 > Think of these three as different ways to handle a written message:
->
 > - **Hashing (The Paper Shredder):** You run a document through a shredder that turns it into a unique pile of colorful confetti. You can never reconstruct the original document from the confetti (one-way), but if you shred the exact same document tomorrow, it will produce the exact same pile of confetti. This is perfect for verifying a secret without storing the secret itself.
 > - **Encryption (The Locked Safe):** You place the document inside a sturdy safe. It is completely hidden from view (confidentiality), but if you have the key, you can unlock the safe and retrieve the original document completely intact (reversible).
 > - **Encoding (Translating to Morse Code):** You translate the English document into Morse code dots and dashes. It looks scrambled to someone who doesn't speak Morse code, but there is no key or password required—anyone can easily translate it back. It is used for compatibility and formatting, not security.

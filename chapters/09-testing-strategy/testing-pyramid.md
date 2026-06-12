@@ -5,7 +5,6 @@
 > [!NOTE]
 > **Beginner's Mental Model — The Testing Pyramid:**
 > Imagine building a **new house**:
->
 > - **Unit Tests (Testing individual bricks):** Before laying a single brick, you test if each brick is solid and doesn't crumble under pressure. These tests are extremely fast and cheap to perform.
 > - **Integration Tests (Testing plumbing and wiring):** Once the walls are up, you test if the pipes connect to the boiler without leaking and if the switches turn on the correct lights. These take more time and effort to set up because they involve real connections.
 > - **End-to-End/E2E Tests (Living in the house):** You walk through the front door, turn on the TV, flush the toilet, and cook a meal to see if the whole house works together for a resident. This is highly realistic but slow, expensive, and difficult to do for every single corner of the house.
@@ -476,7 +475,6 @@ class BookDatabaseTest(TransactionTestCase):
 > [!NOTE]
 > **Beginner's Mental Model — Mocks vs. Stubs:**
 > Imagine you are testing a **detective script** in a play:
->
 > - **A Stub is like a helpful bystander (an informant):** When the detective asks, "Where did the suspect go?", the stub simply replies with a pre-scripted answer: "They ran down Elm Street." The stub doesn't care who is asking or how many times; it just supplies the necessary information so the detective can continue their investigation.
 > - **A Mock is like a wiretap or a spy log:** It sits quietly during the play, but at the end, you check its records to verify: "Did the detective make exactly one phone call to the chief of police, and did they pass the correct suspect name?" The mock's job is to verify *actions and behavior*, not just supply answers.
 

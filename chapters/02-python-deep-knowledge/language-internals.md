@@ -433,7 +433,6 @@ print(Serializable._versions)
 
 > [!NOTE]
 > **Beginner's Mental Model — Reference Counting vs Generational GC:**
->
 > - **Reference Counting** is like a sign-in sheet on a library book. Every time a program takes a reference to an object, its count goes up by 1. When a reference is deleted, the count goes down by 1. When the count hits 0, the book is instantly thrown away.
 > - **Generational GC** is like a periodic garbage sweep. If Person A and Person B are holding hands (circular reference), their sign-in count never hits 0 even if everyone else has left the library. The sweep engine goes through the library, identifies these isolated groups holding hands in a closed circle, and throws them out together.
 

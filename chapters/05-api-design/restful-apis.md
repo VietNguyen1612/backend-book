@@ -191,7 +191,6 @@ curl -X DELETE http://localhost:8000/users/2
 > [!NOTE]
 > **Beginner's Mental Model — HTTP Status Codes:**
 > Think of HTTP status codes as the hand signals a flight attendant gives you after a request:
->
 > - **2xx (Success):** A thumbs-up. Your meal is here (`200 OK`) or was freshly cooked (`201 Created`).
 > - **3xx (Redirection):** Pointing you to another seat. "Please go to seat 12B instead."
 > - **4xx (Client Error):** The attendant pointing at you because you made a mistake. "You can't open the cockpit door (`403 Forbidden`) or you asked for a non-existent item (`404 Not Found`)."

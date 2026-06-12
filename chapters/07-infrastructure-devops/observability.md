@@ -5,7 +5,6 @@
 > [!NOTE]
 > **Beginner's Mental Model — Logs vs. Metrics vs. Traces:**
 > Imagine your application is a **high-speed delivery truck**:
->
 > - **Metrics (The Dashboard):** These are the gauges on the truck's dashboard—speedometer, fuel level, engine temperature. They tell you *how* the truck is performing overall (e.g., "The engine temperature is at 98°C", "We are running at 80% capacity"). They are cheap to watch, always active, and let you know *if* there is a problem.
 > - **Logs (The Driver's Diary):** This is a detailed logbook where the driver writes down major events (e.g., "10:15 AM: Stopped at gas station", "10:30 AM: Flat tire on route 5"). They don't tell you the engine temperature second-by-second, but when a problem occurs, they give you the exact context of *what* happened at that specific moment.
 > - **Traces (The GPS Breadcrumb Trail):** This is a detailed map tracing the exact route a single package took through the sorting facility, the delivery truck, and to the customer's door, showing exactly how long it spent at each step. It helps you see *where* the delays or failures occurred along a multi-step journey.

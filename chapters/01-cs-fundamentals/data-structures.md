@@ -8,6 +8,8 @@
 
 ### Arrays & Linked Lists
 
+To understand how computer programs store lists of information, it helps to imagine two different ways of organizing physical items. Suppose you are setting up a row of numbered lockers side-by-side. If you need to find something in locker number five, you can walk directly to it without opening any other doors. However, if you want to squeeze a new locker right in the middle, you have to physically shift every single locker after it down by one slot. This is the core idea behind an array: items sit next to each other in a continuous line, making them incredibly fast to look up but slow and tedious to reorganize. Now imagine a scavenger hunt where each location contains a clue directing you to the next spot. You cannot jump straight to the fifth clue without following the trail from the very beginning. But if you want to add a new step to the hunt, you only need to write a new clue and update the previous clue to point to it, leaving all other locations untouched. This represents a linked list, where items are scattered but connected sequentially by pointers.
+
 #### Arrays (Contiguous Memory Layout)
 
 An array stores elements in a contiguous block of memory. Because elements sit side-by-side, you can jump directly to any element by computing its address: `base_address + index * element_size`. This gives arrays **O(1) random access**, which is their defining advantage.
@@ -186,6 +188,8 @@ rb.write("event_5")  # Reuses the slot freed by the read
 > Imagine a coat check room. When you hand over your jacket, the attendant uses a quick rule (a hash function) to decide which hook to hang it on based on your ticket number. When you return, they don't search through every jacket one-by-one; they apply the same rule to your ticket and go straight to the correct hook.
 
 ### Hash Tables
+
+Imagine you are running a busy coat check room at a theater. When guests hand you their jackets, you could hang them up in a random order, but finding them later would require searching through the entire rack one by one. Instead, you use a simple rule: you look at the first letter of the guest's last name and hang their coat on a hook corresponding to that letter. When a guest returns with their ticket, you apply the same rule to instantly locate their coat. A hash table works in the exact same way. It uses a mathematical rule called a hash function to take a key (like a guest's name) and calculate a specific index (the hook) where the corresponding value (the coat) should be stored. This allows you to find, add, or remove data almost instantly, bypassing the need to search through every entry in the system.
 
 #### How Hash Tables Work
 
@@ -421,6 +425,8 @@ $ python -c 'print(hash("attacker-controlled-key"))'
 > Think of a tree like a computer's file system. You start at the "root" folder (e.g., C:\), which contains subfolders, which in turn contain more subfolders or files (leaves). To find a file, you follow a single, branching pathway down from the root, narrowing your search at every folder you open.
 
 ### Trees
+
+Consider how you navigate files on your computer. You start at a single top-level folder, like your main drive, and open subfolders to reveal more folders, eventually leading to individual files. This nested structure resembles a tree. In computer science, a tree is a data structure made of nodes connected in a hierarchy. Rather than arranging data in a flat list, trees organize data in parent-child relationships, starting from a single node called the root. By branching outward, trees allow you to discard large portions of irrelevant data at each step of a search, much like clicking through a folder structure instead of scanning every file on your hard drive.
 
 #### Binary Search Tree (BST)
 
@@ -769,6 +775,8 @@ print(ft.range_sum(2, 4))  # Updated: 650
 
 ### Graphs
 
+Think about a map of cities connected by highways, or a network of friends on social media. Unlike a tree, which has a strict top-down structure with no loops, these networks are web-like and can have multiple paths, dead ends, and circular routes. In computer science, we call this structure a graph. A graph consists of points called nodes (representing cities or people) and connections called edges (representing highways or friendships). Because there is no single root or starting point, graphs let us model complex, interconnected systems where any node can connect to any other node, allowing us to solve problems like finding the shortest driving route or recommending mutual friends.
+
 #### Graph Representations
 
 A graph consists of vertices (nodes) and edges (connections). The two primary representations have very different performance characteristics:
@@ -1055,6 +1063,8 @@ Each element is "promoted" to a higher level with some probability (typically 0.
 > Imagine a bouncer at a club with a quick checklist. If you aren't on the guest list, the bouncer can tell you immediately: "You are definitely not on the list" (no false negatives). But if you have a common name, the bouncer might say: "You might be on the list, let me call the manager to double-check" (potential false positive). It saves the manager from checking the heavy database binder for every single person.
 
 #### Bloom Filter
+
+Imagine you are a receptionist at a highly secure building, and there is a massive registry book of authorized visitors. Flipping through this thick book to check every single visitor takes a long time and slows down the entry line. To speed things up, you create a quick, simplified checklist on a single sheet of paper using a special marking code. When someone approaches, you check this sheet first. If their code isn't marked, you can say with absolute certainty: "You are definitely not on the guest list." However, because the marking code is simplified, there is a small chance that different names might produce the same markings. If the sheet shows a mark, you must tell the visitor: "You might be on the list; let me double-check the big registry book." This is how a Bloom filter works. It is an incredibly fast, memory-saving tool that tells you whether an item is definitely not in a set, or if it might be in the set, helping you avoid slow database lookups for items that aren't there.
 
 A Bloom filter is a space-efficient **probabilistic data structure** for testing set membership. It can tell you "definitely not in the set" or "probably in the set." **False positives are possible, but false negatives are impossible.**
 

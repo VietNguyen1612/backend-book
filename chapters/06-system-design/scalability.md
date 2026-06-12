@@ -4,12 +4,11 @@
 
 ### Horizontal vs Vertical Scaling
 
-> [!NOTE]
-> **Beginner's Mental Model — Horizontal vs Vertical Scaling:**
-> Imagine you run a bakery and need to bake more bread:
->
-> - **Vertical Scaling (Scaling Up)** is like buying a bigger, more expensive oven. It fits more bread and doesn't change how you work, but eventually, you can't buy an oven any larger, and the cost of giant ovens grows ridiculously high.
-> - **Horizontal Scaling (Scaling Out)** is like buying ten more regular-sized ovens. You can bake almost infinite bread by just adding more ovens, but now you have to coordinate a team of bakers to manage them, and you must make sure they don't fight over the same ingredients (statelessness).
+When an application grows and traffic increases, its existing servers can become overwhelmed. To keep up with demand, engineers must choose how to scale the system. Imagine you run a bakery and need to bake more bread to serve an increasing number of customers.
+
+One approach is **Vertical Scaling (Scaling Up)**, which is like buying a single, much larger and more expensive oven. This doesn't change your daily workflow—you still put all the dough into one oven—but eventually, you hit a physical limit because manufacturers do not build ovens beyond a certain size. Furthermore, the cost of specialized, giant ovens grows exponentially.
+
+The alternative is **Horizontal Scaling (Scaling Out)**, which is like buying ten more regular-sized ovens and placing them side-by-side. You can bake an almost infinite amount of bread by simply adding more ovens as demand grows. However, this introduces coordination challenges: you now need a team of bakers to manage all the ovens, and you must design a system to ensure they do not fight over the same mixing bowls or ingredients (a concept in software called statelessness).
 
 **Vertical Scaling (Scale Up)** means upgrading the hardware of a single machine -- more CPU cores, more RAM, faster SSDs, better network cards. This approach is attractive because it requires zero changes to your application code. A single-threaded application that runs on 1 CPU and 4 GB of RAM will run just as well on a machine with 64 CPUs and 512 GB of RAM (it will just have more headroom). Databases, in particular, benefit from vertical scaling because coordinating writes across multiple machines is inherently difficult. The downsides are clear: there is a hard ceiling on how large a single machine can get (you cannot buy a server with 1 million CPUs), and cost increases non-linearly. Going from 16 GB to 32 GB of RAM might cost 2x, but going from 512 GB to 1 TB can cost 5-10x due to specialized hardware.
 
@@ -26,9 +25,7 @@ Auto-scaling is the automated version of horizontal scaling. Cloud providers let
 
 ### Load Balancing
 
-> [!NOTE]
-> **Beginner's Mental Model — Load Balancer:**
-> Think of a load balancer as a host at a busy restaurant. Instead of customers crowding the kitchen door and overwhelming the chefs, they wait at the entrance. The host greets each customer and assigns them to an open table or a specific chef who isn't busy. If a chef goes home sick (server health check fails), the host stops sending guests to that chef's station until they recover.
+Once you have horizontally scaled your application by running multiple servers, you need a way to distribute incoming traffic among them. Think of a load balancer as a host standing at the entrance of a busy restaurant. Instead of allowing customers to crowd the kitchen door and overwhelm a single chef, the host greets guests at the door and assigns them to an open table or routes them to a specific chef who is currently free. If a chef goes home sick (similar to a server failing a health check), the host immediately notices and stops sending guests to that station until the chef recovers and returns to work. In this way, the load balancer keeps the workload balanced and ensures that no single server is crushed by traffic while others sit idle.
 
 A load balancer sits between clients and a pool of backend servers, distributing incoming requests across the pool. Load balancers are essential for horizontal scaling, high availability, and graceful maintenance.
 
@@ -365,9 +362,7 @@ Cache MISS for cache:user:42
 
 The first step in production is always *detection*: instrument the cache client to track per-key request rates so you can identify a celebrity key before it melts a node, rather than after.
 
-> [!NOTE]
-> **Beginner's Mental Model — Content Delivery Network (CDN):**
-> Imagine you publish a popular magazine in New York, and readers all over the world want it. If every single reader in Tokyo or London has to wait for a ship to deliver the magazine from New York, it will take weeks. Instead, you send digital copies to local printing shops (CDN edge servers) in Tokyo and London. When a local reader wants a copy, they get it instantly from the shop down the street, saving time and reducing the load on your main office in New York.
+To speed up access for users scattered across different countries, web architectures use a Content Delivery Network. Imagine you publish a popular magazine in New York, and readers all over the world want to read it. If every single subscriber in Tokyo or London has to wait for a cargo ship to transport their individual copy from New York, delivery will take weeks. Instead, you send digital templates of the magazine to local print shops (known as CDN edge servers) in Tokyo and London. When a reader in Tokyo wants a copy, they pick it up instantly from the shop down the street. This drastically reduces transit time for the user and cuts down on the mailing bottleneck at your main office in New York.
 
 **CDN (Content Delivery Network)** caches content at edge locations geographically close to users. Services like CloudFront, Cloudflare, and Fastly cache static assets (images, CSS, JavaScript) and can also cache API responses. Control caching behavior with HTTP headers (`Cache-Control: public, max-age=86400`), configure cache keys (what makes two requests "the same" from the CDN's perspective), and use purge/invalidation APIs when content changes.
 

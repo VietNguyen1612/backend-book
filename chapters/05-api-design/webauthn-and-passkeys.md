@@ -2,11 +2,9 @@
 
 # 5.4 WebAuthn & Passkeys
 
-> [!NOTE]
-> **Beginner's Mental Model — Passkeys and WebAuthn:**
-> Think of WebAuthn as a custom digital signature stamp. Instead of writing a secret signature (a password) on a document that anyone could copy or steal, you own a secure, biometric stamp machine (your device's authenticator) that only activates with your fingerprint or face scan.
->
-> When you register with a site, your device generates a unique stamp (the public key) and gives it to the site, keeping the actual design template (the private key) locked deep inside your device. Every time you log in, the site sends a blank check (a challenge) to your device. You scan your face/fingerprint to authorize your device to stamp the check. The site verifies the stamp using the public key it stored, proving it was you, without you ever having to share the secret design template or type a password.
+To appreciate how WebAuthn and passkeys protect our digital identities, it helps to visualize them as a custom digital signature stamp. Traditional passwords are like handwritten signatures or secrets written on a piece of paper; if anyone sees or copies them, they can impersonate you anywhere. With WebAuthn, you instead own a highly secure, biometric signature stamp machine—your device's built-in authenticator (like your phone's face scanner or fingerprint reader).
+
+When you register an account with a website, your device creates a unique stamp mark (the public key) and shares it with the site, while keeping the actual stamp machine template (the private key) locked deep inside your device's secure hardware. Every time you want to log in, the website sends your device a unique, one-time document to sign (known as a challenge). You scan your face or fingerprint to authorize your device to press the stamp onto the document. The site then checks the stamp mark against the public key it stored during registration. If it matches, the site knows the request came from your authentic device, proving your identity without you ever needing to type a password or share the secret design template.
 
 Section 5.3 covered passwords, OAuth, and JWTs -- all of which ultimately rest on a *shared secret* (a password, a client secret, a signing key) that can be phished, leaked, or replayed. WebAuthn removes the shared secret from the login path entirely by using public-key cryptography, and **passkeys** are the user-friendly packaging that has made it mainstream. This section explains the model, the two ceremonies, and the operational gotchas.
 

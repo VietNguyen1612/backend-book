@@ -12,6 +12,8 @@ Before the TCP and HTTP details, it helps to see where each protocol sits. Netwo
 
 #### OSI vs TCP/IP and Encapsulation
 
+To understand how different computers on the internet talk to each other, it helps to think of the process of sending a physical letter through the mail. You start by writing your message on a piece of paper (the Application layer). Then, you might translate it into a language the recipient understands or fold it up to fit (the Presentation layer). Next, you establish the social protocols of a conversation, starting with a greeting like "Dear Friend" (the Session layer). You then choose a delivery service—perhaps registered mail to guarantee it arrives safely (the Transport layer). After that, you write the specific street address and zip code on the envelope (the Network layer). You drop the envelope in a local mail carrier's truck (the Link layer), which carries it over physical roads and highways (the Physical layer) to its destination. The internet works exactly like this mailing process, divided into structured steps called the OSI Model. Each layer has a specific job and relies on the layer immediately below it to carry its data, and the receiving computer reverses the entire process to read the message.
+
 The 7-layer OSI model is the academic reference; the 4-layer **TCP/IP model** is what the internet actually runs on. The mapping that matters in practice:
 
 ```
@@ -227,6 +229,8 @@ net.ipv4.tcp_rmem = 4096	131072	6291456
 
 #### TCP vs UDP
 
+When computers send packets of data across a network, they generally choose between two primary protocols: TCP and UDP. Think of TCP as a phone call. Before you start speaking, you dial the number and establish a connection. As you talk, you frequently check in by asking "Did you hear that last sentence?", and you wait for a nod or confirmation (an acknowledgement) before moving on. If the line crackles and the other person misses a word, you repeat yourself. This makes TCP highly reliable, but it adds constant back-and-forth overhead. In contrast, think of UDP as shouting through a megaphone to a crowd. You broadcast your message as fast as possible. If someone in the crowd misses a word because of a passing breeze or background noise, you do not stop to repeat it; you just keep shouting the new information. This makes UDP incredibly fast and lightweight, but it offers no guarantee that every single word actually reached the listener.
+
 | Feature | TCP | UDP |
 |---|---|---|
 | Reliability | Guaranteed delivery, ordering | Best-effort, no guarantees |
@@ -420,6 +424,8 @@ Client 1.2.3.4 -> Proxy A -> Proxy B (reverse proxy) -> app server
 
 ### DNS
 
+Every device connected to the internet is identified by a unique numerical address, called an IP address, which looks like a string of numbers (for example, 93.184.216.34). Because humans are terrible at memorizing random lists of numbers, we use readable domain names like "example.com" instead. The Domain Name System, or DNS, is the phonebook of the internet. When you type a website name into your browser, your computer does not know where to send the request yet. It first queries the DNS directory, asking "What is the phone number (IP address) for this name?" The system searches its databases and returns the correct numerical address, allowing your browser to connect to the target server.
+
 #### Recursive Resolution
 
 When your browser needs to resolve `api.example.com`, this is what happens:
@@ -508,6 +514,8 @@ DNSSEC adds cryptographic signatures to DNS records, creating a **chain of trust
 > Imagine you want to send a locked box of secret messages to a server. In older TLS versions, you had to say hello, ask for their certificate, agree on a type of lock, exchange keys, and then finally lock the box (taking two round trips). In **TLS 1.3**, it's a 1-RTT handshake: you immediately send your half of a lock combo in your very first greeting ("Hello, here is my key share"). The server sends back its certificate and its half of the combo, and you instantly begin exchanging locked boxes.
 
 #### TLS 1.3 Handshake
+
+To prevent eavesdroppers from reading private data sent over the internet, we encrypt the connection using TLS. Think of this as sending a locked box of secret messages between yourself and a server. In older versions of TLS, establishing this secure connection was a slow, multi-step process: you had to say hello, request the server's certificate of identity, agree on a type of lock to use, exchange key pieces, and finally lock the box—a process that required two full round-trips of data before any real messages could be sent. The modern TLS 1.3 handshake streamlines this into a single round-trip. When you send your very first greeting, you proactively include your half of the lock combination. The server responds with its certificate and its own half of the combination, allowing both of you to immediately begin encrypting and exchanging locked boxes without wasting any extra time.
 
 TLS 1.3 drastically simplified the handshake, reducing it from 2 RTTs (TLS 1.2) to **1 RTT**. It removed all insecure cipher suites and only supports AEAD ciphers (AES-128-GCM, AES-256-GCM, ChaCha20-Poly1305).
 

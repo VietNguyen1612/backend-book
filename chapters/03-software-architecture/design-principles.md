@@ -8,6 +8,8 @@
 
 ### SOLID Principles
 
+When you build a house, you do not glue the light bulbs directly to the electrical wires, nor do you cement the refrigerator into the kitchen floor. If you did, replacing a burnt-out bulb would require calling an electrician to splice wires, and upgrading your fridge would mean tearing down a wall. Instead, we use standardized sockets, plugs, and modular spaces. The SOLID principles are a set of five design guidelines that bring this same modularity to software. They ensure that our codebase is built from independent, swappable parts rather than a single, tangled web of code. By following these rules, we can change or expand one part of our application—like switching how we calculate discounts or saving data to a different database—without triggering a chain reaction of bugs throughout the rest of the system.
+
 #### S -- Single Responsibility Principle (SRP)
 
 A class or module should have **one and only one reason to change**. This does not mean "does one thing" in a narrow sense. Rather, it means that exactly one actor or stakeholder should be the source of requirements changes for that module. When a module serves two different stakeholders, a change requested by one stakeholder risks breaking functionality for the other.
@@ -856,6 +858,8 @@ Knowing the named anti-patterns gives you a shared vocabulary for code review an
 > Think of the application core as a smartphone. The phone has defined ports (like a USB-C socket or Bluetooth connection). It doesn't care if you plug in a charger, a pair of headphones, or a keyboard—as long as the accessory has the matching connector (the adapter). The phone's core logic (making calls, running apps) is completely isolated from how it gets power or outputs sound, making it easy to swap accessories without redesigning the phone itself.
 
 ### Clean Architecture / Hexagonal Architecture
+
+Imagine a modern television set. The TV has a core display screen and internal processors that decode signals, but it does not have a built-in, unchangeable DVD player, cable box, or game console glued inside its frame. Instead, the TV provides standardized plugs on the back—like HDMI and USB ports. You can plug in a PlayStation, an Apple TV, or a laptop. The television does not care *what* is plugged into the port, as long as the cable fits the socket. This is the core philosophy of Clean and Hexagonal Architecture. The core business rules of your application (the TV screen and processor) are completely isolated from external details like databases, web frameworks, and third-party APIs (the game consoles and players). By defining clear boundaries and interfaces—known as 'ports'—your core code remains untouched even if you completely swap out your database from PostgreSQL to MongoDB, or switch your web framework from Django to FastAPI. You simply build a new 'adapter' (like a new cable) to connect the external tool to the existing port.
 
 Clean Architecture (Robert C. Martin) and Hexagonal Architecture (Alistair Cockburn) share the same core insight: **dependencies should point inward**, toward the domain. The core business logic should have zero knowledge of frameworks, databases, or external services. Those are details that belong in outer layers.
 

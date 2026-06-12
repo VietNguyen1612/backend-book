@@ -4,6 +4,8 @@
 
 ### asyncio
 
+To understand how asynchronous programming works, imagine a busy restaurant kitchen staffed by a single chef (representing a single CPU thread) and a ticket board (representing the Event Loop). In a traditional system using threads (called preemptive multitasking), a manager stands in the kitchen blowing a whistle every ten seconds, forcing the chef to instantly stop whatever they are doing to switch to a different dish, even if they were in the middle of pouring a delicate sauce. In cooperative multitasking, however, the chef is in complete control of when they switch tasks. The chef might chop onions, and when they put a pot of water on the stove to boil (representing a slow network request or database lookup), they voluntarily check the ticket board (the event loop) and say: "Since this water will take ten minutes to boil, I will use this idle time to chop carrots for table three." The chef only switches tasks at clear, pre-defined pausing points (which are the `await` statements in your code). This cooperative approach allows a single thread to handle thousands of tasks concurrently by never letting the CPU sit idle during slow data transfers.
+
 > [!NOTE]
 > **Beginner's Mental Model — Asyncio Event Loop & Cooperative Multitasking:**
 > Imagine a kitchen with one chef (the single thread) and a ticket board (the Event Loop).

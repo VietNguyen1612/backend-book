@@ -4,9 +4,7 @@
 
 ### CI/CD Pipelines
 
-> [!NOTE]
-> **Beginner's Mental Model — CI/CD Automation:**
-> Imagine a CI/CD pipeline as an **automated assembly line and quality control system in a car factory**. As soon as you design a new part (write code), the assembly line automatically runs it through a series of tests: checking the dimensions (linting/type checking), crash-testing it in isolation (unit tests), assembling it into a test car (building), and driving it on a test track (integration tests). If any test fails, the assembly line halts immediately so you don't ship a faulty car to the customer (deploying to production).
+To understand a CI/CD pipeline, imagine the automated assembly line and quality control system in a modern car factory. When an engineer designs a new part, they do not just bolt it onto the cars on the main showroom floor. Instead, they feed it into the assembly line, which automatically puts it through a series of automated checks. The assembly line measures the part's dimensions to see if it matches the blueprint (static analysis/linting), stress-tests it in isolation (unit testing), installs it on a prototype frame (building), and drives the prototype on a test track (integration testing). If any check along the line fails, the entire conveyor belt halts immediately, alerting the engineers so that not a single faulty car makes it to a customer. Only when every single test passes is the new part approved to be automatically loaded onto the shipping trucks (deployed to production).
 
 #### Pipeline Stages
 
@@ -363,13 +361,13 @@ Health check 5 passed
 
 ### Deployment Strategies
 
-> [!NOTE]
-> **Beginner's Mental Model — Rolling vs. Blue-Green vs. Canary Deployments:**
-> Imagine you run a busy **restaurant** and need to update your menu:
->
-> - **Rolling Update (Replacing tables one by one):** You update the menu for one table at a time. Some tables have the old menu, others have the new menu. Eventually, everyone gets the new menu. No extra space needed, but you must support both menus simultaneously.
-> - **Blue-Green (Building a twin restaurant):** You build an identical twin restaurant next door, set it up with the new menu, and once it's ready, you close the old restaurant and open the new one instantly. It is extremely safe and easy to switch back if something is wrong, but it costs twice as much because you need two environments.
-> - **Canary (Testing on a few guests):** You keep the old menu for 95% of your tables, but print the new menu for just 5% of your tables (the "canaries"). You watch if they enjoy the food or get sick. If they like it, you slowly roll it out to more tables; if not, you take away those few menus immediately.
+To understand deployment strategies, imagine you run a busy, successful restaurant and need to transition your guests to a brand-new menu without interrupting their dining experience:
+
+A rolling update is like updating the menu one table at a time. The waiters hand the new menu to table one, while tables two through ten still order from the old menu. Once table one finishes their meals successfully, the waiters switch table two to the new menu, and so on. At any given moment, some guests are eating old dishes and others are eating new ones. While this strategy requires no extra tables or space, your kitchen staff must be prepared to cook dishes from both menus at the same time.
+
+A blue-green deployment is like building an exact replica of your restaurant right next door. You set up the new kitchen, print the new menus, and have your chefs cook test meals in the new building (the green environment), while your guests continue dining in the original building (the blue environment). Once the new restaurant is fully ready and tested, you lock the front door of the old building and immediately open the door of the new one, redirecting all incoming guests there. If a sudden issue occurs in the new kitchen, you can instantly direct the guests back to the old, still-intact restaurant. This is incredibly safe, but it is expensive because you have to pay rent for two buildings.
+
+A canary deployment is like introducing the new menu to just one or two tables out of a hundred. You serve the new recipes to these few select guests—your "canaries"—and watch them closely. If they enjoy their meals and do not show any signs of food poisoning, you gradually introduce the new menu to five tables, then ten, then fifty, until everyone has transitioned. If the first few tables complain or get sick, you immediately retrieve the new menus and revert them to the old ones, ensuring that the vast majority of your guests remain unaffected.
 
 #### Blue-Green Deployment
 

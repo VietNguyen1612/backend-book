@@ -89,9 +89,7 @@ A CDN is a globally distributed reverse-proxy cache. The mechanics worth underst
 
 ### Cache Invalidation
 
-> [!NOTE]
-> **Beginner's Mental Model — Cache Invalidation:**
-> Imagine you keep a notepad on your desk with a list of your friends' phone numbers (the cache) so you don't have to look them up in the city directory (the database) every time. **Cache Invalidation** is the process of updating or crossing out a number on your notepad when a friend changes their phone number. If you don't do this (or do it incorrectly), you'll keep calling the old, wrong number (serving stale data).
+One of the most persistent difficulties in caching is knowing when to discard or update cached data. Imagine you keep a notepad on your desk containing a list of your friends' phone numbers (serving as your cache) so you do not have to look them up in the large city phonebook (the database) every time you want to call someone. **Cache Invalidation** is the act of crossing out or updating a phone number on your notepad whenever one of your friends changes their number. If you fail to do this, or if the update message gets lost, you will continue to dial the old, incorrect number, resulting in what software engineers call serving stale data. Ensuring that your notepad remains in sync with the primary phonebook without constantly re-reading the phonebook is the core challenge of cache invalidation.
 
 > "There are only two hard things in Computer Science: cache invalidation and naming things." -- Phil Karlton
 
@@ -105,9 +103,7 @@ The strategies, from simplest to strongest:
 
 ### Cache Stampede (Thundering Herd)
 
-> [!NOTE]
-> **Beginner's Mental Model — Cache Stampede (Thundering Herd):**
-> Imagine a popular restaurant has a sign in the window showing the "Special of the Day" (the cached value). Everyone looks at the sign and orders without asking the chef. Suddenly, the wind blows the sign away (the cache expires). At that exact moment, 100 hungry customers all run into the kitchen at once to ask the chef what the special is. The chef is overwhelmed by the sudden stampede and the kitchen grinds to a halt.
+Under high traffic, a sudden expiration of a cached item can cause severe system stress. Imagine a popular restaurant has a chalkboard sign in the window displaying the 'Special of the Day' (the cached value). Customers look at the sign and place their orders immediately without bothering the kitchen staff. Suddenly, a gust of wind blows the sign away, erasing the message (the cache expires). If a hundred hungry customers arrive at that exact moment, they will all run into the kitchen simultaneously to ask the chef what the special is. The chef is instantly overwhelmed by the sudden influx of questions and the kitchen grinds to a halt. In software systems, this scenario is known as a cache stampede or thundering herd. It occurs when multiple incoming requests discover a cache miss at the exact same moment and all hit the database simultaneously to reload the data, overloading the database server.
 
 When a popular key expires, every concurrent request misses at once and hits the origin simultaneously -- the recomputation that was supposed to be amortized across thousands of reads now happens thousands of times in a burst, often toppling the database.
 

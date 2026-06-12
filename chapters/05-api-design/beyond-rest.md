@@ -4,9 +4,7 @@
 
 ### GraphQL
 
-> [!NOTE]
-> **Beginner's Mental Model — GraphQL:**
-> Think of a traditional REST API as a fixed set menu at a restaurant: you order Item #3, and you get exactly what's on that plate, even if you only wanted the side salad. GraphQL, on the other hand, is a buffet. You walk up with a plate and request exactly the food items you want, in the exact quantities you need, and nothing more.
+When designing web interfaces, we often face the challenge of retrieving the right amount of information. To understand GraphQL, think of a traditional REST API as a fixed set menu at a restaurant: when you order Item #3, you get exactly what is on that plate, even if you only wanted the side salad. If you want a variety of items, you might have to make several individual orders, resulting in multiple trips. GraphQL, on the other hand, functions like a buffet. You walk up to the counter with a single plate and request exactly the food items you want, in the exact quantities you need, and nothing more. This eliminates both over-fetching (getting extra, unwanted data) and under-fetching (not getting enough data in one request).
 
 **Schema-First Design**
 
@@ -174,9 +172,7 @@ Resolvers are the functions that fetch data for each field in the schema. Every 
 
 The resolver chain works hierarchically. If a `Post` type has an `author` field of type `User`, the engine first resolves the `Post`, then calls the `author` resolver on the result to resolve the nested `User`.
 
-> [!NOTE]
-> **Beginner's Mental Model — DataLoader:**
-> Imagine a waiter who needs to bring drinks to 10 guests. A naive waiter would walk to the bar, grab one drink, walk back to the table, and repeat this 10 times (the N+1 problem). A smart waiter using a **DataLoader** waits until everyone has placed their order, walks to the bar once with a large tray, collects all 10 drinks in a single batch, and distributes them all at once.
+When fetching nested data in GraphQL, we frequently run into efficiency issues. Imagine a waiter who needs to bring drinks to ten guests sitting at a table. A naive waiter would walk to the bar, grab one drink, walk back to the table to serve it, and repeat this trip ten times. In software engineering, this is known as the N+1 database query problem, where one initial query for a list of items leads to N subsequent queries to fetch related details. A smart waiter solves this using a technique similar to a **DataLoader**: they wait until everyone at the table has placed their order, make a single trip to the bar with a large tray, collect all ten drinks in one batch, and distribute them all at once. By grouping individual data requests together, a DataLoader allows the server to fetch all nested resources in a single, highly efficient query.
 
 **The N+1 Problem and DataLoader**
 
@@ -386,9 +382,7 @@ REST is better when: (a) your API is simple CRUD with flat resources, (b) HTTP c
 
 ### gRPC
 
-> [!NOTE]
-> **Beginner's Mental Model — gRPC:**
-> Imagine two remote offices communicating. Instead of writing long letters in plain text (like JSON) and posting them in mailboxes (REST over HTTP/1.1), they install a high-speed intercom system (gRPC over HTTP/2). They speak in a highly compressed code language (Protocol Buffers binary format) that only they understand. It's incredibly fast, direct, and eliminates any guesswork because both ends must strictly follow the same pre-defined script (the `.proto` file).
+While REST APIs are excellent for public-facing web applications, they can introduce unnecessary overhead in internal service-to-service communication. Imagine two remote offices that need to exchange messages. Instead of writing long, verbose letters in plain text (similar to JSON) and posting them in physical mailboxes that take time to deliver (similar to REST over HTTP/1.1), they install a high-speed, direct intercom system (gRPC over HTTP/2). They speak to each other in a highly compressed code language (Protocol Buffers binary format) that only their intercoms understand. This connection is incredibly fast, direct, and eliminates any guesswork because both offices must strictly follow the same pre-defined script (the `.proto` file) that outlines exactly what messages can be sent and received.
 
 **Protocol Buffers (protobuf)**
 
@@ -663,9 +657,7 @@ gRPC is ideal for inter-service communication (especially in polyglot environmen
 
 ### WebSocket & Server-Sent Events
 
-> [!NOTE]
-> **Beginner's Mental Model — WebSockets:**
-> Traditional HTTP is like sending letters: you send a letter, and the server sends one back, then the connection closes. If you want more updates, you must send another letter. A **WebSocket** is like opening a phone call: once you dial and the other side picks up (the handshake), the line stays open indefinitely. Both you and the server can talk at the same time whenever you have something to say, without the overhead of redialing.
+For applications that require real-time updates, the standard request-response model of web browsing falls short. Traditional HTTP is like sending letters through the mail: you send a letter, the server sends one back, and the postman leaves. If you want more updates, you must write and send another letter, paying the delivery cost each time. A **WebSocket** connection is more like establishing a phone call. Once you dial and the other side picks up (known as the initial handshake), the line stays open indefinitely. Both you and the server can talk at the same time whenever you have something to say, without the overhead of redialing or sending new letters. This persistent connection enables instantaneous, bidirectional updates.
 
 **WebSocket**
 
@@ -906,9 +898,7 @@ Additional scaling considerations: impose connection limits per server, implemen
 
 ### Message Queues & Async APIs
 
-> [!NOTE]
-> **Beginner's Mental Model — Message Queues:**
-> Think of a message queue as a post office. Instead of a customer (the client) waiting in line at the counter until a clerk (the worker) finishes a complex, 10-minute task, the customer drops their request in a mailbox (the message queue) and leaves. The mail clerks can retrieve requests from the box and process them one by one at their own pace. If a rush of requests arrives, they don't crash the system; they simply queue up in the mailbox until the clerks can get to them.
+In modern architectures, services often need to hand off tasks that take time to complete, such as generating a PDF report or sending an email blast. To prevent the user from waiting, we use message queues. Think of a message queue as a post office. Instead of a customer (the client) waiting in front of the clerk (the worker) at the counter until a complex, ten-minute mailing task is completed, the customer drops their request in a mailbox (the message queue) and immediately goes about their day. The postal clerks can retrieve requests from the mailbox and process them one by one at their own pace. If a sudden rush of requests arrives, they do not crash the post office; instead, the letters simply pile up safely in the mailbox until the clerks can catch up. This decouples the initial request from the heavy lifting of processing it.
 
 **RabbitMQ**
 

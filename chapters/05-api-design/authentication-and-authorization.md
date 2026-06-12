@@ -1,14 +1,10 @@
 [Back to Chapter](README.md) | [Back to Book](../../README.md)
 
-> [!NOTE]
-> **Beginner's Mental Model — Authentication vs Authorization:**
-> Think of **Authentication** as the bouncer checking your ID at a club entrance to verify *who you are*. Once you are inside, **Authorization** is the VIP pass or wristband that decides *where you are allowed to go* (e.g., you can enter the dance floor, but you are not allowed in the backstage VIP lounge or the DJ booth).
+When securing a backend application, developers must address two fundamental questions: *Who is the user?* and *What are they allowed to do?* While these questions sound similar, they are handled by two distinct security processes. To understand the difference, think of a bouncer standing at the entrance of an exclusive club. **Authentication** is when the bouncer checks your driver's license to verify that you are indeed the person you claim to be. Once the bouncer lets you inside, **Authorization** comes into play—this is the VIP wristband or pass that dictates which sections of the club you can access. You might be allowed onto the main dance floor but barred from entering the backstage lounge or the DJ booth. In software terms, authentication verifies identity, whereas authorization manages permissions.
 
 ### Authentication
 
-> [!NOTE]
-> **Beginner's Mental Model — OAuth 2.0 Flow:**
-> Imagine you arrive at a smart hotel and want to use a third-party app to open your room door. Instead of giving the app your master keycard (your password), the app redirects you to the hotel lobby (Authorization Server). You log in at the lobby, and the hotel clerk gives the app a temporary valet key (Access Token) with a limited expiration that *only* opens your specific door for the next hour.
+To handle access sharing between different applications securely, we use a delegation framework called OAuth 2.0. Imagine you arrive at a high-tech hotel and want to use a third-party smartphone app to unlock your room door. Instead of giving that untrusted app your master physical keycard—which would allow it to access any room or see your personal details—the app redirects you to the hotel lobby. You log in securely at the front desk (the Authorization Server). Once the lobby clerk verifies your identity, they hand the smartphone app a temporary valet key (an Access Token) with a limited lifespan. This valet key only opens your specific room door and automatically expires after an hour. The app gets access to the room (the Resource) without ever knowing your login credentials.
 
 **OAuth 2.0 Flows**
 
@@ -252,9 +248,7 @@ Login successful. Tokens stored.
 
 **How to read this output:** the device never sees the user's credentials -- it only ever holds the `device_code` and polls. The two non-error "errors" are the whole protocol: `authorization_pending` is the *normal* state while the user is still on their phone (you keep polling at `interval` seconds), and `slow_down` is the server throttling an over-eager client, which you must honor by *increasing* the interval, not ignoring it -- hammering the endpoint can get the client blocked. The poll loop is bounded by `expires_in` (here 900s); past that the server returns `expired_token` and the device must restart with a fresh `/device/code` request. This decoupling of "where you authenticate" from "where you use the token" is exactly why the flow needs no redirect URI and no client secret, which is the point to make in an interview.
 
-> [!NOTE]
-> **Beginner's Mental Model — JWT (JSON Web Token):**
-> Think of a JWT as a security wristband given to you at an amusement park. The park staff (Authorization Server) checks your ID once, prints your permissions on the wristband (like "VIP Access" and "Expires at 8:00 PM"), signs it with a special security stamp, and clips it to your wrist. Every ride operator (Microservice) you visit doesn't need to call the front office to check if you're allowed on the ride; they simply look at your wristband, verify the security stamp, read your permissions directly from it, and let you on.
+In modern distributed architectures, servers need a stateless way to keep track of a user's identity and permissions across many independent services. This is where JSON Web Tokens (JWT) shine. Think of a JWT as a security wristband given to you at the entrance of a massive amusement park. The park gatekeeper (the Authorization Server) checks your ID once, prints your specific permissions directly onto the wristband (such as 'VIP Ride Access' and 'Expires at 8:00 PM'), signs it with a special security stamp that cannot be forged, and clips it to your arm. Every time you line up for a ride, the operator (a Microservice) does not need to call the front gate to verify who you are or what tickets you bought. They simply look at your wristband, verify that the security signature is genuine, read the permissions printed directly on the band, and let you on the ride. This allows each microservice to make authorization decisions instantly and independently.
 
 **JWT (JSON Web Token)**
 

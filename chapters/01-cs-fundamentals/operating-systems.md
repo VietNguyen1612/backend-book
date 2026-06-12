@@ -8,6 +8,8 @@
 
 ### Processes & Threads
 
+To understand how a computer runs programs, it helps to imagine a large company. A process is like an entire department housed in its own isolated office building. Each department has its own private files, desk space, and equipment that other departments cannot access directly. A thread, on the other hand, is like an individual employee working inside that department's building. All employees (threads) within the same department share the office space, desks, files, and coffee machine (representing the process's shared memory). However, each employee keeps their own notebook and personal task list (representing their stack and CPU registers) to track their specific work. If one department goes bankrupt and closes down, the other departments in their separate buildings keep running. But if one employee makes a massive mess in the shared department office, it directly affects all the other employees working in that same space.
+
 #### Processes
 
 A **process** is an instance of a running program with its own independent memory space (code, data, heap, stack), file descriptors, and other OS resources. Processes are isolated from each other by the OS; one process cannot directly access another's memory.
@@ -352,6 +354,8 @@ Modern CPUs are deeply pipelined: they start executing instructions *after* a br
 
 #### Virtual Memory
 
+Imagine you are a researcher visiting a library, and the librarian sets you up at a private catalog desk. The desk is designed to look like the entire library's collection is laid out just for you, and you can access any book using a simplified index. In reality, the library only has a limited number of physical bookshelves (representing physical RAM) that must be shared among all visitors. When you request a book from your private catalog, the librarian secretly retrieves it from the shelves and places it on your desk. If your desk fills up and you need more space, the librarian might temporarily box up some of your less-used books and store them in the basement (representing hard disk swap space). This is virtual memory: a system that gives every running program the illusion of having a vast, contiguous block of memory all to itself, while the operating system dynamically maps those virtual addresses to real physical storage behind the scenes.
+
 Each process sees a contiguous address space (e.g., 0 to 2^48 on 64-bit systems) that is **virtual** — it does not correspond directly to physical RAM. The OS maintains a **page table** that maps virtual pages to physical frames (or marks them as not-present, triggering a page fault that may load from disk).
 
 ```
@@ -683,6 +687,8 @@ Little's Law sanity check:  concurrency = throughput x latency
 
 ### I/O Models
 
+Imagine you are a customer sitting at a table in a busy restaurant (representing the user space where your application runs). You want a meal, but for safety, hygiene, and order, the restaurant does not allow customers to walk into the kitchen (representing the kernel space) and cook or grab ingredients themselves. Instead, you look at a menu and place an order through a waiter. The waiter takes your request to the kitchen, the chefs prepare the meal, and the waiter brings it back to you. In computer systems, a system call is that waiter. It is a secure, controlled channel that allows your application to ask the operating system kernel to perform restricted operations on its behalf, such as reading a file from the disk, creating a network connection, or writing data to the screen.
+
 #### Blocking I/O
 
 The simplest model: a thread calls `read()` or `write()` and **blocks** (sleeps) until the operation completes. While waiting, the thread cannot do anything else.
@@ -714,6 +720,8 @@ With non-blocking I/O, `read()` returns immediately with either data or an `EAGA
 > - With **io_uring**, tables write their orders on a shared notepad (submission queue). The waiter processes the notepad in the background and writes the ready food details on another notepad (completion queue), allowing the table to pick it up without ever interrupting the waiter.
 
 #### I/O Multiplexing
+
+To understand how modern servers handle thousands of concurrent requests, imagine a waiter (representing a single CPU thread) managing a restaurant with a hundred tables (connections). Under basic, blocking I/O models, the waiter would stand at a single table waiting for the customers to decide what to order, completely ignoring everyone else in the room. Under a non-blocking poll model, the waiter would run around the room in a loop, asking every single table, "Are you ready yet?", which wastes massive energy. A more efficient system is epoll, where the waiter gives every table a buzzer. The waiter can relax at the front desk, and when a table is ready to order, they press their buzzer, prompting the waiter to go directly to that specific table. The latest evolution, io_uring, takes this a step further by using a shared notepad. Customers write their orders on a "submission" sheet. The kitchen processes these orders in the background and posts the completed meals on a "completion" sheet. This allows the system to process requests continuously without the waiter needing to constantly interrupt their flow to coordinate each individual order.
 
 I/O multiplexing lets a single thread monitor multiple file descriptors and react when any of them becomes ready. This is the foundation of event-driven servers.
 

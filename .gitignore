@@ -2,7 +2,7 @@
 #
 # Only personal/local and generated artifacts are ignored below. The project
 # deliverables are intentionally TRACKED and must NOT be added here:
-#   README.md, AUDIT.md, CHANGELOG.md, _config.yml, search.md,
+#   README.md, AUDIT.md, _config.yml, search.md,
 #   .markdownlint-cli2.yaml, ruff.toml, scripts/, assets/, .github/, chapters/
 
 # --- Self-study workflow: local only, never commit ---

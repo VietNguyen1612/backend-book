@@ -18,7 +18,7 @@ import sys
 
 def markdown_files() -> list[str]:
     files = sorted(glob.glob("chapters/**/*.md", recursive=True))
-    for extra in ("README.md", "AUDIT.md", "CHANGELOG.md"):
+    for extra in ("README.md", "AUDIT.md"):
         if os.path.exists(extra):
             files.append(extra)
     return files

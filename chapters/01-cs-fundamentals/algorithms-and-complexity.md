@@ -2,10 +2,6 @@
 
 # 1.2 Algorithms & Complexity
 
-> [!NOTE]
-> **Beginner's Mental Model — Big-O Analysis:**
-> Think of Big-O as choosing a way to travel. If you are going next door, walking is fast. If you are going across the country, walking would take forever, so you need a plane. Big-O doesn't tell you the exact minutes a trip takes; it tells you how much longer the trip gets as the distance (input size `n`) grows. A plane is O(1) overhead time to board, but once in the air, it handles huge distances easily, whereas walking is O(n)—double the distance, double the time.
-
 ### Big-O Analysis
 
 #### Understanding Complexity Classes
@@ -296,10 +292,6 @@ print(single_number([4, 1, 2, 1, 2]))  # 4
 
 ---
 
-> [!NOTE]
-> **Beginner's Mental Model — Sorting:**
-> Imagine sorting a messy pile of student exams by last name. You could split the pile in half, hand each half to an assistant to sort, and then merge their two sorted stacks together (Merge Sort). Alternatively, you could pick one exam as a benchmark, put all names before it on the left and all names after it on the right, and repeat the process on those smaller piles (Quicksort).
-
 ### Sorting
 
 #### Comparison-Based Sorts
@@ -571,10 +563,6 @@ print(top_k_stream(stream, 3))         # [89, 78, 67]
 > **Key Takeaway:** Match the tool to the need. One percentile/median from a list → quickselect (O(n)). Top-k from a large or streaming dataset → a size-k heap / `heapq.nlargest` (O(n log k), O(k) memory). Reserve a full sort for when you genuinely need *all* elements ordered — paying O(n log n) to read off one element or a handful is a common, avoidable inefficiency.
 
 ---
-
-> [!NOTE]
-> **Beginner's Mental Model — Dynamic Programming:**
-> Imagine I write `1 + 1 + 1 + 1 + 1` on a board and ask you what it equals. You count them up and say "5". If I write another `+ 1` at the end, you don't recount all the ones from the beginning. You remember that the first part was "5" and simply add 1 to get "6". Dynamic Programming is just that: writing down the answers to sub-problems so you never have to recalculate them.
 
 ### Dynamic Programming
 

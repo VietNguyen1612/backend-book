@@ -4,12 +4,6 @@
 
 ### Horizontal vs Vertical Scaling
 
-> [!NOTE]
-> **Beginner's Mental Model — Horizontal vs Vertical Scaling:**
-> Imagine you run a bakery and need to bake more bread:
-> - **Vertical Scaling (Scaling Up)** is like buying a bigger, more expensive oven. It fits more bread and doesn't change how you work, but eventually, you can't buy an oven any larger, and the cost of giant ovens grows ridiculously high.
-> - **Horizontal Scaling (Scaling Out)** is like buying ten more regular-sized ovens. You can bake almost infinite bread by just adding more ovens, but now you have to coordinate a team of bakers to manage them, and you must make sure they don't fight over the same ingredients (statelessness).
-
 **Vertical Scaling (Scale Up)** means upgrading the hardware of a single machine -- more CPU cores, more RAM, faster SSDs, better network cards. This approach is attractive because it requires zero changes to your application code. A single-threaded application that runs on 1 CPU and 4 GB of RAM will run just as well on a machine with 64 CPUs and 512 GB of RAM (it will just have more headroom). Databases, in particular, benefit from vertical scaling because coordinating writes across multiple machines is inherently difficult. The downsides are clear: there is a hard ceiling on how large a single machine can get (you cannot buy a server with 1 million CPUs), and cost increases non-linearly. Going from 16 GB to 32 GB of RAM might cost 2x, but going from 512 GB to 1 TB can cost 5-10x due to specialized hardware.
 
 **Horizontal Scaling (Scale Out)** means adding more machines to your fleet instead of making one machine bigger. This approach has near-unlimited theoretical capacity -- you can always add another server. However, it demands that your application is designed to be stateless: no machine should hold data that another machine cannot access. If server A stores a user's session in local memory and the next request is routed to server B, that session is lost. Horizontal scaling requires externalizing all shared state to purpose-built stores (Redis for sessions, S3 for file uploads, a database for persistent data, environment variables or a configuration service for settings).
@@ -24,10 +18,6 @@ Auto-scaling is the automated version of horizontal scaling. Cloud providers let
 - Avoid in-memory caches that cannot tolerate loss -- use them only as a performance optimization layer where a cache miss is handled gracefully.
 
 ### Load Balancing
-
-> [!NOTE]
-> **Beginner's Mental Model — Load Balancer:**
-> Think of a load balancer as a host at a busy restaurant. Instead of customers crowding the kitchen door and overwhelming the chefs, they wait at the entrance. The host greets each customer and assigns them to an open table or a specific chef who isn't busy. If a chef goes home sick (server health check fails), the host stops sending guests to that chef's station until they recover.
 
 A load balancer sits between clients and a pool of backend servers, distributing incoming requests across the pool. Load balancers are essential for horizontal scaling, high availability, and graceful maintenance.
 
@@ -363,10 +353,6 @@ Cache MISS for cache:user:42
 - **Key splitting (sharding the hot key)**: replicate the value under several physical keys (`post:123#0` ... `post:123#9`) spread across different cache nodes, and have each reader pick a random replica. This deliberately fans a single logical key across N nodes, trading N-fold write amplification on update for N-fold read capacity. Used for counters and other read-heavy hot values.
 
 The first step in production is always *detection*: instrument the cache client to track per-key request rates so you can identify a celebrity key before it melts a node, rather than after.
-
-> [!NOTE]
-> **Beginner's Mental Model — Content Delivery Network (CDN):**
-> Imagine you publish a popular magazine in New York, and readers all over the world want it. If every single reader in Tokyo or London has to wait for a ship to deliver the magazine from New York, it will take weeks. Instead, you send digital copies to local printing shops (CDN edge servers) in Tokyo and London. When a local reader wants a copy, they get it instantly from the shop down the street, saving time and reducing the load on your main office in New York.
 
 **CDN (Content Delivery Network)** caches content at edge locations geographically close to users. Services like CloudFront, Cloudflare, and Fastly cache static assets (images, CSS, JavaScript) and can also cache API responses. Control caching behavior with HTTP headers (`Cache-Control: public, max-age=86400`), configure cache keys (what makes two requests "the same" from the CDN's perspective), and use purge/invalidation APIs when content changes.
 

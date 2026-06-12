@@ -6,10 +6,6 @@
 
 Before the TCP and HTTP details, it helps to see where each protocol sits. Networking is built in **layers**, each one adding its own header around the data from the layer above (**encapsulation**) and stripping it on the way back up.
 
-> [!NOTE]
-> **Beginner's Mental Model — The OSI Model:**
-> Think of the OSI model as sending a physical letter through the mail. You write the message (Application), translate it to English or fold it up (Presentation), start the conversation with "Dear Friend" (Session), choose registered mail for guaranteed delivery (Transport/TCP), write the destination address on the envelope (Network/IP), put it in the local mail carrier's truck (Link/Ethernet), and send it as physical paper traveling along roads (Physical). Each step depends on the one below it, and the recipient reverses the steps to read your message.
-
 #### OSI vs TCP/IP and Encapsulation
 
 The 7-layer OSI model is the academic reference; the 4-layer **TCP/IP model** is what the internet actually runs on. The mapping that matters in practice:
@@ -221,10 +217,6 @@ net.ipv4.tcp_rmem = 4096	131072	6291456
 
 > **Common pitfall:** These `sysctl -w` changes are lost on reboot. Persist them in `/etc/sysctl.conf` (or a file in `/etc/sysctl.d/`) and apply with `sysctl -p`.
 
-> [!NOTE]
-> **Beginner's Mental Model — TCP vs UDP:**
-> Think of **TCP** like a phone call: you establish a connection, say "Did you hear that last sentence?", wait for a nod (ACK) before continuing, and repeat yourself if the line crackles (retransmission). It's reliable but has overhead. Think of **UDP** like shouting through a megaphone: you broadcast the information quickly, and if someone misses a word or the wind blows it away, you don't stop to repeat it. It's fast but doesn't guarantee delivery.
-
 #### TCP vs UDP
 
 | Feature | TCP | UDP |
@@ -414,10 +406,6 @@ Client 1.2.3.4 -> Proxy A -> Proxy B (reverse proxy) -> app server
 
 ---
 
-> [!NOTE]
-> **Beginner's Mental Model — DNS:**
-> DNS is the phonebook of the internet. Instead of memorizing the physical latitude and longitude coordinates of your friend's house (an IP address like `93.184.216.34`), you look them up by their name (like `api.example.com`). When you type a URL, your computer asks a series of directories "Who knows the number for this name?" until it finds the correct IP.
-
 ### DNS
 
 #### Recursive Resolution
@@ -502,10 +490,6 @@ DNSSEC adds cryptographic signatures to DNS records, creating a **chain of trust
 ---
 
 ### TLS/SSL
-
-> [!NOTE]
-> **Beginner's Mental Model — TLS 1.3 Handshake:**
-> Imagine you want to send a locked box of secret messages to a server. In older TLS versions, you had to say hello, ask for their certificate, agree on a type of lock, exchange keys, and then finally lock the box (taking two round trips). In **TLS 1.3**, it's a 1-RTT handshake: you immediately send your half of a lock combo in your very first greeting ("Hello, here is my key share"). The server sends back its certificate and its half of the combo, and you instantly begin exchanging locked boxes.
 
 #### TLS 1.3 Handshake
 

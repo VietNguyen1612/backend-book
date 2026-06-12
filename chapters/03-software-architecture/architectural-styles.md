@@ -4,10 +4,6 @@
 
 Architectural styles are high-level strategies for organizing a system. The choice of architectural style has far-reaching consequences for development workflow, deployment, scaling, and team organization.
 
-> [!NOTE]
-> **Beginner's Mental Model — Monolith vs. Microservices:**
-> Think of a Monolith like a large, single-family house where everyone lives under one roof, sharing the kitchen, plumbing, and electricity. It is easy to build and coordinate, but if the kitchen catches fire, the whole house is affected. Microservices are like a neighborhood of separate townhouses. Each house has its own kitchen and utilities. If one house has a plumbing issue, the others keep functioning normally. However, coordinating a neighborhood block party (a distributed transaction) is much more complex than just shouting down the hall.
-
 ### Monolith
 
 A monolith is a single deployment unit where all components run in the same process. Despite its reputation, a monolith is the correct starting point for most projects. The key is to build a **modular monolith**: a single deployment unit that is internally organized into modules with clear boundaries.
@@ -225,10 +221,6 @@ Microservices introduce a class of problems that do not exist in monoliths:
 - **Testing**: unit tests are easy, but integration tests across services require contract testing (Pact)
 - **Service discovery**: services need to find each other (Consul, Kubernetes DNS)
 
-> [!NOTE]
-> **Beginner's Mental Model — Saga Pattern:**
-> Imagine organizing a multi-city vacation where you must book a flight, a hotel, and a rental car. Since you can't book all three in a single instant, you book them one by one. If you successfully book the flight and hotel, but find out the rental cars are sold out, you don't just stop; you must trigger "compensating actions"—canceling the hotel and flight reservations to get a refund, returning you back to the start. A Saga coordinates these individual steps and their corresponding undo actions across multiple independent services.
-
 #### Saga Pattern
 
 When a business operation spans multiple services, you cannot use a single database transaction. The Saga pattern replaces one distributed transaction with a sequence of local transactions, each with a compensating action (undo) in case of failure.
@@ -427,10 +419,6 @@ OpenTelemetry (OTel) is now the vendor-neutral standard for generating and expor
 ### Event-Driven Architecture
 
 Event-Driven Architecture (EDA) is an architectural style where the flow of the program is determined by events -- significant changes in state. Components produce and consume events, leading to loosely coupled systems that can react to changes in real time.
-
-> [!NOTE]
-> **Beginner's Mental Model — Event Sourcing:**
-> Think of Event Sourcing like a bank ledger or a chess match record. Instead of only keeping track of the final score or the current balance, you write down every single move or transaction in order. To find the current state of the board or your account, you simply replay all the recorded moves from the beginning. This gives you a perfect audit trail of how you got there.
 
 #### Event Sourcing
 

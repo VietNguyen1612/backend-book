@@ -8,10 +8,6 @@ Before tuning queries, it helps to understand how PostgreSQL physically stores a
 
 #### Pages and the Buffer Pool
 
-> [!NOTE]
-> **Beginner's Mental Model — Pages and the Buffer Pool:**
-> Think of database pages like books in a library, and the buffer pool as the library's reading table. If you want to read a single line in a book, the librarian doesn't just hand you that line; they bring the entire book (a page, usually 8KB) and place it on the table (buffer pool). If the book you want is already on the table (a cache hit), you read it instantly. If not, the librarian has to go all the way to the basement archives (disk) to fetch it, which takes much longer.
-
 PostgreSQL reads and writes data in fixed-size **pages** (blocks), 8 KB by default. A table or index is just a sequence of such pages on disk. Crucially, the engine never operates on a row directly from disk -- it first loads the whole page into a shared in-memory cache called the **buffer pool**, sized by the `shared_buffers` setting. On top of that, the operating system's page cache provides a second tier of caching. The practical consequence is that almost all query tuning is really about keeping your *working set* (the hot pages a query touches) resident in these caches so that reads are served from RAM instead of disk.
 
 ```sql
@@ -43,10 +39,6 @@ LIMIT 5;
 
 #### Write-Ahead Log (WAL)
 
-> [!NOTE]
-> **Beginner's Mental Model — Write-Ahead Logging (WAL):**
-> Think of WAL like a reporter taking shorthand notes during a fast-paced trial. Instead of immediately writing a beautifully formatted official court record (updating the main database files, which takes too much time), the reporter quickly jots down every event in a chronological, append-only notebook (the WAL). If the courthouse loses power (a crash), they can recreate the exact official record just by replaying the shorthand notes.
-
 Durability -- the "D" in ACID -- comes from the **Write-Ahead Log**. The rule is simple and absolute: the WAL record describing a change must be flushed (`fsync`'d) to durable storage *before* the modified ("dirty") data page is allowed to be written back to disk. Note the ordering carefully -- the in-memory page in the buffer pool is updated *first*; what the WAL protocol guarantees is that the corresponding WAL record is durable before that dirty page is *flushed to disk* (and, separately, that the WAL up to the commit record is durable before COMMIT is acknowledged). WAL writes are sequential appends, which are far faster than the random I/O of updating scattered heap pages, so the commit path stays fast. On a crash, PostgreSQL replays the WAL from the last **checkpoint** to bring the data files back to a consistent state. This same WAL stream is what feeds streaming replication and Point-in-Time Recovery.
 
 A **checkpoint** periodically flushes all dirty buffer-pool pages to the data files and records a marker in the WAL; recovery only needs to replay WAL written after the most recent checkpoint. Tuning checkpoint frequency is a balance: frequent checkpoints mean fast recovery but more constant I/O; infrequent checkpoints mean less steady-state I/O but longer recovery and larger WAL.
@@ -73,10 +65,6 @@ FROM pg_stat_bgwriter;
 
 #### Heap, TIDs, and the Clustered-Index Contrast
 
-> [!NOTE]
-> **Beginner's Mental Model — Heap vs. Clustered Tables:**
-> Imagine storing a collection of documents. A **Heap table** (like PostgreSQL) is like tossing documents into a filing cabinet in no particular order. You use a separate index cards box (indexes) to find the cabinet drawer and folder location of each document. A **Clustered table** (like MySQL InnoDB) is like sorting the documents alphabetically by their primary key directly in a single binder. The binder itself *is* the sorted collection, so once you find the index, the document is right there, but rearranging them is more work.
-
 PostgreSQL stores table rows in an unordered **heap** -- rows live wherever there is free space, in no particular order. Every index (including the primary key) is a separate structure whose leaf entries point back to heap rows via a **TID** (tuple identifier: a `(page number, item offset)` pair). So an index lookup in PostgreSQL is two steps: walk the index to get TIDs, then fetch those rows from the heap.
 
 This is fundamentally different from MySQL's InnoDB, which uses a **clustered index**: the table *is* the primary-key B-tree, with full rows stored in the leaf nodes. Secondary indexes in InnoDB store the primary-key value (not a physical pointer), so a secondary-index lookup costs two B-tree traversals. The trade-offs fall out directly from this layout:
@@ -86,10 +74,6 @@ This is fundamentally different from MySQL's InnoDB, which uses a **clustered in
 - PostgreSQL can `CLUSTER` a table to physically reorder it by an index, but unlike InnoDB the ordering is not maintained automatically after writes.
 
 #### MVCC Storage: Heap Bloat vs Undo Log
-
-> [!NOTE]
-> **Beginner's Mental Model — Multi-Version Concurrency Control (MVCC):**
-> Think of MVCC like a shared collaborative document (like Google Docs) where instead of locking the document so only one person can edit it at a time, each person sees their own draft version. Writers create new draft pages, while readers continue to read older, finalized versions of the page. The database periodically cleans up the old, discarded pages (VACUUMing) once everyone is done reading them.
 
 Both PostgreSQL and InnoDB use MVCC so readers never block writers, but they store old row versions differently -- and this single design choice drives very different operational behavior:
 
@@ -192,10 +176,6 @@ ORDER BY "order_count" DESC LIMIT 10
 A sequential scan reads every row in a table from disk, page by page. This is not inherently bad. For small tables (under a few thousand rows), a sequential scan is often faster than an index scan because it avoids the overhead of traversing the index tree and performing random I/O to fetch heap tuples. The planner also favors sequential scans when the query's selectivity is low -- for example, if a WHERE clause matches more than roughly 5-15% of the table, the planner often decides that reading the entire table sequentially is cheaper than performing thousands of random index lookups.
 
 An index scan traverses the B-tree (or other index type) to find matching entries, then fetches the corresponding rows from the heap (the actual table data). This involves random I/O, which is slower per page than sequential I/O but dramatically faster overall when only a small fraction of the table is needed.
-
-> [!NOTE]
-> **Beginner's Mental Model — Index-Only Scans:**
-> Imagine looking up a friend's phone number in a phone book. If you only need their phone number and name, you can get all that information directly from the index (the phone book listings). You don't need to actually walk to their physical house (fetching the row from the table heap) to ask for the number. This is an index-only scan: the index itself holds all the answers.
 
 An index-only scan is even better: if all columns required by the query are present in the index itself (a "covering index"), PostgreSQL can answer the query entirely from the index without touching the heap at all, provided the visibility map confirms the pages are all-visible.
 
@@ -413,13 +393,6 @@ SELECT * FROM sessions ORDER BY token;        -- sorting
 ```
 
 In practice, B-tree indexes are almost always preferred because they are more versatile and the performance difference for equality is small. Consider hash indexes only for very large tables with purely equality-based lookups and no range or sort requirements.
-
-> [!NOTE]
-> **Beginner's Mental Model — GIN, GiST, and BRIN Indexes:**
-> Think of these as specialized library cataloging systems:
-> - **GIN (Generalized Inverted Index)** is like the index at the back of a textbook. It maps individual ingredients or tags to all the recipes/pages where they appear—perfect for arrays, tags, or JSON columns.
-> - **GiST (Generalized Search Tree)** is like a map grid system. It groups coordinates or ranges into nesting boxes (e.g., "North America -> USA -> New York"), allowing you to quickly zoom in on geographic coordinates or overlapping calendar intervals.
-> - **BRIN (Block Range Index)** is like a summary card stuck to the front of a storage box that says: "Contains items with dates between 2020 and 2022." The database doesn't index every single item; it just tells you which boxes are worth opening—perfect for huge tables sorted by time.
 
 #### GIN (Generalized Inverted Index)
 
@@ -655,10 +628,6 @@ with connection.cursor() as cursor:
 ```
 
 #### Concurrency Anomalies: Lost Update and Write Skew
-
-> [!NOTE]
-> **Beginner's Mental Model — Write Skew:**
-> Imagine a shared bank account between two spouses, with a rule that the total balance must not drop below $0. Currently, the balance is $100. Simultaneously, Spouse A and Spouse B both check the balance, see $100, and decide to withdraw $80. Both checks pass because they looked at the same initial state, but when both transactions complete, the balance drops to -$60, violating the rule. This is write skew: two independent, concurrent writes that seem valid in isolation but break a global rule when combined.
 
 The isolation levels above are defined by *which anomalies they prevent*. Two of these anomalies cause subtle, expensive bugs in production and come up constantly in interviews, so they deserve a closer look.
 

@@ -4,10 +4,6 @@
 
 ### Middleware / Interceptors
 
-> [!NOTE]
-> **Beginner's Mental Model — Middleware:**
-> Think of middleware like **airport security checkpoints**. When you fly (make an HTTP request), you don't go straight from the entrance to the airplane (the view/controller). First, you pass through passport check (authentication), then baggage screening (request validation/security), and maybe metal detectors (rate limiting). When returning (the HTTP response), you pass back through customs (response headers/logging). If any checkpoint fails, you are turned away (short-circuited response) without ever reaching the plane.
-
 Middleware is the mechanism by which cross-cutting concerns are handled in web applications. A cross-cutting concern is something that affects many parts of the application but does not belong in any single view or controller: logging, authentication, CORS headers, compression, rate limiting, request ID injection, and exception handling are all classic examples.
 
 The middleware pattern is universal. In Django, it is a class with `__call__`. In Flask, it is `before_request` / `after_request` decorators. In FastAPI/Starlette, it is `BaseHTTPMiddleware`. In Express.js, it is `app.use()`. In Java Spring, it is a `Filter` or `HandlerInterceptor`. The abstraction is always the same: a wrapper that can inspect and modify the request before it reaches the handler, and inspect and modify the response after the handler has produced it.
@@ -522,10 +518,6 @@ You can refine what the introspection cannot infer with the `@extend_schema` dec
 ---
 
 ### Background Task Processing
-
-> [!NOTE]
-> **Beginner's Mental Model — Background Tasks (e.g., Celery):**
-> Imagine you are a **waiter at a busy restaurant**. A customer orders a steak and asks for a printed receipt. You don't walk into the kitchen, stand there for 30 minutes watching the chef cook the steak, and make the customer wait before printing their receipt. Instead, you write down the order (enqueue a task) and stick it on the kitchen ticket wheel (the message broker). You immediately print their receipt and move on to serve other tables (return the HTTP response). Meanwhile, the chef (the background worker) cooks the steak at their own pace.
 
 Many web applications need to perform work that is too slow or too unreliable to do inside an HTTP request/response cycle: sending emails, generating reports, processing images, calling third-party APIs, or running data pipelines. Background task processing offloads this work to separate worker processes that consume tasks from a message broker (like Redis or RabbitMQ).
 

@@ -2,10 +2,6 @@
 
 # 3.1 Design Principles
 
-> [!NOTE]
-> **Beginner's Mental Model — SOLID Principles:**
-> Think of SOLID as the blueprint for a professional restaurant kitchen. Instead of one chaotic chef doing everything, tasks are divided: a pastry chef only bakes (Single Responsibility); you customize dishes by adding toppings, not by rebuilding the recipe (Open/Closed); you can swap whole milk for oat milk without rewriting the baking instructions (Liskov Substitution); a waiter only needs the ordering menu, not the dishwasher's manual (Interface Segregation); and the kitchen orders ingredients through a general "supplier contract" rather than depending on one specific farm (Dependency Inversion).
-
 ### SOLID Principles
 
 #### S -- Single Responsibility Principle (SRP)
@@ -850,10 +846,6 @@ Knowing the named anti-patterns gives you a shared vocabulary for code review an
 > **Common pitfall:** Anti-pattern labels are diagnostic tools, not insults to throw in review. The useful move is to name the *force* that produced the anti-pattern (deadline pressure, unclear ownership, a wrong early abstraction) and propose the specific refactor (extract class, push behavior down, collapse a pointless layer), rather than just declaring code "bad."
 
 ---
-
-> [!NOTE]
-> **Beginner's Mental Model — Clean/Hexagonal Architecture:**
-> Think of the application core as a smartphone. The phone has defined ports (like a USB-C socket or Bluetooth connection). It doesn't care if you plug in a charger, a pair of headphones, or a keyboard—as long as the accessory has the matching connector (the adapter). The phone's core logic (making calls, running apps) is completely isolated from how it gets power or outputs sound, making it easy to swap accessories without redesigning the phone itself.
 
 ### Clean Architecture / Hexagonal Architecture
 

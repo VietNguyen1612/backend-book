@@ -2,10 +2,6 @@
 
 # 4.2 NoSQL & Specialized Databases
 
-> [!NOTE]
-> **Beginner's Mental Model — Redis Data Structures and Caching:**
-> Think of Redis like an extremely fast, in-memory whiteboard in a busy office, whereas a traditional database is like a large filing cabinet in the basement. Writing and reading from the whiteboard is nearly instantaneous. You can organize information on the whiteboard in different formats: basic sticky notes (Strings), structured profile cards (Hashes), lists of tasks in order (Lists), collections of unique IDs (Sets), or a ranked leaderboard (Sorted Sets). To keep the board from cluttering, you set a timer on each sticky note (TTL) so it self-erases when no longer needed.
-
 ### Redis
 
 Redis is an in-memory data structure store used as a cache, message broker, and general-purpose database. Its power comes from its rich set of data structures, atomic operations, and sub-millisecond latency.
@@ -359,10 +355,6 @@ maxmemory-policy allkeys-lru
 
 ---
 
-> [!NOTE]
-> **Beginner's Mental Model — Document vs. Relational Databases:**
-> Imagine organizing information about customers and their orders. A **Relational database** is like a spreadsheet with separate tabs for Customers, Orders, and Items, linked together by IDs (joins). If you want to see an order, you have to look up rows from all three tabs and piece them together. A **Document database** (like MongoDB) is like storing each order as a complete, self-contained physical folder. Inside the "Order #123" folder, you find the customer's name, their items, and their address all written on one sheet of paper. It's faster to read the entire order at once, but updating a customer's email address means hunting down and updating every single folder they are mentioned in.
-
 ### MongoDB
 
 MongoDB is a document database that stores data as BSON (Binary JSON) documents. Each document is a self-contained unit that can have a different structure from other documents in the same collection, providing schema flexibility.
@@ -485,10 +477,6 @@ Sharding distributes data across multiple replica sets (shards) using a shard ke
 > **Key Takeaway:** MongoDB excels when your data is document-oriented and your access patterns are known up front. Design your schema for your queries, not for normalization. Use the aggregation pipeline for analytics. Choose shard keys very carefully -- they are effectively immutable and determine the performance characteristics of your entire cluster.
 
 ---
-
-> [!NOTE]
-> **Beginner's Mental Model — Search Indexes (Inverted Index):**
-> Think of a search index like the index at the back of a cookbook. Instead of paging through every single recipe from start to finish to find one that mentions "chocolate" (a full table scan), you turn to the index at the back. Under the word "chocolate," you see a neat list of page numbers: 12, 45, and 108. You can jump directly to those pages. In database terms, this is an "inverted index": it maps search words (terms) directly to the documents containing them, making full-text search incredibly fast.
 
 ### Elasticsearch
 

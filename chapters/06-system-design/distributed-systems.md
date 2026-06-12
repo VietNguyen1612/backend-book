@@ -2,18 +2,7 @@
 
 # 6.2 Distributed Systems
 
-> [!NOTE]
-> **Beginner's Mental Model — CAP Theorem (The Phone Line):**
-> Imagine a bank that has two branches, each with a paper ledger of accounts. If the phone line between the branches goes down (a network partition), the bank faces a choice:
-> - **Availability (AP):** Keep both branches open. Customers can deposit or withdraw money, but since the branches can't talk to update the ledger, the balances will diverge (stale data).
-> - **Consistency (CP):** Close the branches or refuse transactions until the phone line is fixed. The balances remain perfectly correct, but customers are turned away (unavailable).
-> You can't have both when the phone line is cut.
-
 ### Consensus & Coordination
-
-> [!NOTE]
-> **Beginner's Mental Model — Raft Consensus:**
-> Think of Raft as a group of friends trying to decide what movie to watch, but they can only talk via walkie-talkies. First, they elect a coordinator (Leader Election) by voting. Once elected, the leader decides the movie name and tells everyone to write it down (Log Replication). The leader waits for a majority of friends to say "I've written it down" (Quorum) before saying "Okay, it's final!" (Commit). If some walkie-talkies fail, as long as a majority of friends can still talk to each other, they can safely make decisions without the rest.
 
 **Raft** is a consensus algorithm designed to be understandable (in contrast to Paxos, which is notoriously difficult to implement correctly). Raft ensures that a cluster of nodes agrees on a sequence of operations (a replicated log), even if some nodes fail. It is used by etcd (which powers Kubernetes), Consul, CockroachDB, and TiKV.
 
@@ -221,10 +210,6 @@ Because fencing is hard to retrofit, the pragmatic guidance is: **prefer making 
 **Synchronous Communication** (HTTP REST, gRPC) follows the request-response pattern. The caller sends a request and blocks until it receives a response. This is simple to reason about and ideal for user-facing requests that need an immediate response (e.g., "show me my profile"). The downsides are temporal coupling (if the downstream service is down, the caller fails), latency accumulation (each hop adds latency), and cascading failure risk (one slow dependency can exhaust the caller's thread pool, causing it to fail, which cascades to its callers).
 
 **Asynchronous Communication** (message brokers like Kafka, RabbitMQ, SQS) decouples services in time. The producer publishes a message and immediately continues. The consumer processes it whenever it is ready. This provides natural retry semantics (failed messages can be redelivered), load leveling (bursts of messages are buffered), and fault isolation (a consumer being down does not affect the producer). The trade-off is increased complexity: you need to reason about eventual consistency, message ordering, idempotency, and dead letter queues.
-
-> [!NOTE]
-> **Beginner's Mental Model — Service Discovery:**
-> Imagine a large office where employees (microservices) frequently move desks. Instead of trying to guess where everyone is sitting, the company sets up a live digital directory at the front desk (Service Registry). Whenever an employee moves, they register their new desk number. When you need to find the accountant (e.g. `payment-service`), you check the directory to get their current desk number, then walk straight to them.
 
 **Service Discovery** is how services find each other in a dynamic environment where instances come and go:
 

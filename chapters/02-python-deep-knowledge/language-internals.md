@@ -431,11 +431,6 @@ print(Serializable._versions)
 
 ---
 
-> [!NOTE]
-> **Beginner's Mental Model — Reference Counting vs Generational GC:**
-> - **Reference Counting** is like a sign-in sheet on a library book. Every time a program takes a reference to an object, its count goes up by 1. When a reference is deleted, the count goes down by 1. When the count hits 0, the book is instantly thrown away.
-> - **Generational GC** is like a periodic garbage sweep. If Person A and Person B are holding hands (circular reference), their sign-in count never hits 0 even if everyone else has left the library. The sweep engine goes through the library, identifies these isolated groups holding hands in a closed circle, and throws them out together.
-
 ### Memory & Garbage Collection
 
 #### Reference Counting
@@ -789,10 +784,6 @@ print(a is b)  # True -- guaranteed same object
 
 ---
 
-> [!NOTE]
-> **Beginner's Mental Model — The GIL (Global Interpreter Lock):**
-> Imagine a classroom with multiple students (threads) and one teacher (the Python interpreter). Even though you have many students ready to ask questions at the same time, the teacher only has one "talking stick" (the GIL). A student must hold the talking stick to speak. This means only one student can talk at any given instant, even if the room is full of students. However, if a student needs to look up a word in a dictionary (I/O operation like a network call), they hand the stick back to the teacher so someone else can talk while they are busy searching.
-
 ### GIL (Global Interpreter Lock)
 
 The GIL is a mutex that protects access to Python objects, ensuring only one thread executes Python bytecode at a time. This simplifies CPython's memory management (reference counting is not thread-safe without it) but means that **CPU-bound** multithreaded programs cannot use multiple cores.
@@ -945,10 +936,6 @@ print(bool(sysconfig.get_config_var("Py_GIL_DISABLED")))  # True on a free-threa
 > **Key Takeaway:** The GIL prevents CPU-bound parallelism in threads but does not affect I/O-bound work or multiprocessing. Use `ThreadPoolExecutor` for I/O-bound tasks, `ProcessPoolExecutor` for CPU-bound tasks, and `asyncio` for high-concurrency I/O. Free-threaded Python (PEP 703) is coming but requires a thread-safety mindset.
 
 ---
-
-> [!NOTE]
-> **Beginner's Mental Model — CPython Bytecode Translation:**
-> Think of Python source code as a complex recipe written in English ("Bake a chocolate cake"). Before cooking, the CPython compiler translates this recipe into a series of simple, numbered instructions (bytecode) like: "1. Load flour," "2. Load sugar," "3. Mix." The Python Virtual Machine is the chef that reads these simple bytecode steps one-by-one and executes them. This translation happens once when the script is loaded, so the chef doesn't have to keep re-reading the complex English recipe.
 
 ### CPython Internals
 

@@ -2,14 +2,6 @@
 
 # 9.1 Testing Pyramid
 
-> [!NOTE]
-> **Beginner's Mental Model — The Testing Pyramid:**
-> Imagine building a **new house**:
-> - **Unit Tests (Testing individual bricks):** Before laying a single brick, you test if each brick is solid and doesn't crumble under pressure. These tests are extremely fast and cheap to perform.
-> - **Integration Tests (Testing plumbing and wiring):** Once the walls are up, you test if the pipes connect to the boiler without leaking and if the switches turn on the correct lights. These take more time and effort to set up because they involve real connections.
-> - **End-to-End/E2E Tests (Living in the house):** You walk through the front door, turn on the TV, flush the toilet, and cook a meal to see if the whole house works together for a resident. This is highly realistic but slow, expensive, and difficult to do for every single corner of the house.
-> The pyramid says you should have a massive foundation of brick-tests (unit), a good amount of plumbing-tests (integration), and only a few walkthroughs (E2E) on top.
-
 The testing pyramid is a model that guides how you distribute your automated tests across different layers. At the base sits a large number of fast, isolated unit tests. In the middle are integration tests that verify how components work together with real dependencies. At the top are fewer, slower end-to-end and performance tests. The goal is to catch as many bugs as possible at the lowest (cheapest) layer while still verifying that the entire system works when assembled.
 
 The classic failure mode is the inverted pyramid -- the **"ice cream cone"** -- where a team has a thick layer of slow, brittle end-to-end tests on top and almost no unit tests at the bottom. Such a suite takes ages to run, fails intermittently for reasons unrelated to the change under test, and gives imprecise failure messages, so developers stop trusting it. The corrective instinct is to "push coverage down the pyramid": every bug that an E2E test could catch but a faster unit or integration test could catch *just as well* belongs at the lower layer.
@@ -471,12 +463,6 @@ class BookDatabaseTest(TransactionTestCase):
 ```
 
 #### Test Doubles: Dummies, Stubs, Mocks, Fakes, and Spies
-
-> [!NOTE]
-> **Beginner's Mental Model — Mocks vs. Stubs:**
-> Imagine you are testing a **detective script** in a play:
-> - **A Stub is like a helpful bystander (an informant):** When the detective asks, "Where did the suspect go?", the stub simply replies with a pre-scripted answer: "They ran down Elm Street." The stub doesn't care who is asking or how many times; it just supplies the necessary information so the detective can continue their investigation.
-> - **A Mock is like a wiretap or a spy log:** It sits quietly during the play, but at the end, you check its records to verify: "Did the detective make exactly one phone call to the chief of police, and did they pass the correct suspect name?" The mock's job is to verify *actions and behavior*, not just supply answers.
 
 Understanding the vocabulary of test doubles is essential for writing clean tests. A **dummy** is an object passed only to satisfy a parameter list -- it is never actually used by the code path under test (for example, a placeholder `logger` you must supply to a constructor but whose calls you do not care about). A **stub** returns canned data and has no assertions on how it was called -- you use it to control the indirect inputs to the code under test. A **mock** goes further: it records how it was called and you assert on those interactions (e.g., "was `send_email` called exactly once with this recipient?"). A **fake** is a lightweight but working implementation -- an in-memory database, a local SMTP server -- that behaves realistically but avoids heavy infrastructure. A **spy** wraps the real implementation, allowing it to execute normally while recording calls for later inspection.
 

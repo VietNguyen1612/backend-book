@@ -4,10 +4,6 @@
 
 ### Secrets Management
 
-> [!NOTE]
-> **Beginner's Mental Model — Secrets Management:**
-> Think of secrets management as a **secure digital bank vault with one-time, dynamic access cards**. Instead of printing your house keys (API keys, database passwords) on postcards and sharing them with everyone (hardcoding them in your code or committing them to Git), you place the physical keys inside the vault. When an employee (an application service) needs to get inside, they must authenticate at the vault door, which issues them a temporary, single-use keycard that automatically expires after its task is complete. This keeps the keys safe, tracks who used them and when, and makes it easy to replace a key without changing the locks on every door.
-
 Secrets -- API keys, database credentials, encryption keys, certificates -- are the crown jewels of your infrastructure. A single leaked secret can lead to a full system compromise. Proper secrets management means storing secrets securely, rotating them regularly, auditing access, and ensuring they never appear in source code or logs.
 
 #### HashiCorp Vault

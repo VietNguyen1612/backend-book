@@ -233,6 +233,10 @@ In a Django project, you see the Builder pattern in Django's `QuerySet` API itse
 
 ---
 
+> [!NOTE]
+> **Beginner's Mental Model — Singleton:**
+> Think of a Singleton as a single physical printer in a small office. Instead of giving every employee their own personal printer (which would be expensive and waste resources), everyone sends their documents to the exact same shared machine. No matter who clicks "Print," the request goes to that one specific device.
+
 #### Singleton
 
 The Singleton pattern ensures a class has only one instance and provides a global access point to it. Common uses include database connection pools, configuration managers, and logging instances.
@@ -403,6 +407,10 @@ conn#2 ran: SELECT 2
 Structural patterns deal with object composition -- how classes and objects are assembled to form larger structures while keeping the structure flexible and efficient.
 
 ---
+
+> [!NOTE]
+> **Beginner's Mental Model — Adapter:**
+> Think of an Adapter like a physical travel plug adapter. If you travel from the US to Europe, your laptop plug (with flat pins) won't fit into the European wall outlet (with round holes). An adapter doesn't change how your laptop works, nor does it change the electricity in the wall; it simply sits in the middle and translates the connection so they can work together.
 
 #### Adapter
 
@@ -895,6 +903,10 @@ Reminder(SmsChannel()).send({"message": "renew cert", "due": "Friday"})
 Behavioral patterns deal with algorithms and the assignment of responsibilities between objects. They describe not just patterns of objects but also patterns of communication between them.
 
 ---
+
+> [!NOTE]
+> **Beginner's Mental Model — Observer:**
+> Think of the Observer pattern like subscribing to a YouTube channel or a newsletter. Instead of you (the viewer) constantly refreshing the channel's page to check for new videos (polling), you hit the "Subscribe" button. When a new video is uploaded, the channel automatically sends a notification to all subscribers at once.
 
 #### Observer
 

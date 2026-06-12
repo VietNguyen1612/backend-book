@@ -130,6 +130,10 @@ uv run pytest
 # It's becoming the recommended tool for new projects
 ```
 
+> [!NOTE]
+> **Beginner's Mental Model — Virtual Environments:**
+> Imagine you are a chef working on two different recipes. One recipe (Project A) requires Django version 4, and the other (Project B) requires Django version 5. If you install these globally on your computer, they will conflict (you can only have one version of a package installed globally). A **Virtual Environment** is like creating a private, isolated test kitchen for each project. In Project A's kitchen, you install Django 4, and in Project B's kitchen, you install Django 5. They are completely separate, so they never interfere with each other.
+
 #### Virtual Environments
 
 ```python

@@ -1,8 +1,14 @@
 [Back to Chapter](README.md) | [Back to Book](../../README.md)
 
-# 5.3 Authentication & Authorization
+> [!NOTE]
+> **Beginner's Mental Model — Authentication vs Authorization:**
+> Think of **Authentication** as the bouncer checking your ID at a club entrance to verify *who you are*. Once you are inside, **Authorization** is the VIP pass or wristband that decides *where you are allowed to go* (e.g., you can enter the dance floor, but you are not allowed in the backstage VIP lounge or the DJ booth).
 
 ### Authentication
+
+> [!NOTE]
+> **Beginner's Mental Model — OAuth 2.0 Flow:**
+> Imagine you arrive at a smart hotel and want to use a third-party app to open your room door. Instead of giving the app your master keycard (your password), the app redirects you to the hotel lobby (Authorization Server). You log in at the lobby, and the hotel clerk gives the app a temporary valet key (Access Token) with a limited expiration that *only* opens your specific door for the next hour.
 
 **OAuth 2.0 Flows**
 
@@ -245,6 +251,10 @@ Login successful. Tokens stored.
 ```
 
 **How to read this output:** the device never sees the user's credentials -- it only ever holds the `device_code` and polls. The two non-error "errors" are the whole protocol: `authorization_pending` is the *normal* state while the user is still on their phone (you keep polling at `interval` seconds), and `slow_down` is the server throttling an over-eager client, which you must honor by *increasing* the interval, not ignoring it -- hammering the endpoint can get the client blocked. The poll loop is bounded by `expires_in` (here 900s); past that the server returns `expired_token` and the device must restart with a fresh `/device/code` request. This decoupling of "where you authenticate" from "where you use the token" is exactly why the flow needs no redirect URI and no client secret, which is the point to make in an interview.
+
+> [!NOTE]
+> **Beginner's Mental Model — JWT (JSON Web Token):**
+> Think of a JWT as a security wristband given to you at an amusement park. The park staff (Authorization Server) checks your ID once, prints your permissions on the wristband (like "VIP Access" and "Expires at 8:00 PM"), signs it with a special security stamp, and clips it to your wrist. Every ride operator (Microservice) you visit doesn't need to call the front office to check if you're allowed on the ride; they simply look at your wristband, verify the security stamp, read your permissions directly from it, and let you on.
 
 **JWT (JSON Web Token)**
 

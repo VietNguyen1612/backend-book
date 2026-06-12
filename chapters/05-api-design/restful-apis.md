@@ -128,6 +128,10 @@ router.register(r"users", UserViewSet)
 urlpatterns = router.urls
 ```
 
+> [!NOTE]
+> **Beginner's Mental Model — HTTP Methods:**
+> Think of HTTP methods as the verbs in a kitchen order. `GET` is asking the chef to show you a recipe (read-only, doesn't change anything). `POST` is placing a brand-new order on the kitchen ticket (creates something new). `PUT` is replacing a whole dish on the tray with a different one (full replace). `PATCH` is just adding a pinch of salt to a dish that's already there (partial update). `DELETE` is throwing a ruined dish in the trash.
+
 **HTTP Methods as Verbs**
 
 Each HTTP method carries specific semantics. Understanding idempotency (whether repeating the same request produces the same result) is essential for building reliable APIs:
@@ -183,6 +187,14 @@ curl -X DELETE http://localhost:8000/users/2
 
 # Response: 204 No Content
 ```
+
+> [!NOTE]
+> **Beginner's Mental Model — HTTP Status Codes:**
+> Think of HTTP status codes as the hand signals a flight attendant gives you after a request:
+> - **2xx (Success):** A thumbs-up. Your meal is here (`200 OK`) or was freshly cooked (`201 Created`).
+> - **3xx (Redirection):** Pointing you to another seat. "Please go to seat 12B instead."
+> - **4xx (Client Error):** The attendant pointing at you because you made a mistake. "You can't open the cockpit door (`403 Forbidden`) or you asked for a non-existent item (`404 Not Found`)."
+> - **5xx (Server Error):** The attendant looking panicked. "The engine is smoking, we have a technical issue (`500 Internal Server Error`)."
 
 **Status Codes**
 

@@ -4,6 +4,10 @@
 
 ### CI/CD Pipelines
 
+> [!NOTE]
+> **Beginner's Mental Model — CI/CD Automation:**
+> Imagine a CI/CD pipeline as an **automated assembly line and quality control system in a car factory**. As soon as you design a new part (write code), the assembly line automatically runs it through a series of tests: checking the dimensions (linting/type checking), crash-testing it in isolation (unit tests), assembling it into a test car (building), and driving it on a test track (integration tests). If any test fails, the assembly line halts immediately so you don't ship a faulty car to the customer (deploying to production).
+
 #### Pipeline Stages
 
 A well-designed CI/CD pipeline automates the path from code commit to production deployment. Each stage acts as a quality gate: if any stage fails, the pipeline stops and the team is notified. The typical stages are:
@@ -358,6 +362,13 @@ Health check 5 passed
 ---
 
 ### Deployment Strategies
+
+> [!NOTE]
+> **Beginner's Mental Model — Rolling vs. Blue-Green vs. Canary Deployments:**
+> Imagine you run a busy **restaurant** and need to update your menu:
+> - **Rolling Update (Replacing tables one by one):** You update the menu for one table at a time. Some tables have the old menu, others have the new menu. Eventually, everyone gets the new menu. No extra space needed, but you must support both menus simultaneously.
+> - **Blue-Green (Building a twin restaurant):** You build an identical twin restaurant next door, set it up with the new menu, and once it's ready, you close the old restaurant and open the new one instantly. It is extremely safe and easy to switch back if something is wrong, but it costs twice as much because you need two environments.
+> - **Canary (Testing on a few guests):** You keep the old menu for 95% of your tables, but print the new menu for just 5% of your tables (the "canaries"). You watch if they enjoy the food or get sick. If they like it, you slowly roll it out to more tables; if not, you take away those few menus immediately.
 
 #### Blue-Green Deployment
 

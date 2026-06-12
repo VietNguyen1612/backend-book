@@ -4,6 +4,10 @@
 
 ### Architecture Decision Records (ADR)
 
+> [!NOTE]
+> **Beginner's Mental Model — Architecture Decision Records (ADRs):**
+> Think of an ADR as a **captain's log entry on a ship**. Instead of just writing down "Turned the ship 45 degrees north" (the decision), the captain writes: "Turned the ship 45 degrees north because a massive storm was developing to our east, and our fuel levels were too low to sail around it. We considered staying anchored, but the anchor chain is starting to rust." Two years later, when a new captain takes over and wonders why the ship is off-course, they read the log and understand exactly why that choice was made under those specific constraints.
+
 An Architecture Decision Record is a short document that captures a single significant architectural decision along with its full context. The most important aspect of an ADR is that it records **why** a decision was made, not merely what was decided. Teams that only document the "what" find themselves relitigating the same debates months later because nobody remembers the constraints, trade-offs, and reasoning that shaped the original choice.
 
 A well-written ADR includes three core sections. The **Context** section describes the problem, the forces at play (technical constraints, team capabilities, deadlines, regulatory requirements), and any relevant background. The **Decision** section states clearly what was chosen and, briefly, what alternatives were considered and rejected. The **Consequences** section is perhaps the most valuable: it captures both the positive outcomes and the trade-offs, risks, and potential downsides that the team knowingly accepted.
@@ -156,6 +160,12 @@ The most common failure mode is writing the doc *after* the code is already writ
 > **Key Takeaway:** The design doc is where you change your mind cheaply. Code is expensive to write and even more expensive to throw away, so move the disagreement upstream into prose where rewriting a paragraph is free. A good RFC culture trades a day of writing and review for weeks of avoided rework and surfaces the objection that would otherwise have shown up in production.
 
 ---
+
+> [!NOTE]
+> **Beginner's Mental Model — Technical Debt:**
+> Imagine you are **moving into a new house** and need to put away 100 boxes:
+> - **Doing it right:** You unbox everything, put things neatly on shelves, and label the cabinets. It takes a few days (high initial effort), but for the next year, you can find any item in 5 seconds.
+> - **Taking on debt:** Because you are in a rush, you stack all the boxes in the middle of the living room. It takes only 10 minutes (low initial effort), but for the next year, finding a clean pair of socks takes you 20 minutes of digging through cardboard. That extra 20 minutes is the **interest** you pay on your clutter (technical debt). A little debt is fine to meet a deadline, but if you never clean up, your house eventually becomes unlivable.
 
 ### Technical Debt Management
 

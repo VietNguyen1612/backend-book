@@ -4,6 +4,10 @@
 
 ### GraphQL
 
+> [!NOTE]
+> **Beginner's Mental Model — GraphQL:**
+> Think of a traditional REST API as a fixed set menu at a restaurant: you order Item #3, and you get exactly what's on that plate, even if you only wanted the side salad. GraphQL, on the other hand, is a buffet. You walk up with a plate and request exactly the food items you want, in the exact quantities you need, and nothing more.
+
 **Schema-First Design**
 
 GraphQL uses a strongly typed schema to define the shape of your API. The schema declares types (the data structures), queries (read operations), and mutations (write operations). Clients can request exactly the fields they need, no more and no less. The schema also supports introspection -- clients can query the schema itself to discover available types and operations, making the API self-documenting.
@@ -169,6 +173,10 @@ curl -X POST http://localhost:8000/graphql \
 Resolvers are the functions that fetch data for each field in the schema. Every field in a GraphQL type has a corresponding resolver. When a query is executed, the GraphQL engine walks the query tree and calls the appropriate resolver for each field. Resolvers can pull data from any source: a database, a REST API, a cache, or a computation.
 
 The resolver chain works hierarchically. If a `Post` type has an `author` field of type `User`, the engine first resolves the `Post`, then calls the `author` resolver on the result to resolve the nested `User`.
+
+> [!NOTE]
+> **Beginner's Mental Model — DataLoader:**
+> Imagine a waiter who needs to bring drinks to 10 guests. A naive waiter would walk to the bar, grab one drink, walk back to the table, and repeat this 10 times (the N+1 problem). A smart waiter using a **DataLoader** waits until everyone has placed their order, walks to the bar once with a large tray, collects all 10 drinks in a single batch, and distributes them all at once.
 
 **The N+1 Problem and DataLoader**
 
@@ -377,6 +385,10 @@ REST is better when: (a) your API is simple CRUD with flat resources, (b) HTTP c
 > **Key Takeaway:** GraphQL trades simplicity for flexibility. It shines in complex, multi-client environments but introduces challenges around caching, authorization complexity, and the N+1 problem. DataLoader is not optional -- it is a requirement for any production GraphQL API.
 
 ### gRPC
+
+> [!NOTE]
+> **Beginner's Mental Model — gRPC:**
+> Imagine two remote offices communicating. Instead of writing long letters in plain text (like JSON) and posting them in mailboxes (REST over HTTP/1.1), they install a high-speed intercom system (gRPC over HTTP/2). They speak in a highly compressed code language (Protocol Buffers binary format) that only they understand. It's incredibly fast, direct, and eliminates any guesswork because both ends must strictly follow the same pre-defined script (the `.proto` file).
 
 **Protocol Buffers (protobuf)**
 
@@ -651,6 +663,10 @@ gRPC is ideal for inter-service communication (especially in polyglot environmen
 
 ### WebSocket & Server-Sent Events
 
+> [!NOTE]
+> **Beginner's Mental Model — WebSockets:**
+> Traditional HTTP is like sending letters: you send a letter, and the server sends one back, then the connection closes. If you want more updates, you must send another letter. A **WebSocket** is like opening a phone call: once you dial and the other side picks up (the handshake), the line stays open indefinitely. Both you and the server can talk at the same time whenever you have something to say, without the overhead of redialing.
+
 **WebSocket**
 
 WebSocket provides full-duplex, persistent communication over a single TCP connection. The connection starts as an HTTP request that is "upgraded" to the WebSocket protocol. Once established, both the client and server can send messages at any time without the overhead of establishing new connections. This makes WebSocket ideal for real-time applications: chat, gaming, live collaboration, and trading platforms.
@@ -889,6 +905,10 @@ Additional scaling considerations: impose connection limits per server, implemen
 > **Key Takeaway:** Use SSE for one-way server-to-client streaming -- it is simpler, works with standard HTTP infrastructure, and reconnects automatically. Reserve WebSocket for truly bidirectional use cases. For multi-server deployments, you will need an external pub/sub system like Redis to bridge connections across instances.
 
 ### Message Queues & Async APIs
+
+> [!NOTE]
+> **Beginner's Mental Model — Message Queues:**
+> Think of a message queue as a post office. Instead of a customer (the client) waiting in line at the counter until a clerk (the worker) finishes a complex, 10-minute task, the customer drops their request in a mailbox (the message queue) and leaves. The mail clerks can retrieve requests from the box and process them one by one at their own pace. If a rush of requests arrives, they don't crash the system; they simply queue up in the mailbox until the clerks can get to them.
 
 **RabbitMQ**
 

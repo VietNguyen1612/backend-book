@@ -2,6 +2,10 @@
 
 # 4.3 Data Management
 
+> [!NOTE]
+> **Beginner's Mental Model — Database Migrations:**
+> Think of database migrations like version control (like Git) for your database structure. Just as Git commits track changes to your source code over time, migrations are a series of step-by-step instructions (scripts) that track changes to your database schema (adding tables, renaming columns, setting constraints). They ensure that every environment—your local machine, staging, and production—runs on the exact same database structure.
+
 ### Migration Strategies
 
 Database migrations are one of the highest-risk operations in production systems. A bad migration can lock tables, corrupt data, or cause downtime. Understanding which changes are safe and which require careful planning is essential.
@@ -67,6 +71,10 @@ class Migration(migrations.Migration):
         ),
     ]
 ```
+
+> [!NOTE]
+> **Beginner's Mental Model — Expand-Contract Pattern:**
+> Imagine you want to replace a narrow old bridge on a busy highway with a wide new bridge. You can't just blow up the old bridge (downtime); instead, you build the new bridge alongside the old one first (**Expand**). You route a small amount of traffic onto the new bridge, keep both running in parallel, and eventually shift all traffic over (**Migrate**). Finally, once the new bridge is proven stable, you tear down the old one (**Contract**). This allows you to make major, breaking database changes with zero downtime.
 
 #### Breaking Changes and the Expand-Contract Pattern
 
@@ -573,6 +581,12 @@ Serverless functions (AWS Lambda, Cloud Functions) break the pooling model: the 
 ---
 
 ### ETL & Data Pipelines
+
+> [!NOTE]
+> **Beginner's Mental Model — ETL vs. ELT:**
+> Imagine you run a juice company importing oranges from different farms:
+> - **ETL (Extract, Transform, Load)** is like squeezing the oranges into juice at a factory *before* shipping the cartons to your retail stores. The stores receive ready-to-sell juice, saving space and weight, but if they later decide they wanted orange marmalade instead, they are out of luck because the raw oranges were already processed.
+> - **ELT (Extract, Load, Transform)** is like shipping the whole, raw oranges directly to a massive warehouse store first. Once inside the warehouse, you can squeeze them into juice, make marmalade, or slice them up on demand using the warehouse's advanced kitchen. This keeps the raw data available for any future use, but requires a powerful, modern warehouse to handle the processing.
 
 #### ETL vs ELT
 

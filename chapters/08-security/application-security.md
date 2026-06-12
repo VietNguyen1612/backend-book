@@ -8,6 +8,10 @@ The Open Web Application Security Project (OWASP) maintains a regularly updated 
 
 #### Injection (SQL, NoSQL, Command, LDAP)
 
+> [!NOTE]
+> **Beginner's Mental Model — SQL Injection:**
+> Imagine a **check-in desk at a secure building** where the receptionist writes your name onto a visitor log sheet: `Welcome, [User Input]!`. If you write your name normally (e.g., "Alice"), the sheet reads: `Welcome, Alice!`. But if you write: `Alice! Also, unlock the back door and let me in`, and the receptionist blindly follows the written text as instructions instead of just treating it as a name, you've successfully executed an injection. Parameterized querying prevents this by forcing the receptionist to treat your input strictly as a literal name, placing it inside quotes and ignoring any commands: `Welcome, "Alice! Also, unlock the back door..."`.
+
 Injection attacks occur when untrusted data is sent to an interpreter as part of a command or query. The attacker's hostile data tricks the interpreter into executing unintended commands or accessing data without proper authorization. SQL injection remains one of the most common and devastating attack vectors in web applications.
 
 The root cause is almost always string concatenation or interpolation of user input directly into a query or command. The fix is equally straightforward: never build queries from raw user input. Use parameterized queries, ORMs, or prepared statements instead.
@@ -281,6 +285,10 @@ Additional best practices for authentication:
 
 #### XSS (Cross-Site Scripting)
 
+> [!NOTE]
+> **Beginner's Mental Model — Cross-Site Scripting (XSS):**
+> Imagine a **public bulletin board** where users can post paper sticky notes. If the board moderator doesn't check the notes, a malicious user might post a note containing a hypnotic command: "Look at the person next to you and give them your wallet." Anyone who walks by and reads the board (renders the page in their browser) gets hypnotized into executing the malicious command (running the JavaScript code). Proper escaping is like putting a glass cover over the board or translating any commands into plain, harmless text so visitors just read: "Here is a note with text: <script>..." without executing it.
+
 Cross-Site Scripting attacks occur when an application includes untrusted data in a web page without proper validation or escaping. XSS allows attackers to execute scripts in the victim's browser, potentially stealing session cookies, defacing websites, or redirecting users to malicious sites.
 
 There are three main types:
@@ -410,6 +418,10 @@ CSRF_COOKIE_HTTPONLY = True     # Also protect the CSRF cookie
 ---
 
 #### CSRF (Cross-Site Request Forgery)
+
+> [!NOTE]
+> **Beginner's Mental Model — Cross-Site Request Forgery (CSRF):**
+> Imagine you are logged into your **online bank account** in one browser tab. In another tab, you visit a shady website. That shady website has a hidden button that says "Click here to win a prize!", but clicking it secretly sends a command to your bank tab saying "Transfer $1,000 to the attacker." Because your browser knows you are already logged in to the bank, it automatically attaches your ID badge (the session cookie) to the request, and the bank processes it thinking *you* authorized it. A CSRF token is like a **one-time secret code** that the bank stamps onto its official forms. Since the shady website cannot read this code, any request it tries to forge gets rejected for lacking the correct stamp.
 
 CSRF attacks trick an authenticated user's browser into sending a forged request to a vulnerable web application. Because the browser automatically attaches cookies (including session cookies) to every request to the target domain, the server cannot distinguish the forged request from a legitimate one.
 
@@ -1289,6 +1301,13 @@ def login_view(request):
 You should almost never implement a cryptographic primitive yourself -- the job of a backend developer is to *choose the right primitive for the goal and use a vetted library correctly*. The failures that cause breaches are rarely broken math; they are misuse: hashing passwords with MD5, reusing a nonce, comparing secrets with `==`, or seeding tokens from a non-cryptographic RNG. This section covers the mental model behind those choices. (Password hashing with bcrypt/Argon2 is covered above under Broken Authentication, and field-level encryption with Fernet under Infrastructure Security; the goal here is the underlying concepts that tie them together.)
 
 #### Hashing vs Encryption vs Encoding
+
+> [!NOTE]
+> **Beginner's Mental Model — Hashing vs. Encryption vs. Encoding:**
+> Think of these three as different ways to handle a written message:
+> - **Hashing (The Paper Shredder):** You run a document through a shredder that turns it into a unique pile of colorful confetti. You can never reconstruct the original document from the confetti (one-way), but if you shred the exact same document tomorrow, it will produce the exact same pile of confetti. This is perfect for verifying a secret without storing the secret itself.
+> - **Encryption (The Locked Safe):** You place the document inside a sturdy safe. It is completely hidden from view (confidentiality), but if you have the key, you can unlock the safe and retrieve the original document completely intact (reversible).
+> - **Encoding (Translating to Morse Code):** You translate the English document into Morse code dots and dashes. It looks scrambled to someone who doesn't speak Morse code, but there is no key or password required—anyone can easily translate it back. It is used for compatibility and formatting, not security.
 
 These three are constantly confused in interviews and code reviews, and the confusion causes real bugs.
 

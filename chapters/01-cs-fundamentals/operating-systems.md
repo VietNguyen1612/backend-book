@@ -2,6 +2,10 @@
 
 # 1.3 Operating Systems
 
+> [!NOTE]
+> **Beginner's Mental Model — Processes vs Threads:**
+> Imagine a company. A **Process** is like an entire department in its own office building. It has its own desks, files, and resources, completely isolated from other departments (processes). A **Thread** is like an employee working inside that department. All employees (threads) in the same department share the same office space, files, and coffee machine (shared memory), but each employee has their own notebook and task list (stack and registers). If one department goes bankrupt, other departments keep running; but if someone makes a mess in the shared office, it affects all employees in that department.
+
 ### Processes & Threads
 
 #### Processes
@@ -342,6 +346,10 @@ Modern CPUs are deeply pipelined: they start executing instructions *after* a br
 
 ### Memory Management
 
+> [!NOTE]
+> **Beginner's Mental Model — Virtual Memory:**
+> Imagine you are a student and the school librarian gives you a private catalog desk that makes it look like you have the entire library's collection to yourself (Virtual Memory). In reality, the library only has a limited number of physical bookshelves (Physical RAM). When you request a specific book from your catalog, the librarian secretly runs to the back, fetches that book, and puts it on your desk. If you run out of desk space, the librarian might temporarily store some of your books in a box in the basement (Swap/Disk).
+
 #### Virtual Memory
 
 Each process sees a contiguous address space (e.g., 0 to 2^48 on 64-bit systems) that is **virtual** — it does not correspond directly to physical RAM. The OS maintains a **page table** that maps virtual pages to physical frames (or marks them as not-present, triggering a page fault that may load from disk).
@@ -669,6 +677,10 @@ Little's Law sanity check:  concurrency = throughput x latency
 
 ---
 
+> [!NOTE]
+> **Beginner's Mental Model — System Calls:**
+> Think of your application as a customer in a restaurant (user space) and the operating system kernel as the kitchen (kernel space). You cannot walk into the kitchen and cook or grab food yourself because it's restricted for safety and order. Instead, you look at the menu and place an order through a waiter. The waiter taking your order and bringing back the food is a **System Call**—a controlled way to ask the kitchen to do something for you (like reading a file or sending a network packet).
+
 ### I/O Models
 
 #### Blocking I/O
@@ -692,6 +704,13 @@ This works fine when each connection gets its own thread (**thread-per-connectio
 #### Non-Blocking I/O
 
 With non-blocking I/O, `read()` returns immediately with either data or an `EAGAIN`/`EWOULDBLOCK` error indicating no data is available yet. The application must poll repeatedly — this is **busy-waiting** and wastes CPU cycles.
+
+> [!NOTE]
+> **Beginner's Mental Model — epoll and io_uring:**
+> Imagine a waiter (single thread) managing 100 tables (connections).
+> - With basic I/O, the waiter stands at one table waiting for them to decide what to order, ignoring all other tables.
+> - With **epoll**, the waiter gives every table a buzzer. When a table is ready to order, they press the buzzer, and the waiter goes directly to that specific table.
+> - With **io_uring**, tables write their orders on a shared notepad (submission queue). The waiter processes the notepad in the background and writes the ready food details on another notepad (completion queue), allowing the table to pick it up without ever interrupting the waiter.
 
 #### I/O Multiplexing
 

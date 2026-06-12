@@ -316,6 +316,10 @@ FBVs are easier to understand and debug; CBVs reduce repetition when you have ma
 
 ### ORM & Database Layer
 
+> [!NOTE]
+> **Beginner's Mental Model — ORM Translator (Object-Relational Mapping):**
+> Imagine you are a tourist in a foreign country where everyone speaks **SQL**, but you only speak **Python**. An ORM is your **personal translator**. Instead of learning how to write complex SQL query phrases by hand, you speak to the ORM in familiar Python objects and methods (like `Book.objects.filter(genre="FIC")`). The ORM automatically translates your Python instructions into perfect SQL commands, sends them to the database, and translates the database's responses back into Python objects for you.
+
 #### Model Definitions and Patterns
 
 The Django ORM follows the Active Record pattern: each model instance knows how to save itself to the database, delete itself, and query its own table. This is in contrast to SQLAlchemy's default Data Mapper pattern, where a separate session/unit-of-work layer manages persistence and the model classes are closer to plain data containers.
@@ -478,6 +482,10 @@ COMMIT;
 This concept applies universally: Alembic for SQLAlchemy, Flyway for Java, Knex migrations for Node.js, and Active Record migrations for Rails. The key principle is that database schema changes are version-controlled, ordered, and reproducible.
 
 #### QuerySet Evaluation and the N+1 Problem
+
+> [!NOTE]
+> **Beginner's Mental Model — Lazy Evaluation:**
+> Imagine you are shopping with a **highly efficient personal assistant**. You hand them a shopping list: "Get milk, get eggs, get bread." A "lazy" assistant won't run to the store three separate times. Instead, they wait until you say, "I'm ready, cook breakfast!" (evaluating the list). Only then do they make a single trip to the supermarket to get everything at once. In Django, when you filter a QuerySet, Django doesn't call the database immediately. It waits until you actually try to print, iterate, or use the data, allowing it to combine all your filters into a single, optimized database trip.
 
 Django QuerySets are lazy: constructing a queryset does not execute any SQL. The query only hits the database when you iterate over the queryset, call `len()`, slice it, or explicitly evaluate it with `.exists()`, `.count()`, etc. This laziness lets you chain filters and build queries incrementally without performance cost.
 

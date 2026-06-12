@@ -18,6 +18,7 @@ The F.I.R.S.T. acronym captures five qualities that every good test should have.
 
 **Timely.** Tests should be written alongside the code, not weeks later as an afterthought. When you write a function, write its tests before you move on. Test-Driven Development (TDD) takes this further by writing the test *before* the implementation. Whether or not you practice strict TDD, the principle is: do not accumulate a testing debt that you will never repay.
 
+
 #### Determinism: Time, Randomness, Ordering, and Flaky Tests
 
 The *Repeatable* principle deserves concrete techniques, because non-determinism is the single largest source of flaky tests -- tests that pass and fail without any code change. A flaky test is arguably worse than no test: it trains the team to ignore red builds ("just re-run it"), and that learned blindness eventually lets a real regression slip through. The four classic sources of non-determinism each have a standard fix.
@@ -52,6 +53,12 @@ tests/test_coupons.py::test_same_thing_with_time_machine PASSED     [100%]
 ```
 
 **How to read this output:** These two tests will print `PASSED` identically whether you run them today or in five years -- that is the whole point. Without `@freeze_time`, the assertion `is_expired(expiry=date(2026, 1, 14)) is True` is true only until the clock passes that date, after which the test silently flips and someone wastes an afternoon. The interview-level point is *why prefer dependency injection of a clock over patching*: freezing libraries are perfect for tests, but designing the production code to accept a `clock` parameter makes the time-dependence explicit and testable without any monkeypatching at all.
+
+> [!NOTE]
+> **Beginner's Mental Model — Property-Based Testing:**
+> Imagine you are testing a new **calculator's addition function**:
+> - **Example-Based Testing:** You write a few test cases manually: "Does 2 + 2 = 4?" and "Does 5 + 3 = 8?".
+> - **Property-Based Testing:** Instead of picking numbers yourself, you define a *rule (property)*: "For any two numbers A and B, A + B must always equal B + A." You hand this rule to a helper framework (like Hypothesis), which automatically generates hundreds of weird, extreme pairs of numbers (like negatives, zero, massive numbers, decimals) to try to break your rule. If it finds a pair that breaks the rule (e.g., triggering an overflow), it simplifies it to show you the exact boundary where your code failed.
 
 **Seed randomness.** Code that uses `random`, `uuid4`, shuffling, or sampling must be seeded in tests so the "random" choice is reproducible (`random.seed(0)` / `np.random.seed(0)`). For property-based tests, Hypothesis already records and replays the seed of a failing example so you can reproduce it deterministically. Never assert on an unseeded random value.
 
@@ -190,6 +197,10 @@ tests/test_book_model.py::TestBookModel::test_discount_price PASSED             
 **How to read this output:** Each test got its own `Book` (and, via `SubFactory`, its own `Author`, `Review`, and `User`) without a single hardcoded fixture row — that is the payoff of factories. Note the `0.42s` total: factory_boy hits the database for every `create()`, so on a real suite these are integration-speed tests, not microsecond unit tests. The `[ 25%]` markers are pytest's progress counter, and the green `PASSED` per line is the Self-Validating principle in action — no log file to eyeball.
 
 Using factories means that when the `Book` model adds a `language` field with a default, you update `BookFactory` once and all existing tests continue to work.
+
+> [!NOTE]
+> **Beginner's Mental Model — Mutation Testing:**
+> Imagine you are a **teacher grading a student's safety inspection guide**. To test if the student is actually paying attention (and not just checking boxes), you secretly go around the room and swap the fire extinguisher with a painted red cardboard box, or turn off the main water valve. If the student completes the inspection and gives the room a perfect passing grade (your tests still pass), you know their inspection guide is flawed. Mutation testing does exactly this: it makes tiny, deliberate bugs (mutations) in your application code and runs your tests. If the tests still pass (the mutant "survives"), it means your tests are blind to that bug.
 
 #### Mutation Testing with mutmut
 

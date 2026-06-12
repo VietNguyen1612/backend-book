@@ -4,6 +4,12 @@
 
 ### asyncio
 
+> [!NOTE]
+> **Beginner's Mental Model — Asyncio Event Loop & Cooperative Multitasking:**
+> Imagine a kitchen with one chef (the single thread) and a ticket board (the Event Loop).
+> - In **Preemptive Multitasking** (threading), a manager blows a whistle every 10 seconds and forces the chef to stop what they are doing to work on a different dish, even if they were in the middle of pouring sauce.
+> - In **Cooperative Multitasking**, the chef chops onions, and when they put a pot of water on the stove to boil (an I/O wait), they voluntarily look at the ticket board (the event loop) and say, "This water will take 10 minutes, I will go chop carrots for table 3 now." The chef only switches tasks at clear pausing points (`await` statements).
+
 #### The Event Loop: Cooperative Multitasking
 
 The event loop is the heart of `asyncio`. It runs in a single thread and manages the execution of coroutines cooperatively. When a coroutine hits an `await`, it yields control back to the event loop, which can then run other coroutines. This is fundamentally different from threading (preemptive multitasking).

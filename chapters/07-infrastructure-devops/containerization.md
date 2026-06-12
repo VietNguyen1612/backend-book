@@ -4,6 +4,10 @@
 
 ### Docker
 
+> [!NOTE]
+> **Beginner's Mental Model — Docker Image vs. Container:**
+> Think of a Docker **image** as a cake recipe (a read-only blueprint), and a **container** as the actual cake baked from that recipe (the running instance). You can use one recipe to bake as many identical cakes as you want. If you frost or cut one cake (modify a container), the recipe (image) remains completely unchanged.
+
 #### Multi-Stage Builds
 
 A multi-stage build uses multiple `FROM` statements in a single Dockerfile. The key idea is to separate the **build environment** (which contains compilers, build tools, and development dependencies) from the **runtime environment** (which contains only the final artifact and its runtime dependencies). This dramatically reduces the size of your production image -- often by 10x or more -- and shrinks the attack surface by removing unnecessary tooling.
@@ -378,6 +382,10 @@ Because a container is just a process, the operational rules follow directly: ke
 
 ### Kubernetes
 
+> [!NOTE]
+> **Beginner's Mental Model — Kubernetes Pods:**
+> Imagine a Pod as a **hotel room**. While a container is like a single guest (your application), the room (the Pod) can accommodate one or more guests who share the same address, phone line, and bathroom (network namespace and storage). Most of the time, a room has just one guest, but sometimes a guest needs a helper (a sidecar container) in the same room to assist them.
+
 #### Pods
 
 A Pod is the smallest deployable unit in Kubernetes. It encapsulates one or more containers that share the same network namespace (they can reach each other on `localhost`) and the same storage volumes. In practice, most Pods run a single application container, but multi-container Pods are used for specific patterns.
@@ -492,6 +500,10 @@ spec:
           configMap:
             name: myapp-config-files
 ```
+
+> [!NOTE]
+> **Beginner's Mental Model — Kubernetes Services:**
+> Think of a Service as a **reception desk or a single phone number for a department**. Since individual employees (Pods) might be hired, fired, or move desks (get rescheduled or replaced), calling their personal extensions directly is unreliable. Instead, you call the department's reception desk (the Service), which automatically forwards your call to whichever employee (Pod) is currently available.
 
 #### Services
 

@@ -2,6 +2,10 @@
 
 # 10.2 System Thinking
 
+> [!NOTE]
+> **Beginner's Mental Model — Trade-offs:**
+> Think of system design trade-offs like **buying a car**. You want a car that is lightning fast (performance), has massive cargo space (scale), is incredibly cheap (cost), and is completely safe (reliability). However, in reality, you cannot have all four. If you want a cheap, high-cargo vehicle, it won't be fast. If you want a fast sports car, it will be expensive and have zero cargo space. In software engineering, every decision is a trade-off: you must choose which features to prioritize and which ones you are willing to sacrifice based on your requirements.
+
 ### Trade-off Analysis Framework
 
 Every architectural decision involves trade-offs. There is no perfect choice -- only choices that are better or worse for a specific context. The mark of a senior engineer is not knowing the "right" answer but being able to articulate the trade-offs clearly and make a deliberate, well-reasoned choice.
@@ -152,6 +156,10 @@ This connects directly to the simplicity-versus-flexibility and build-versus-buy
 > **Key Takeaway:** You have roughly three innovation tokens. Spend them on the technology that makes your product uniquely valuable, and make everything else as boring as possible. Choosing exciting tech for an undifferentiated problem is paying a permanent operational tax for a one-time dopamine hit.
 
 ---
+
+> [!NOTE]
+> **Beginner's Mental Model — Bottlenecks:**
+> Imagine a **six-lane highway that suddenly narrows down to a single lane** at a toll booth. No matter how fast cars drive on the six lanes, the total throughput of the highway is completely limited by how fast cars can pass through the single toll lane. The toll booth is the **bottleneck**. In system design, upgrading your fast application servers (the six lanes) won't make your app faster if your database is struggling to handle queries (the toll booth). To optimize a system, you must identify and widen the narrowest part.
 
 ### Back-of-Envelope Estimation
 

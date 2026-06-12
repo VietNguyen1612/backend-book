@@ -2,6 +2,12 @@
 
 # 5.4 WebAuthn & Passkeys
 
+> [!NOTE]
+> **Beginner's Mental Model — Passkeys and WebAuthn:**
+> Think of WebAuthn as a custom digital signature stamp. Instead of writing a secret signature (a password) on a document that anyone could copy or steal, you own a secure, biometric stamp machine (your device's authenticator) that only activates with your fingerprint or face scan.
+>
+> When you register with a site, your device generates a unique stamp (the public key) and gives it to the site, keeping the actual design template (the private key) locked deep inside your device. Every time you log in, the site sends a blank check (a challenge) to your device. You scan your face/fingerprint to authorize your device to stamp the check. The site verifies the stamp using the public key it stored, proving it was you, without you ever having to share the secret design template or type a password.
+
 Section 5.3 covered passwords, OAuth, and JWTs -- all of which ultimately rest on a *shared secret* (a password, a client secret, a signing key) that can be phished, leaked, or replayed. WebAuthn removes the shared secret from the login path entirely by using public-key cryptography, and **passkeys** are the user-friendly packaging that has made it mainstream. This section explains the model, the two ceremonies, and the operational gotchas.
 
 ### Why Passwordless

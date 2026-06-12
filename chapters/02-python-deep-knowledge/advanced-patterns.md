@@ -4,6 +4,10 @@
 
 ### Decorators & Context Managers
 
+> [!NOTE]
+> **Beginner's Mental Model — Decorators:**
+> Think of a decorator like a security guard standing outside a VIP room. The VIP room is your original function. Instead of changing the room itself to check guest IDs or log who enters, you place a guard (the decorator) at the door. When someone calls the function, the guard runs some code first (e.g., checks credentials, starts a timer, or logs the entry), lets the caller in to execute the original function, and then runs code on their way out (e.g., stops the timer).
+
 #### Function Decorators: Wrapping Behavior
 
 A decorator is a function that takes a function and returns a modified function. Always use `@functools.wraps` to preserve the original function's metadata (`__name__`, `__doc__`, `__module__`).
@@ -278,6 +282,10 @@ Result: 499999500000, Time: 0.0182s
 ---
 
 ### Generators & Iterators
+
+> [!NOTE]
+> **Beginner's Mental Model — Generators:**
+> Imagine a Pez dispenser. If you buy a bag of 1,000 candies and pour them all onto a table, they take up a lot of space (a standard list). A generator is the Pez dispenser itself: it doesn't spill all the candies onto the table at once. It holds the potential to give you candies, and only delivers exactly one candy when you push it (using `yield` / `next()`). It takes up almost no space in your hand, regardless of how many candies are waiting inside.
 
 #### Generator Functions: Lazy Evaluation
 

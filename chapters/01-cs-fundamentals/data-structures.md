@@ -2,6 +2,10 @@
 
 # 1.1 Data Structures
 
+> [!NOTE]
+> **Beginner's Mental Model — Arrays vs Linked Lists:**
+> Think of an array as a row of numbered lockers side-by-side: if you know the locker number, you can open it instantly (O(1) random access), but inserting a new locker in the middle requires shifting all subsequent lockers down. A linked list is like a scavenger hunt where each clue points to the location of the next clue: you have to follow the trail from the beginning to find anything (O(n) access), but adding a new step just requires updating one clue to point to the new location (O(1) insertion).
+
 ### Arrays & Linked Lists
 
 #### Arrays (Contiguous Memory Layout)
@@ -176,6 +180,10 @@ rb.write("event_5")  # Reuses the slot freed by the read
 > **Key Takeaway:** The choice between arrays and linked lists is fundamentally about memory layout. Arrays win when you need random access and cache-friendly iteration. Linked lists (and deque) win when you need fast insertions/removals at both ends. In Python, prefer `list` for most cases and `collections.deque` when you need a queue. True linked lists are rarely hand-implemented in Python because the overhead per-node is high and cache locality is poor.
 
 ---
+
+> [!NOTE]
+> **Beginner's Mental Model — Hash Tables:**
+> Imagine a coat check room. When you hand over your jacket, the attendant uses a quick rule (a hash function) to decide which hook to hang it on based on your ticket number. When you return, they don't search through every jacket one-by-one; they apply the same rule to your ticket and go straight to the correct hook.
 
 ### Hash Tables
 
@@ -407,6 +415,10 @@ $ python -c 'print(hash("attacker-controlled-key"))'
 > **Key Takeaway:** Hash tables provide O(1) average-case operations, making them the backbone of almost every high-performance system. Understanding collision resolution, load factors, and Python's dict internals helps you reason about performance. For distributed systems, consistent hashing is essential knowledge for designing scalable caches and databases.
 
 ---
+
+> [!NOTE]
+> **Beginner's Mental Model — Trees:**
+> Think of a tree like a computer's file system. You start at the "root" folder (e.g., C:\), which contains subfolders, which in turn contain more subfolders or files (leaves). To find a file, you follow a single, branching pathway down from the root, narrowing your search at every folder you open.
 
 ### Trees
 
@@ -751,6 +763,10 @@ print(ft.range_sum(2, 4))  # Updated: 650
 
 ---
 
+> [!NOTE]
+> **Beginner's Mental Model — Graphs:**
+> Imagine a map of cities (nodes) connected by highways (edges). Unlike a tree where there is only one strict parent-child path, a graph has no single root. You can have multiple routes between the same cities, dead ends, and even loops where you end up back where you started.
+
 ### Graphs
 
 #### Graph Representations
@@ -1033,6 +1049,10 @@ Searching for 9:
 Each element is "promoted" to a higher level with some probability (typically 0.5). This randomization gives the logarithmic performance without the complexity of rebalancing rotations.
 
 **Real-world use:** Redis sorted sets (ZSET) use skip lists internally, LevelDB and RocksDB use skip lists for their memtable. Skip lists are simpler to implement correctly than red-black trees and are naturally suited for concurrent access (lock-free variants exist).
+
+> [!NOTE]
+> **Beginner's Mental Model — Bloom Filters:**
+> Imagine a bouncer at a club with a quick checklist. If you aren't on the guest list, the bouncer can tell you immediately: "You are definitely not on the list" (no false negatives). But if you have a common name, the bouncer might say: "You might be on the list, let me call the manager to double-check" (potential false positive). It saves the manager from checking the heavy database binder for every single person.
 
 #### Bloom Filter
 

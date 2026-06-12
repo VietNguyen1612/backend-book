@@ -18,7 +18,6 @@ The F.I.R.S.T. acronym captures five qualities that every good test should have.
 
 **Timely.** Tests should be written alongside the code, not weeks later as an afterthought. When you write a function, write its tests before you move on. Test-Driven Development (TDD) takes this further by writing the test *before* the implementation. Whether or not you practice strict TDD, the principle is: do not accumulate a testing debt that you will never repay.
 
-
 #### Determinism: Time, Randomness, Ordering, and Flaky Tests
 
 The *Repeatable* principle deserves concrete techniques, because non-determinism is the single largest source of flaky tests -- tests that pass and fail without any code change. A flaky test is arguably worse than no test: it trains the team to ignore red builds ("just re-run it"), and that learned blindness eventually lets a real regression slip through. The four classic sources of non-determinism each have a standard fix.
@@ -57,6 +56,7 @@ tests/test_coupons.py::test_same_thing_with_time_machine PASSED     [100%]
 > [!NOTE]
 > **Beginner's Mental Model — Property-Based Testing:**
 > Imagine you are testing a new **calculator's addition function**:
+>
 > - **Example-Based Testing:** You write a few test cases manually: "Does 2 + 2 = 4?" and "Does 5 + 3 = 8?".
 > - **Property-Based Testing:** Instead of picking numbers yourself, you define a *rule (property)*: "For any two numbers A and B, A + B must always equal B + A." You hand this rule to a helper framework (like Hypothesis), which automatically generates hundreds of weird, extreme pairs of numbers (like negatives, zero, massive numbers, decimals) to try to break your rule. If it finds a pair that breaks the rule (e.g., triggering an overflow), it simplifies it to show you the exact boundary where your code failed.
 

@@ -366,6 +366,7 @@ Health check 5 passed
 > [!NOTE]
 > **Beginner's Mental Model — Rolling vs. Blue-Green vs. Canary Deployments:**
 > Imagine you run a busy **restaurant** and need to update your menu:
+>
 > - **Rolling Update (Replacing tables one by one):** You update the menu for one table at a time. Some tables have the old menu, others have the new menu. Eventually, everyone gets the new menu. No extra space needed, but you must support both menus simultaneously.
 > - **Blue-Green (Building a twin restaurant):** You build an identical twin restaurant next door, set it up with the new menu, and once it's ready, you close the old restaurant and open the new one instantly. It is extremely safe and easy to switch back if something is wrong, but it costs twice as much because you need two environments.
 > - **Canary (Testing on a few guests):** You keep the old menu for 95% of your tables, but print the new menu for just 5% of your tables (the "canaries"). You watch if they enjoy the food or get sick. If they like it, you slowly roll it out to more tables; if not, you take away those few menus immediately.

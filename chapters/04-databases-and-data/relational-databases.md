@@ -417,6 +417,7 @@ In practice, B-tree indexes are almost always preferred because they are more ve
 > [!NOTE]
 > **Beginner's Mental Model — GIN, GiST, and BRIN Indexes:**
 > Think of these as specialized library cataloging systems:
+>
 > - **GIN (Generalized Inverted Index)** is like the index at the back of a textbook. It maps individual ingredients or tags to all the recipes/pages where they appear—perfect for arrays, tags, or JSON columns.
 > - **GiST (Generalized Search Tree)** is like a map grid system. It groups coordinates or ranges into nesting boxes (e.g., "North America -> USA -> New York"), allowing you to quickly zoom in on geographic coordinates or overlapping calendar intervals.
 > - **BRIN (Block Range Index)** is like a summary card stuck to the front of a storage box that says: "Contains items with dates between 2020 and 2022." The database doesn't index every single item; it just tells you which boxes are worth opening—perfect for huge tables sorted by time.

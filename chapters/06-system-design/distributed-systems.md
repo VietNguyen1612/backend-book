@@ -5,6 +5,7 @@
 > [!NOTE]
 > **Beginner's Mental Model — CAP Theorem (The Phone Line):**
 > Imagine a bank that has two branches, each with a paper ledger of accounts. If the phone line between the branches goes down (a network partition), the bank faces a choice:
+>
 > - **Availability (AP):** Keep both branches open. Customers can deposit or withdraw money, but since the branches can't talk to update the ledger, the balances will diverge (stale data).
 > - **Consistency (CP):** Close the branches or refuse transactions until the phone line is fixed. The balances remain perfectly correct, but customers are turned away (unavailable).
 > You can't have both when the phone line is cut.

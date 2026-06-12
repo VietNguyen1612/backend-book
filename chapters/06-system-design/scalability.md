@@ -7,6 +7,7 @@
 > [!NOTE]
 > **Beginner's Mental Model — Horizontal vs Vertical Scaling:**
 > Imagine you run a bakery and need to bake more bread:
+>
 > - **Vertical Scaling (Scaling Up)** is like buying a bigger, more expensive oven. It fits more bread and doesn't change how you work, but eventually, you can't buy an oven any larger, and the cost of giant ovens grows ridiculously high.
 > - **Horizontal Scaling (Scaling Out)** is like buying ten more regular-sized ovens. You can bake almost infinite bread by just adding more ovens, but now you have to coordinate a team of bakers to manage them, and you must make sure they don't fight over the same ingredients (statelessness).
 

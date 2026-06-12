@@ -708,6 +708,7 @@ With non-blocking I/O, `read()` returns immediately with either data or an `EAGA
 > [!NOTE]
 > **Beginner's Mental Model — epoll and io_uring:**
 > Imagine a waiter (single thread) managing 100 tables (connections).
+>
 > - With basic I/O, the waiter stands at one table waiting for them to decide what to order, ignoring all other tables.
 > - With **epoll**, the waiter gives every table a buzzer. When a table is ready to order, they press the buzzer, and the waiter goes directly to that specific table.
 > - With **io_uring**, tables write their orders on a shared notepad (submission queue). The waiter processes the notepad in the background and writes the ready food details on another notepad (completion queue), allowing the table to pick it up without ever interrupting the waiter.

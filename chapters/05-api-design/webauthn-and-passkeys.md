@@ -4,7 +4,7 @@
 
 Section 5.3 covered passwords, OAuth, and JWTs -- all of which ultimately rest on a *shared secret* (a password, a client secret, a signing key) that can be phished, leaked, or replayed. WebAuthn removes the shared secret from the login path entirely by using public-key cryptography, and **passkeys** are the user-friendly packaging that has made it mainstream. This section explains the model, the two ceremonies, and the operational gotchas.
 
-### Why Passwordless
+## Why Passwordless
 
 Passwords fail in predictable ways: users reuse them, attackers phish them, and a single server breach leaks a reusable credential. Even with a password *plus* TOTP/SMS, the second factor is still a shared secret a convincing phishing page can capture and relay in real time (adversary-in-the-middle).
 
@@ -14,7 +14,7 @@ WebAuthn (a W3C standard; **FIDO2** = WebAuthn + the CTAP protocol that talks to
 - The server stores only the **public key**. A breach of that database yields nothing an attacker can log in with.
 - Each assertion is **bound to the site's origin**, so a phishing page on `evil.com` cannot produce a valid signature for `example.com` -- WebAuthn is *phishing-resistant by construction*, not by user vigilance.
 
-### The WebAuthn Model
+## The WebAuthn Model
 
 Four parties cooperate. Knowing which one does what is the whole mental model:
 
@@ -39,7 +39,7 @@ The **relying party (RP)** is your application. The **authenticator** generates 
 
 There are two ceremonies: **registration** (attestation) creates a credential; **authentication** (assertion) proves possession of it. Both follow the same shape: the server issues a random **challenge**, the authenticator signs over it, and the server verifies. The challenge makes every ceremony single-use and replay-proof.
 
-### Registration (Attestation) Ceremony
+## Registration (Attestation) Ceremony
 
 ```
   Registration
@@ -128,7 +128,7 @@ const result = await fetch("/register/complete", {
 
 **How to read this flow:** the security-critical line is the server's `verify_registration_response`. It recomputes the SHA-256 hash of your RP ID and checks it against the authenticator data, confirms the `expected_origin` matches exactly (so a credential minted on `https://example.com` cannot be created from `https://example.com.evil.com`), and confirms the challenge is the one *you* issued (defeating replay). `user_id` must be an opaque, stable handle -- never the email, because it is stored on the authenticator and used to look the account up during usernameless login. Setting `resident_key=REQUIRED` is what turns an ordinary credential into a **passkey** (a *discoverable* credential the authenticator can surface without the server first telling it which credential to use).
 
-### Authentication (Assertion) Ceremony
+## Authentication (Assertion) Ceremony
 
 Authentication mirrors registration, but now the authenticator *signs* the challenge with the private key it already holds, and the server verifies that signature with the stored public key.
 
@@ -182,7 +182,7 @@ const user = await fetch("/login/complete", {
 }).then((r) => r.json());
 ```
 
-### Passkeys: Synced vs Device-Bound
+## Passkeys: Synced vs Device-Bound
 
 A **passkey** is simply a *discoverable* (resident) WebAuthn credential with good UX on top. Two flavors matter operationally:
 
@@ -191,7 +191,7 @@ A **passkey** is simply a *discoverable* (resident) WebAuthn credential with goo
 
 Two UX wins fall out of discoverable credentials: **usernameless login** (the server sends no `allow_credentials`, and the authenticator offers the accounts it holds) and **conditional UI / autofill** (`startAuthentication({ ..., useBrowserAutofill: true })`), where passkeys appear in the username field's autofill dropdown.
 
-### Security Properties & Gotchas
+## Security Properties & Gotchas
 
 - **Phishing resistance is the headline.** Because the assertion is bound to the origin and RP ID, a relayed credential is useless on the wrong domain. This is the one property passwords + OTP cannot match.
 - **The sign counter is a weak signal.** It exists to detect cloned authenticators, but many platform authenticators and synced passkeys report `0` and never increment (a synced key lives on many devices by design). Treat a non-monotonic counter as suspicious only when the stored count is non-zero, as above -- do not hard-fail on `0`.

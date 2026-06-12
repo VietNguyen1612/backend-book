@@ -4,13 +4,13 @@
 
 Design patterns are reusable solutions to commonly occurring problems in software design. They are not code templates to copy-paste but rather conceptual blueprints that you adapt to your specific situation. The following sections cover the most important patterns, organized by their intent.
 
-### Creational Patterns
+## Creational Patterns
 
 Creational patterns abstract the instantiation process, making a system independent of how its objects are created, composed, and represented.
 
 ---
 
-#### Factory Method
+### Factory Method
 
 The Factory Method pattern defines an interface for creating an object but lets subclasses (or, in Python, factory functions) decide which class to instantiate. Use it when the exact type of object to create is determined at runtime or when object creation involves complex logic.
 
@@ -81,7 +81,7 @@ In a Django project, the Factory Method appears when creating serializers based 
 
 ---
 
-#### Abstract Factory
+### Abstract Factory
 
 The Abstract Factory pattern provides an interface for creating **families of related objects** without specifying their concrete classes. Use it when your system must work with multiple families of products that are designed to be used together.
 
@@ -162,7 +162,7 @@ In backend development, this pattern appears when supporting multiple database b
 
 ---
 
-#### Builder
+### Builder
 
 The Builder pattern constructs complex objects step by step, separating the construction process from the representation. This is useful when an object has many optional parameters or when the construction involves multiple steps.
 
@@ -233,7 +233,7 @@ In a Django project, you see the Builder pattern in Django's `QuerySet` API itse
 
 ---
 
-#### Singleton
+### Singleton
 
 The Singleton pattern ensures a class has only one instance and provides a global access point to it. Common uses include database connection pools, configuration managers, and logging instances.
 
@@ -290,7 +290,7 @@ print(pool1 is pool2)  # True
 
 ---
 
-#### Prototype
+### Prototype
 
 The Prototype pattern creates new objects by cloning existing ones. This is useful when object creation is expensive (e.g., involves database queries or complex computation) or when you want to create variations of a template object.
 
@@ -337,7 +337,7 @@ Use `copy.copy()` for shallow copies (nested objects are shared) and `copy.deepc
 
 ---
 
-#### Object Pool
+### Object Pool
 
 The Object Pool pattern keeps a set of pre-created, reusable objects ready for use, handing one out on request and taking it back when the caller is done -- instead of constructing and destroying expensive objects repeatedly. It is the pattern behind database connection pools, thread pools, and HTTP client pools: creating a TCP connection or spawning a thread costs milliseconds and OS resources, so you amortize that cost by reusing a bounded set.
 
@@ -398,13 +398,13 @@ conn#2 ran: SELECT 2
 
 ---
 
-### Structural Patterns
+## Structural Patterns
 
 Structural patterns deal with object composition -- how classes and objects are assembled to form larger structures while keeping the structure flexible and efficient.
 
 ---
 
-#### Adapter
+### Adapter
 
 The Adapter pattern converts the interface of a class into another interface that clients expect. It lets classes work together that otherwise could not because of incompatible interfaces. This is especially common when integrating third-party libraries or legacy systems.
 
@@ -484,7 +484,7 @@ In a Django project, adapters are used when integrating multiple email providers
 
 ---
 
-#### Decorator (Structural Pattern)
+### Decorator (Structural Pattern)
 
 The structural Decorator pattern dynamically adds responsibilities to objects by wrapping them. This is distinct from Python's `@decorator` syntax, though Python decorators are inspired by the same concept. The structural Decorator wraps an object with an enhanced version that implements the same interface.
 
@@ -579,7 +579,7 @@ This is a powerful technique because you can add, remove, or reorder behaviors w
 
 ---
 
-#### Facade
+### Facade
 
 The Facade pattern provides a simplified interface to a complex subsystem. It does not add new functionality but rather presents a more convenient, higher-level API. Use it to reduce the number of objects a client must interact with.
 
@@ -673,7 +673,7 @@ In a Django project, service classes often act as facades that coordinate models
 
 ---
 
-#### Proxy
+### Proxy
 
 The Proxy pattern provides a surrogate or placeholder for another object to control access to it. There are several types of proxies:
 
@@ -750,7 +750,7 @@ In Python, `__getattr__` provides a concise way to implement proxies by delegati
 
 ---
 
-#### Composite
+### Composite
 
 The Composite pattern composes objects into tree structures to represent part-whole hierarchies. It lets clients treat individual objects and compositions of objects uniformly. Classic examples include file systems (files and directories), organizational charts, and UI component trees.
 
@@ -829,7 +829,7 @@ In backend development, the Composite pattern is useful for modeling permission 
 
 ---
 
-#### Bridge
+### Bridge
 
 The Bridge pattern decouples an **abstraction** from its **implementation** so the two can vary independently. It is the answer to a combinatorial explosion: when you have *M* kinds of "what" and *N* kinds of "how", inheritance forces you to write `M x N` subclasses, while Bridge splits them into two hierarchies you compose at runtime (`M + N` classes). The classic example: notification *types* (alert, report, reminder) crossed with delivery *channels* (email, SMS, Slack). Rather than `EmailAlert`, `SmsAlert`, `SlackAlert`, `EmailReport`... you have a `Notification` abstraction holding a reference to a `Channel` implementor.
 
@@ -890,13 +890,13 @@ Reminder(SmsChannel()).send({"message": "renew cert", "due": "Friday"})
 
 ---
 
-### Behavioral Patterns
+## Behavioral Patterns
 
 Behavioral patterns deal with algorithms and the assignment of responsibilities between objects. They describe not just patterns of objects but also patterns of communication between them.
 
 ---
 
-#### Observer
+### Observer
 
 The Observer pattern defines a one-to-many dependency between objects so that when one object changes state, all its dependents are notified and updated automatically. This decouples the subject (publisher) from its observers (subscribers).
 
@@ -954,7 +954,7 @@ In a Django project, the Observer pattern is built into the framework as **Djang
 
 ---
 
-#### Strategy
+### Strategy
 
 The Strategy pattern defines a family of algorithms, encapsulates each one, and makes them interchangeable. The client delegates to a strategy object, allowing the algorithm to vary independently from the clients that use it.
 
@@ -1057,7 +1057,7 @@ Strategy is one of the most commonly used patterns in backend development. In a 
 
 ---
 
-#### Command
+### Command
 
 The Command pattern encapsulates a request as an object, allowing you to parameterize clients with different requests, queue requests, log them, and support undo/redo operations.
 
@@ -1166,7 +1166,7 @@ In backend systems, the Command pattern appears in task queues (Celery tasks are
 
 ---
 
-#### Chain of Responsibility
+### Chain of Responsibility
 
 The Chain of Responsibility pattern passes a request along a chain of handlers. Each handler decides either to process the request or to pass it to the next handler in the chain. This decouples senders from receivers and allows you to compose processing pipelines dynamically.
 
@@ -1274,7 +1274,7 @@ This is exactly how Django middleware and ASGI/WSGI middleware stacks work. Each
 
 ---
 
-#### State
+### State
 
 The State pattern allows an object to alter its behavior when its internal state changes. The object appears to change its class. State transitions are modeled as objects, making the transition logic explicit and each state's behavior self-contained.
 
@@ -1402,7 +1402,7 @@ This is much cleaner than a series of `if/elif` checks on a status string scatte
 
 ---
 
-#### Template Method
+### Template Method
 
 The Template Method pattern defines the **skeleton of an algorithm** in a base class, deferring specific steps to subclasses. The overall sequence is fixed; only the variable steps are overridden. This is the inheritance-based cousin of Strategy (which uses composition): use Template Method when the steps are tightly bound to a fixed workflow, and Strategy when you want to swap a whole step at runtime.
 
@@ -1461,7 +1461,7 @@ Bob=200
 
 ---
 
-#### Mediator
+### Mediator
 
 The Mediator pattern centralizes communication between a set of objects so they no longer refer to each other directly. Instead of *N* objects each holding references to the others (an `O(N^2)` web of dependencies), every object talks only to the mediator, which routes the interactions. This reduces coupling at the cost of a mediator that can itself grow complex.
 
@@ -1511,7 +1511,7 @@ login button enabled: True
 
 ---
 
-#### Iterator
+### Iterator
 
 The Iterator pattern provides sequential access to the elements of a collection without exposing its underlying representation. In Python this pattern is built into the language: any object implementing `__iter__` (and `__next__`) works in a `for` loop, and **generators** are the idiomatic, lazy way to produce iterators without writing a class. Laziness is the production payoff -- you can iterate a billion-row table or an infinite stream without materializing it in memory.
 
@@ -1545,7 +1545,7 @@ for batch in paginate(total=7, page_size=3):
 
 ---
 
-#### Visitor
+### Visitor
 
 The Visitor pattern lets you add new operations to a set of object types **without modifying those types**. You separate the operation (the "visitor") from the structure it operates on, using double dispatch to pick the right behavior for each element type. It shines when the set of types is stable but you keep adding new operations (export, validate, price, render) over them. In Python, `functools.singledispatch` provides type-based dispatch that captures the essence of Visitor without the boilerplate `accept(visitor)` methods of the classic Java form.
 
@@ -1604,7 +1604,7 @@ print(round(area(drawing), 2))
 
 ---
 
-#### Repository
+### Repository
 
 The Repository pattern mediates between the domain and data mapping layers, providing a collection-like interface for accessing domain objects. It encapsulates the logic needed to access data sources and centralizes query logic so that it is not scattered across the application.
 
@@ -1707,7 +1707,7 @@ The `InMemoryUserRepository` makes testing trivial -- no database setup, no migr
 
 ---
 
-#### Unit of Work
+### Unit of Work
 
 The Unit of Work pattern tracks all changes made to objects during a business transaction and coordinates writing those changes to the database as a single atomic operation. Either all changes are committed, or all are rolled back.
 
@@ -1775,7 +1775,7 @@ Django's `transaction.atomic()` is the most common Unit of Work implementation i
 
 ---
 
-#### CQRS (Command Query Responsibility Segregation)
+### CQRS (Command Query Responsibility Segregation)
 
 CQRS separates the **read model** (optimized for queries) from the **write model** (optimized for business rules and data integrity). The write side uses a normalized domain model with validation and business rules. The read side uses denormalized projections optimized for specific queries.
 
@@ -1893,13 +1893,13 @@ CQRS adds significant complexity. Use it when read and write patterns differ dra
 
 ---
 
-### Enterprise Application Patterns
+## Enterprise Application Patterns
 
 Beyond the GoF catalog, a set of patterns (largely from Martin Fowler's *Patterns of Enterprise Application Architecture*) address the recurring concerns of data-backed business applications: moving data across boundaries, expressing business rules reusably, and choosing how domain objects relate to the database. Repository, Unit of Work, and Service Layer were covered with the behavioral patterns above; the remaining ones round out the toolkit.
 
 ---
 
-#### DTO (Data Transfer Object)
+### DTO (Data Transfer Object)
 
 A DTO is a flat, serializable object whose only job is to **carry data across a boundary** -- an API request/response, a queue payload, a cache entry. It is deliberately behavior-free and is kept *separate from your domain entities*. The point is decoupling: your wire format (the contract clients depend on) should not be your database schema or your rich domain model, because then any internal refactor becomes a breaking API change, and any internal field accidentally leaks to clients.
 
@@ -1947,7 +1947,7 @@ UserResponseDTO(id=1, email='a@b.com', role='admin')
 
 ---
 
-#### Specification
+### Specification
 
 The Specification pattern encapsulates a business rule or query predicate as a **composable object**, so the rule can be named, reused, and combined with boolean logic (`and`, `or`, `not`) rather than being duplicated as ad-hoc `if` conditions and `WHERE` clauses scattered across the codebase. The same specification can drive both in-memory validation ("does this object satisfy the rule?") and querying ("fetch all objects satisfying the rule").
 
@@ -2022,7 +2022,7 @@ print([c.name for c in customers if churn_risk.is_satisfied_by(c)])
 
 ---
 
-#### Data Mapper vs. Active Record
+### Data Mapper vs. Active Record
 
 These are the two dominant patterns for connecting domain objects to relational tables, and the choice shapes your whole persistence strategy.
 
@@ -2062,7 +2062,7 @@ class OrderRepository:        # the mapper/repository owns persistence
 
 ---
 
-#### Dependency Injection
+### Dependency Injection
 
 Dependency Injection (DI) means an object receives its collaborators from the outside -- as constructor arguments or function parameters -- rather than constructing them internally. This is the practical mechanism behind the Dependency Inversion Principle: it is what lets you pass a real adapter in production and a fake in tests through the same code path, and it is visible throughout this chapter (every `__init__(self, repo: Repository)` above is DI). In Python, explicit constructor injection is usually all you need; for larger apps, frameworks help -- FastAPI's `Depends`, or containers like `dependency-injector` that wire object graphs from a central configuration. The anti-pattern to avoid is the Service Locator, where objects reach into a global registry to *fetch* their dependencies, which hides the dependency graph and reintroduces the global-state problems DI was meant to solve.
 
@@ -2070,13 +2070,13 @@ Dependency Injection (DI) means an object receives its collaborators from the ou
 
 ---
 
-### Concurrency & Reliability Patterns
+## Concurrency & Reliability Patterns
 
 Distributed and concurrent systems fail in ways single-threaded programs do not: dependencies time out, queues fill up, the same message arrives twice, one slow service drags down everything that calls it. The following patterns are the standard toolkit for building systems that degrade gracefully instead of collapsing. (Several appear again in the Architectural Styles chapter in a distributed-systems context; here the focus is the in-process and client-side mechanics.)
 
 ---
 
-#### Producer-Consumer
+### Producer-Consumer
 
 The Producer-Consumer pattern decouples the rate of *producing* work from the rate of *consuming* it by placing a buffer (queue) between them. Producers enqueue items and move on; consumers dequeue and process at their own pace. This smooths bursts, lets you scale producers and consumers independently, and is the foundation of every task queue.
 
@@ -2123,7 +2123,7 @@ consumed 2
 
 ---
 
-#### Thread Pool / Worker Pool
+### Thread Pool / Worker Pool
 
 A worker pool maintains a fixed set of threads (or processes) that pull tasks from a queue, bounding concurrency so you never spawn an unlimited number of workers and exhaust CPU, memory, or downstream connection limits. Python's `concurrent.futures.ThreadPoolExecutor` is the standard implementation.
 
@@ -2159,7 +2159,7 @@ for r in results:
 
 ---
 
-#### Future / Promise
+### Future / Promise
 
 A Future is a placeholder for a result that does not exist yet -- you receive it immediately when you submit async work, and later read its value (or exception) once the work completes. It lets you launch work, keep doing other things, and collect results when convenient. Python exposes this as `concurrent.futures.Future` (thread/process pools) and `asyncio.Future`/awaitables (async I/O).
 
@@ -2191,7 +2191,7 @@ with ThreadPoolExecutor(max_workers=3) as pool:
 
 ---
 
-#### Circuit Breaker
+### Circuit Breaker
 
 A Circuit Breaker stops calling a failing dependency so you fail *fast* instead of piling up doomed requests that hold threads and connections while waiting to time out. It models a circuit with three states: **closed** (calls flow normally, failures are counted), **open** (the failure threshold was crossed -- calls are rejected immediately without even trying), and **half-open** (after a cooldown, a trial call is allowed; success closes the circuit, failure re-opens it).
 
@@ -2260,7 +2260,7 @@ attempt 4: RuntimeError: Circuit OPEN -- failing fast
 
 ---
 
-#### Bulkhead
+### Bulkhead
 
 Named after the watertight compartments that stop a breached ship from flooding entirely, the Bulkhead pattern isolates resources so a failure in one area cannot consume *all* of them. You give each dependency (or tenant, or request class) its own bounded resource pool -- separate thread pools, separate connection pools, separate rate limits -- so that one slow or failing dependency exhausts only its own compartment.
 
@@ -2282,13 +2282,13 @@ The payoff is failure isolation: if the recommendations service hangs, it can ti
 
 ---
 
-#### Backpressure
+### Backpressure
 
 Backpressure is the mechanism by which an overwhelmed consumer signals upstream producers to *slow down*, rather than silently dropping work or growing an unbounded buffer until it runs out of memory. The simplest form is a bounded queue: when it fills, `put()` blocks, which naturally throttles the producer (as in the Producer-Consumer example above). At the network level it appears as HTTP `429 Too Many Requests`, TCP flow control, or a queue depth limit that rejects new work. The anti-pattern it prevents is the unbounded queue: an in-memory queue with no size limit will happily accept work faster than it can be processed until the process is OOM-killed -- turning a transient slowdown into a crash. The rule: every buffer between a fast producer and a slow consumer must be bounded, and the system must have a defined behavior (block, shed load, or reject) for when it is full.
 
 ---
 
-#### Retry with Backoff and Jitter
+### Retry with Backoff and Jitter
 
 Retrying a failed operation is essential for surviving transient faults (a brief network blip, a momentary timeout), but a naive retry loop is dangerous. Three rules make retries safe:
 
@@ -2325,7 +2325,7 @@ attempt 2 failed (timeout); retrying in 2.18s
 
 ---
 
-#### Idempotency and Deduplication
+### Idempotency and Deduplication
 
 An operation is idempotent if performing it multiple times has the same effect as performing it once. This is the property that makes retries and at-least-once message delivery *safe* -- if a client retries a payment because the response was lost (but the charge actually succeeded), an idempotent endpoint recognizes the duplicate and returns the original result instead of charging again. The standard mechanism is an **idempotency key**: the client sends a unique key with the request, and the server records it; a second request with the same key returns the stored result rather than re-executing.
 
@@ -2360,7 +2360,7 @@ duplicate key-abc: returning stored result
 
 ---
 
-#### Leader Election / Leases
+### Leader Election / Leases
 
 When you run multiple identical instances of a service for availability, some tasks must be performed by **exactly one** instance -- a scheduled cron job, a log compaction, a queue cleanup. Running them on every replica causes duplicate work or corruption. Leader election ensures one instance is designated the leader and only it performs the singleton task. The common implementation is a **lease** (a time-bounded distributed lock): an instance acquires a lock with a TTL, periodically renews it while it holds leadership, and if it crashes the lease expires and another instance takes over -- avoiding the deadlock of a permanent lock held by a dead node.
 

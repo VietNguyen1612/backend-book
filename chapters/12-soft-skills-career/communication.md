@@ -4,9 +4,9 @@
 
 Effective communication is arguably the single highest-leverage skill a backend engineer can develop. You may write flawless code, but if you cannot explain your design decisions, convey risk to stakeholders, or leave behind documentation that others can follow, the impact of your work shrinks dramatically. This section covers the concrete artifacts and practices that separate engineers who merely code from engineers who lead.
 
-### Technical Writing
+## Technical Writing
 
-#### RFC / Design Document
+### RFC / Design Document
 
 An RFC (Request for Comments) or Design Document is the single most important written artifact an engineer produces outside of code itself. It forces you to think through a problem before writing a line of implementation, surfaces disagreements early when they are cheap to resolve, and creates a durable record of *why* a system was built the way it was.
 
@@ -26,7 +26,7 @@ A strong RFC contains these sections:
 
 The most important practice: **circulate the RFC and collect feedback before writing implementation code.** A one-week review period that catches a fundamental flaw saves months of wasted work.
 
-##### Complete RFC Template with Filled-In Example
+#### Complete RFC Template with Filled-In Example
 
 ```
 =============================================================
@@ -195,7 +195,7 @@ Measurement window: 30 days after 100% rollout.
 - Payment Gateway SLA documentation: /wiki/vendor/payment-gw
 ```
 
-#### README
+### README
 
 A README is the front door of your project. When another engineer encounters your repository for the first time, the README determines whether they can get productive in minutes or waste hours guessing. A good README answers three questions immediately:
 
@@ -207,7 +207,7 @@ A README is the front door of your project. When another engineer encounters you
 
 The most common README failure mode is *staleness*. A README that describes the project as it existed six months ago is worse than no README, because it actively misleads. Treat README updates as part of your definition of done for any change that alters setup steps, dependencies, or core behavior.
 
-#### Runbooks
+### Runbooks
 
 A runbook is a step-by-step operational procedure designed to be followed under pressure -- often at 3 AM during an incident. The quality of your runbooks directly determines your team's mean time to recovery (MTTR).
 
@@ -224,7 +224,7 @@ Every runbook should include:
 
 Runbooks must be tested. An untested runbook will fail when you need it most. Schedule quarterly "runbook drills" where an engineer follows the runbook verbatim against a staging environment. Update the runbook based on where they get stuck.
 
-##### Runbook Template with Example: Database Connection Pool Exhaustion
+#### Runbook Template with Example: Database Connection Pool Exhaustion
 
 ```
 =============================================================
@@ -403,7 +403,7 @@ The single highest-value command in that runbook is the Step 2 query against `pg
 
 > **Common pitfall:** `pg_terminate_backend()` frees the connection immediately, but if the underlying cause is a missing index or an unbounded query, the next request simply re-creates the same long-running query and you are back where you started within minutes. Killing queries buys time; it is not the fix. Always pair Option A with `statement_timeout` (Option D) or the schema fix so the problem cannot silently recur.
 
-#### ADRs (Architecture Decision Records)
+### ADRs (Architecture Decision Records)
 
 An ADR is a short document that captures a single architectural decision: the context, the decision itself, and the consequences. Unlike an RFC, which is written *before* a decision is made to solicit feedback, an ADR is written *after* the decision to record it for posterity.
 
@@ -421,9 +421,9 @@ Store ADRs in version control alongside the code they describe (e.g., `docs/adr/
 
 > **Key Takeaway -- Technical Writing**: The documents you write (RFCs, READMEs, runbooks, ADRs) are force multipliers. A well-written RFC prevents weeks of wasted implementation. A good runbook shaves hours off incident recovery. A clear ADR prevents the same architectural debate from recurring every quarter. Invest in your writing the same way you invest in your code: draft, review, revise, and maintain.
 
-### Stakeholder Communication
+## Stakeholder Communication
 
-#### Translating Technical Concepts to Business Impact
+### Translating Technical Concepts to Business Impact
 
 The most common communication failure among backend engineers is describing *what* they are doing in technical terms without connecting it to *why it matters* to the business. Your engineering manager, product manager, and executive sponsors do not need to understand connection pooling or Kafka consumer groups. They need to understand risk, cost, timeline, and user impact.
 
@@ -451,7 +451,7 @@ Here are concrete before-and-after examples:
 - BEFORE: "We have a critical CVE in our log4j dependency and need to patch immediately."
 - AFTER: "A security vulnerability was publicly disclosed that affects our order processing system. If exploited, an attacker could gain access to our production servers and potentially customer data. The industry-wide severity rating is 10 out of 10. We need to deploy a patch within 24 hours. The patch itself is low-risk (a library version update) and requires no downtime. Delaying exposes us to regulatory penalties under our data protection obligations and potential breach notification requirements."
 
-#### Estimating Honestly
+### Estimating Honestly
 
 Engineers face constant pressure to give optimistic estimates. Resist this. An honest estimate protects both you and your stakeholders. When an estimate slips, trust erodes -- and trust is the foundation of your professional reputation.
 
@@ -467,7 +467,7 @@ Communicate your assumptions. "This estimate assumes the Payment Gateway API doc
 
 > **Common pitfall:** Do not bury your contingency inside a single padded point estimate (quietly turning a 3-week base case into "5 weeks" and presenting only "5 weeks"). When the work finishes early, you look like you sandbagged; when it slips anyway, the hidden buffer is already spent and you have nothing left to absorb the surprise. State the base case, the contingency, and the assumptions separately so stakeholders can see your reasoning and renegotiate scope rather than just the number.
 
-#### Saying No Constructively
+### Saying No Constructively
 
 "No" is one of the most important words in an engineer's vocabulary, but it must be delivered with alternatives and reasoning, not as a blunt refusal.
 
@@ -480,11 +480,11 @@ This approach shows that you are aligned with the business goal (launching quick
 
 > **Key Takeaway -- Stakeholder Communication**: Your ability to influence decisions is directly proportional to your ability to communicate in terms your audience cares about. Executives care about revenue, risk, and timeline. Product managers care about user experience and competitive position. Translate accordingly. An engineer who can say "this refactoring will save us $80,000 in engineering time over the next year" will get that refactoring approved. An engineer who says "the code is messy and hard to work with" will not.
 
-### Writing for Your Audience
+## Writing for Your Audience
 
 The same facts must be packaged differently depending on who is reading. The mistake junior engineers make is writing one message in their own head-space -- full of implementation detail -- and broadcasting it to everyone. The skill is to ask, before you write a word: *who is the reader, what decision are they trying to make, and what do they need from me to make it?*
 
-#### Lead With the Conclusion
+### Lead With the Conclusion
 
 For stakeholders -- managers, product, executives -- put the conclusion and the "so what" in the first sentence, then support it. This is sometimes called BLUF (Bottom Line Up Front). A busy reader should be able to stop after the first paragraph and still know what happened, what you need, and what it means for them. Do not build up to your point with a chronological narrative of everything you investigated; that is how *you* discovered the answer, not how the reader wants to consume it.
 
@@ -495,11 +495,11 @@ The strong version respects the reader's time and ends with the single most usef
 
 For engineers, the priority flips. They need enough depth to evaluate or extend your work -- the data flow, the edge cases, the trade-offs you rejected. The RFC and ADR formats above exist precisely to carry that depth. The error is using one register for both audiences: drowning an executive in connection-pool internals, or handing an engineer a one-line summary with no way to verify your reasoning.
 
-#### Make the Ask Explicit
+### Make the Ask Explicit
 
 Every piece of communication that wants something should say, unambiguously, what it wants and by when. "Let me know your thoughts" is not an ask. "I need a yes/no on the Kafka approach by Thursday so I can start implementation Friday -- if I do not hear back I will proceed with the default in the RFC" is an ask. State who you need it from, what form the answer should take, and the deadline. If there is no ask, say so explicitly ("FYI, no action needed") so the reader does not waste energy hunting for one.
 
-### Asynchronous, Written-First Communication
+## Asynchronous, Written-First Communication
 
 For any team that is distributed across time zones -- or simply busy -- a default of *write it down first* scales far better than a default of *schedule a meeting*. A meeting consumes N people's time simultaneously, happens once, and leaves behind nothing but fading memories and possibly some hurried notes. A well-written document is consumed by each reader when they have the context to absorb it, can be read by someone who joins the team a year later, and becomes the authoritative record of *what was decided and why*.
 
@@ -509,7 +509,7 @@ This also changes *how* you write. Async-first writing must stand on its own, be
 
 > **Common pitfall:** Treating "async-first" as "never talk to anyone." Some conversations -- a tense disagreement, a sensitive piece of feedback, an ambiguous design with many unknowns -- are resolved faster and more humanely in a 15-minute call than in a 40-message thread. The skill is defaulting to written, and recognizing the specific moments when synchronous is the right tool. Always write the *outcome* down afterward.
 
-### Communicating Status Honestly
+## Communicating Status Honestly
 
 Trust is built on the predictability of your word, and nothing erodes it faster than bad news that arrives late. The instinct under pressure is to stay quiet and hope you can recover the slip before anyone notices. This almost never works, and it converts a manageable problem into a crisis plus a credibility hit.
 
@@ -524,11 +524,11 @@ Practical habits:
 
 > **Key Takeaway -- Communicating With People**: Communication is not decoration on top of "real" engineering work; for a senior engineer it *is* much of the work. Lead with the conclusion for those who need a decision, give depth to those who need to verify, make every ask explicit, default to durable writing so your thinking outlives the meeting, and tell the truth about status early -- especially when the truth is uncomfortable. The engineer everyone trusts is the one whose written word reliably matches reality.
 
-### Collaboration & Mentorship
+## Collaboration & Mentorship
 
 Software of any meaningful scale is a team sport. The romantic image of the lone genius shipping a product single-handedly does not survive contact with real systems, which are too large for any one person to hold in their head, must run reliably while their author sleeps, and must outlive any individual's tenure. A *strong team* -- one where context flows freely and no single person is irreplaceable -- consistently outperforms a collection of strong individuals who hoard knowledge.
 
-#### Share Context and Reduce Bus-Factor
+### Share Context and Reduce Bus-Factor
 
 "Bus factor" is the morbid but useful question: how many people would have to be hit by a bus before a system becomes unmaintainable? A bus factor of one -- a system only one person understands -- is a liability no matter how good that person is. They cannot take a vacation without anxiety, they become a bottleneck for every change in their area, and the team is one resignation away from a crisis.
 
@@ -539,13 +539,13 @@ Raising the bus factor is a deliberate practice, not an accident:
 - **Rotate ownership.** Let different people lead incidents, own the next project in an unfamiliar area, or present the architecture to new hires. Rotation is uncomfortable in the short term and resilient in the long term.
 - **Default to over-sharing context.** When you make a decision, explain the *why* in the channel, not just to the one person who asked. The marginal cost of one extra paragraph is tiny; the value of someone else having that context six months later is large.
 
-#### Mentorship Multiplies Impact
+### Mentorship Multiplies Impact
 
 An individual contributor's output is bounded by their own hours. A mentor's output is bounded by nothing in particular, because every engineer they make meaningfully better keeps producing better work long after the mentoring conversation ends. This is why mentorship is one of the highest-leverage activities available to a senior engineer, and why it is weighted heavily in promotion to staff and beyond.
 
 Real mentorship is not answering questions on Slack. It is *creating conditions for others to grow*: pairing on a hard problem and narrating your reasoning, reviewing code as teaching rather than gatekeeping (as the worked examples in the Career Progression chapter show), and -- most importantly -- **delegating meaningful work, not just scraps.** The fastest way to stunt a junior engineer is to keep all the interesting, career-defining work for yourself and hand them only the tedious bits. The fastest way to grow one is to give them a real, slightly-too-hard problem with a safety net, and resist the urge to take the keyboard when they struggle.
 
-#### Giving and Receiving Feedback
+### Giving and Receiving Feedback
 
 Feedback is the mechanism by which teams improve, but only if it is actually exchanged. Good feedback has three properties:
 
@@ -555,7 +555,7 @@ Feedback is the mechanism by which teams improve, but only if it is actually exc
 
 Receiving feedback well is the harder and rarer skill. The reflex is to defend, explain, and counter-argue. Resist it. When someone gives you feedback, your job in that moment is to *understand* it, not to litigate it: listen, ask clarifying questions, thank them, and decide later what to act on. An engineer who gets visibly defensive teaches everyone around them to stop giving feedback, which guarantees they stop improving. The most senior engineers are often the most eager for criticism, because they have internalized that it is the cheapest path to getting better.
 
-#### Psychological Safety
+### Psychological Safety
 
 All of the above -- honest status, surfaced risks, real feedback, admitting you are stuck -- depends on a single team property: **psychological safety**, the shared belief that you can ask a "dumb" question, admit a mistake, or disagree with a senior person without being punished or humiliated. On a team without it, people hide problems until they explode, never ask the question that would have saved a day, and silently agree with decisions they think are wrong. On a team with it, problems surface while they are small and learning compounds.
 

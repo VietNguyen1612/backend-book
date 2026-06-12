@@ -2,11 +2,11 @@
 
 # 4.1 Relational Databases (PostgreSQL Focus)
 
-### Storage Internals & Durability
+## Storage Internals & Durability
 
 Before tuning queries, it helps to understand how PostgreSQL physically stores and protects data. Almost every performance and durability trade-off in a relational database traces back to these mechanics.
 
-#### Pages and the Buffer Pool
+### Pages and the Buffer Pool
 
 PostgreSQL reads and writes data in fixed-size **pages** (blocks), 8 KB by default. A table or index is just a sequence of such pages on disk. Crucially, the engine never operates on a row directly from disk -- it first loads the whole page into a shared in-memory cache called the **buffer pool**, sized by the `shared_buffers` setting. On top of that, the operating system's page cache provides a second tier of caching. The practical consequence is that almost all query tuning is really about keeping your *working set* (the hot pages a query touches) resident in these caches so that reads are served from RAM instead of disk.
 
@@ -37,7 +37,7 @@ LIMIT 5;
 
 **How to read this output:** Compare `cached` against `total` per table. `users` is 100% cached (32 MB of 32 MB) -- every query against it is served from RAM. `order_items` has only 145 MB of 1.2 GB resident, so range scans over it will trigger disk reads and run inconsistently depending on what got evicted. This view is the concrete way to answer "is `shared_buffers` big enough for my working set?" -- if your hot tables are chronically under-cached and the box has spare RAM, that is your signal to raise `shared_buffers` (a common starting point is ~25% of system memory, leaving the rest for the OS page cache). Sizing it to fit the working set, not the whole database, is the real goal.
 
-#### Write-Ahead Log (WAL)
+### Write-Ahead Log (WAL)
 
 Durability -- the "D" in ACID -- comes from the **Write-Ahead Log**. The rule is simple and absolute: the WAL record describing a change must be flushed (`fsync`'d) to durable storage *before* the modified ("dirty") data page is allowed to be written back to disk. Note the ordering carefully -- the in-memory page in the buffer pool is updated *first*; what the WAL protocol guarantees is that the corresponding WAL record is durable before that dirty page is *flushed to disk* (and, separately, that the WAL up to the commit record is durable before COMMIT is acknowledged). WAL writes are sequential appends, which are far faster than the random I/O of updating scattered heap pages, so the commit path stays fast. On a crash, PostgreSQL replays the WAL from the last **checkpoint** to bring the data files back to a consistent state. This same WAL stream is what feeds streaming replication and Point-in-Time Recovery.
 
@@ -63,7 +63,7 @@ FROM pg_stat_bgwriter;
 
 **How to read this output:** `checkpoints_timed` (triggered by `checkpoint_timeout`) versus `checkpoints_req` (forced because `max_wal_size` filled up first) is the headline. Here ~17% of checkpoints are *requested* rather than timed, which means write bursts are filling the WAL faster than the timeout fires -- raising `max_wal_size` would smooth the I/O into fewer, scheduled checkpoints. The `buffers_backend` number being high (dirty pages flushed by ordinary backends rather than the background writer or checkpointer) is a classic sign that foreground queries are doing flush work they should not, hurting latency. `fsync = off` would make all of this faster and is a guaranteed way to corrupt your database on a crash -- never do it on real data.
 
-#### Heap, TIDs, and the Clustered-Index Contrast
+### Heap, TIDs, and the Clustered-Index Contrast
 
 PostgreSQL stores table rows in an unordered **heap** -- rows live wherever there is free space, in no particular order. Every index (including the primary key) is a separate structure whose leaf entries point back to heap rows via a **TID** (tuple identifier: a `(page number, item offset)` pair). So an index lookup in PostgreSQL is two steps: walk the index to get TIDs, then fetch those rows from the heap.
 
@@ -73,7 +73,7 @@ This is fundamentally different from MySQL's InnoDB, which uses a **clustered in
 - A fat or randomly-distributed primary key is more expensive in InnoDB because its value is duplicated into every secondary index. This is one reason monotonic (time-sorted) keys like a `BIGINT` or UUIDv7 are preferred over random UUIDv4 for InnoDB primary keys.
 - PostgreSQL can `CLUSTER` a table to physically reorder it by an index, but unlike InnoDB the ordering is not maintained automatically after writes.
 
-#### MVCC Storage: Heap Bloat vs Undo Log
+### MVCC Storage: Heap Bloat vs Undo Log
 
 Both PostgreSQL and InnoDB use MVCC so readers never block writers, but they store old row versions differently -- and this single design choice drives very different operational behavior:
 
@@ -82,7 +82,7 @@ Both PostgreSQL and InnoDB use MVCC so readers never block writers, but they sto
 
 The lesson for both engines is the same: long-running transactions are the enemy. In PostgreSQL they pin dead tuples and prevent VACUUM from reclaiming them; in InnoDB they balloon the undo log. Keep transactions short.
 
-#### B-tree vs LSM Storage Engines
+### B-tree vs LSM Storage Engines
 
 The B-tree is the dominant on-disk index structure for relational databases (PostgreSQL, InnoDB): it supports reads, range scans, and in-place updates well, with O(log n) lookups. But it is not the only choice, and picking a database is partly picking a storage engine.
 
@@ -96,9 +96,9 @@ A **Log-Structured Merge-tree (LSM)** -- used by Cassandra, RocksDB, ScyllaDB, a
 
 ---
 
-### Query Optimization
+## Query Optimization
 
-#### EXPLAIN ANALYZE: Reading Execution Plans
+### EXPLAIN ANALYZE: Reading Execution Plans
 
 The single most important tool for understanding query performance in PostgreSQL is `EXPLAIN ANALYZE`. While `EXPLAIN` alone shows the planner's estimated plan, adding `ANALYZE` actually executes the query and reports real timing and row counts. This distinction matters because the planner's estimates can be wildly inaccurate when table statistics are stale.
 
@@ -171,7 +171,7 @@ ORDER BY "order_count" DESC LIMIT 10
 
 **How to read this output:** `top_users.query` is the single most useful debugging trick when an ORM query is mysteriously slow -- it lets you paste the generated SQL straight into `EXPLAIN ANALYZE`. Notice Django emits a `LEFT OUTER JOIN` (not an inner join) because `annotate(Count(...))` must still count users who have zero orders; if you intended an inner join you would need an explicit `.filter()`. The datetime appears unquoted here because `.query` is a developer-facing approximation -- never copy it into application code as a string, since that would expose you to SQL injection; let the ORM parameterize it.
 
-#### Seq Scan vs Index Scan
+### Seq Scan vs Index Scan
 
 A sequential scan reads every row in a table from disk, page by page. This is not inherently bad. For small tables (under a few thousand rows), a sequential scan is often faster than an index scan because it avoids the overhead of traversing the index tree and performing random I/O to fetch heap tuples. The planner also favors sequential scans when the query's selectivity is low -- for example, if a WHERE clause matches more than roughly 5-15% of the table, the planner often decides that reading the entire table sequentially is cheaper than performing thousands of random index lookups.
 
@@ -206,7 +206,7 @@ With the covering index in place, the plan reports an index-only scan:
 
 **How to read this output:** The node type `Index Only Scan` (not the usual `Index Scan`) is the proof that PostgreSQL answered the query entirely from the index without touching the table heap. The line to watch is `Heap Fetches: 0` -- it means every matching page was marked all-visible in the visibility map, so zero random heap reads were needed. In a hot read path (think a dashboard hitting this query thousands of times a second) eliminating heap fetches is what turns a "fast" query into a "free" one. If you instead see a high `Heap Fetches` count, the table needs a `VACUUM` to refresh its visibility map, otherwise the covering index buys you nothing.
 
-#### Query Planner and Statistics
+### Query Planner and Statistics
 
 PostgreSQL's query planner is cost-based: it estimates the cost of various execution strategies and picks the cheapest one. These cost estimates depend heavily on table statistics -- histograms of column value distributions, most-common-values lists, and correlation data. When statistics are stale, the planner makes poor choices.
 
@@ -243,7 +243,7 @@ ALTER TABLE orders ALTER COLUMN status SET STATISTICS 500;
 ANALYZE orders;
 ```
 
-#### Common Anti-Patterns
+### Common Anti-Patterns
 
 **SELECT * fetches unnecessary columns.** This wastes I/O bandwidth, memory, and network transfer. It also prevents index-only scans. Always specify only the columns you need. In Django, use `values()` or `only()` to limit selected fields:
 
@@ -321,9 +321,9 @@ SELECT * FROM products WHERE name ILIKE '%Widget%';  -- Case-insensitive too
 
 ---
 
-### Indexing Strategies
+## Indexing Strategies
 
-#### B-tree (Default Index)
+### B-tree (Default Index)
 
 B-tree is the default and most versatile index type in PostgreSQL. It supports equality (`=`) and range queries (`<`, `>`, `<=`, `>=`, `BETWEEN`), as well as `IS NULL`, `ORDER BY`, and pattern matching with anchored `LIKE 'prefix%'`.
 
@@ -377,7 +377,7 @@ FROM orders
 WHERE user_id = 42;
 ```
 
-#### Hash Index
+### Hash Index
 
 Hash indexes support only equality comparisons (`=`). They are faster than B-tree for exact-match lookups because the key is hashed to a bucket directly, avoiding tree traversal. Since PostgreSQL 10, hash indexes are crash-safe and WAL-logged.
 
@@ -394,7 +394,7 @@ SELECT * FROM sessions ORDER BY token;        -- sorting
 
 In practice, B-tree indexes are almost always preferred because they are more versatile and the performance difference for equality is small. Consider hash indexes only for very large tables with purely equality-based lookups and no range or sort requirements.
 
-#### GIN (Generalized Inverted Index)
+### GIN (Generalized Inverted Index)
 
 GIN indexes are designed for values that contain multiple elements -- arrays, JSONB documents, full-text search vectors, and other composite types. A GIN index maps each element (array member, JSON key, lexeme) to the set of rows containing that element.
 
@@ -417,7 +417,7 @@ CREATE INDEX idx_articles_fts ON articles USING gin (to_tsvector('english', titl
 
 GIN indexes are slower to build and update than B-tree (because inserting one row may require updating many index entries), but they are very fast for lookups. PostgreSQL supports "fastupdate" for GIN which batches pending entries for better write throughput at the cost of slightly slower reads.
 
-#### GiST (Generalized Search Tree)
+### GiST (Generalized Search Tree)
 
 GiST indexes support geometric data, range types, full-text search, and nearest-neighbor queries. Unlike GIN which stores exact element-to-row mappings, GiST uses a lossy structure that may require recheck of results.
 
@@ -439,7 +439,7 @@ ORDER BY coordinates <-> point(40.7128, -74.0060)
 LIMIT 5;
 ```
 
-#### BRIN (Block Range Index)
+### BRIN (Block Range Index)
 
 BRIN indexes are extremely compact. Instead of indexing individual rows, they store summary information (min/max values) for each block range (a group of consecutive physical pages). This makes BRIN indexes tiny -- often 1000x smaller than equivalent B-tree indexes -- but only effective when data is physically ordered on disk in the same order as the indexed column.
 
@@ -473,7 +473,7 @@ On a well-ordered events table the plan looks like:
 
 BRIN indexes shine for append-only tables (logs, events, metrics) where the physical order matches the column order. If rows are inserted out of order or frequently updated, BRIN becomes ineffective because each block range will have wide min/max boundaries, causing many false positives.
 
-#### Partial Indexes
+### Partial Indexes
 
 A partial index indexes only a subset of rows, defined by a WHERE predicate. This keeps the index small and focused. It is particularly useful when you frequently query a small, well-defined subset of a large table.
 
@@ -491,7 +491,7 @@ WHERE deleted_at IS NULL;
 -- This allows multiple "deleted" rows with the same email
 ```
 
-#### Expression Indexes
+### Expression Indexes
 
 An expression index indexes the result of a function or expression rather than a raw column value. The query must use the exact same expression to benefit from the index.
 
@@ -541,9 +541,9 @@ class User(models.Model):
 
 ---
 
-### Transactions & Concurrency
+## Transactions & Concurrency
 
-#### ACID Properties
+### ACID Properties
 
 ACID is the set of guarantees that relational databases provide for transactions:
 
@@ -595,7 +595,7 @@ def transfer_funds_v2(from_id, to_id, amount):
         receiver.save()
 ```
 
-#### Isolation Levels
+### Isolation Levels
 
 PostgreSQL supports four isolation levels, each providing a different trade-off between correctness and performance:
 
@@ -627,7 +627,7 @@ with connection.cursor() as cursor:
     # ... perform queries ...
 ```
 
-#### Concurrency Anomalies: Lost Update and Write Skew
+### Concurrency Anomalies: Lost Update and Write Skew
 
 The isolation levels above are defined by *which anomalies they prevent*. Two of these anomalies cause subtle, expensive bugs in production and come up constantly in interviews, so they deserve a closer look.
 
@@ -676,7 +676,7 @@ HINT:  The transaction might succeed if retried.
 
 **How to read this output:** This is the error your application must be prepared to catch under `SERIALIZABLE`. The HINT is the key operational instruction -- a serialization failure is *not* a bug, it is the database telling you it prevented an anomaly and you should simply retry the transaction. Any code path running at Serializable must wrap its transaction in a retry loop (with a small bounded number of attempts); forgetting that retry loop is the most common mistake when teams reach for Serializable to fix write skew. The alternative, if you want to stay at a weaker isolation level, is to *materialize the conflict* -- e.g. `SELECT ... FOR UPDATE` the rows you counted, so the two transactions actually contend on the same locks.
 
-#### MVCC (Multi-Version Concurrency Control)
+### MVCC (Multi-Version Concurrency Control)
 
 PostgreSQL uses MVCC to handle concurrency without read locks. The fundamental idea is that every row has hidden system columns (`xmin` and `xmax`) recording which transactions created and deleted that row version. When a row is updated, PostgreSQL does not overwrite it in place. Instead, it creates a new version of the row and marks the old version as "dead" (by setting its `xmax`).
 
@@ -738,7 +738,7 @@ ALTER TABLE orders SET (
 
 **HOT (Heap-Only Tuple) updates** are a PostgreSQL optimization. When a row is updated and (a) no indexed column changes, and (b) the new version fits on the same heap page, PostgreSQL can avoid creating a new index entry. The old index entry simply follows a chain of HOT pointers on the heap page to reach the current version. This dramatically reduces index bloat for frequently-updated non-indexed columns.
 
-#### Locking
+### Locking
 
 **Row-level locks** are the most common explicit locks. `SELECT FOR UPDATE` acquires an exclusive lock on selected rows, blocking other transactions from modifying or locking those rows until the lock-holding transaction commits or rolls back. `SELECT FOR SHARE` acquires a shared lock, allowing other readers but blocking writers.
 
@@ -793,7 +793,7 @@ def with_advisory_lock(lock_id):
 
 **Deadlock detection** is automatic in PostgreSQL. When two transactions each wait for a lock held by the other, PostgreSQL detects the cycle (typically within 1 second, controlled by `deadlock_timeout`) and aborts one of the transactions. To prevent deadlocks, always acquire locks in a consistent order (e.g., by ascending ID).
 
-#### Optimistic vs Pessimistic Locking
+### Optimistic vs Pessimistic Locking
 
 **Pessimistic locking** uses `SELECT FOR UPDATE` to lock rows before modifying them. It guarantees that no one else can change the row while you work on it. This is appropriate when contention is high and conflicts are expected.
 
@@ -840,9 +840,9 @@ def update_price(product_id, new_price, max_retries=3):
 
 ---
 
-### Advanced Features
+## Advanced Features
 
-#### Partitioning
+### Partitioning
 
 Partitioning splits a large table into smaller physical pieces (partitions) while presenting a single logical table to queries. This improves query performance (partition pruning skips irrelevant partitions), maintenance operations (VACUUM, reindex per partition), and data lifecycle management (drop old partitions instead of deleting rows).
 
@@ -918,7 +918,7 @@ CREATE TABLE sessions_p2 PARTITION OF sessions FOR VALUES WITH (MODULUS 4, REMAI
 CREATE TABLE sessions_p3 PARTITION OF sessions FOR VALUES WITH (MODULUS 4, REMAINDER 3);
 ```
 
-#### Window Functions
+### Window Functions
 
 Window functions perform calculations across a set of rows related to the current row, without collapsing them into a single output row (unlike GROUP BY). They are indispensable for analytics, ranking, running totals, and comparing rows with their neighbors.
 
@@ -995,7 +995,7 @@ WHERE rn <= 3;
 
 > **Common pitfall:** A window function cannot appear in a `WHERE` clause of the same query level (e.g. `WHERE ROW_NUMBER() OVER (...) <= 3` is a syntax error), because `WHERE` is evaluated before window functions are computed. That is precisely why the top-N pattern wraps the ranking in a subquery and filters in the outer `SELECT`.
 
-#### CTEs (Common Table Expressions)
+### CTEs (Common Table Expressions)
 
 CTEs, written with the `WITH` clause, allow you to define named temporary result sets within a query. They make complex queries readable and maintainable by breaking them into logical steps. Since PostgreSQL 12, non-recursive CTEs can be "inlined" by the optimizer (treated as subqueries), so there is usually no performance penalty.
 
@@ -1104,7 +1104,7 @@ def get_org_tree(manager_id):
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
 ```
 
-#### JSONB
+### JSONB
 
 JSONB (Binary JSON) stores JSON data in a decomposed binary format, allowing efficient querying and indexing. It is the preferred JSON type in PostgreSQL (over `json`, which stores raw text).
 
@@ -1199,7 +1199,7 @@ has_material = Product.objects.filter(attributes__has_key='material')
 apple_products = Product.objects.filter(attributes__contains={'brand': 'Apple'})
 ```
 
-#### Full-Text Search
+### Full-Text Search
 
 PostgreSQL provides built-in full-text search with support for stemming, ranking, and language-specific processing. It transforms documents into `tsvector` (a sorted list of lexemes) and queries into `tsquery` (a boolean expression of lexemes).
 
@@ -1241,7 +1241,7 @@ SELECT * FROM articles
 WHERE search_vector @@ phraseto_tsquery('english', 'query optimization');
 ```
 
-#### Logical Replication and Streaming Replication
+### Logical Replication and Streaming Replication
 
 PostgreSQL supports two forms of replication for different use cases:
 
@@ -1291,7 +1291,7 @@ CREATE SUBSCRIPTION my_sub
     PUBLICATION my_pub;
 ```
 
-#### Connection Pooling
+### Connection Pooling
 
 Each PostgreSQL connection consumes approximately 5-10 MB of RAM (due to per-process memory allocations for sort buffers, hash tables, and other state). The default `max_connections` is 100. For applications with hundreds or thousands of concurrent users, opening a direct connection for each is unsustainable.
 

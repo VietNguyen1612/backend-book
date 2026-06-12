@@ -2,9 +2,9 @@
 
 # 7.1 Containerization
 
-### Docker
+## Docker
 
-#### Multi-Stage Builds
+### Multi-Stage Builds
 
 A multi-stage build uses multiple `FROM` statements in a single Dockerfile. The key idea is to separate the **build environment** (which contains compilers, build tools, and development dependencies) from the **runtime environment** (which contains only the final artifact and its runtime dependencies). This dramatically reduces the size of your production image -- often by 10x or more -- and shrinks the attack surface by removing unnecessary tooling.
 
@@ -71,7 +71,7 @@ myapp           multi-stage      f6e5d4c3b2a1   214MB
 
 **How to read this output:** The single-stage image carries `gcc`, `libpq-dev`, apt caches, and build headers that are only needed at build time -- roughly a gigabyte of dead weight that ships to every node, slows every `docker pull`, and widens the attack surface. The multi-stage image discarded all of it by copying only `/install` into a fresh runtime base. In an interview, "how do you shrink a Docker image?" is answered first with multi-stage builds; in production, smaller images mean faster autoscaling and rollouts because nodes pull layers in seconds, not minutes.
 
-#### Layer Caching
+### Layer Caching
 
 Every instruction in a Dockerfile creates a layer. Docker caches each layer and reuses it if the instruction and all preceding layers have not changed. When a layer's cache is invalidated, every subsequent layer is also rebuilt. This means the order of instructions in your Dockerfile has a significant impact on build speed.
 
@@ -116,7 +116,7 @@ $ docker build -t myapp .
 
 > **Common pitfall:** Layer caching is invalidated by *content*, not just by named files. `COPY . .` is invalidated by any change in the build context, including files you do not care about -- which is exactly why a tight `.dockerignore` (next section) is part of cache hygiene, not just security.
 
-#### Security
+### Security
 
 Running containers as the root user is a common default that should always be overridden in production. If an attacker exploits a vulnerability in your application, root access inside the container can be leveraged to escape to the host or access sensitive resources. Always create and switch to a non-root user.
 
@@ -128,7 +128,7 @@ Never bake secrets (API keys, database passwords, tokens) into your Docker image
 
 Where possible, run the container filesystem as read-only (`--read-only` flag or `readOnlyRootFilesystem: true` in Kubernetes). This prevents an attacker from writing malicious files even if they gain execution.
 
-#### .dockerignore
+### .dockerignore
 
 The `.dockerignore` file works like `.gitignore` but for Docker's build context. When you run `docker build`, Docker sends the entire build context directory to the daemon. Without a `.dockerignore`, this includes everything -- git history, local environment files, IDE configuration, dependency caches, and test data.
 
@@ -175,7 +175,7 @@ README.md
 .github
 ```
 
-#### Health Checks
+### Health Checks
 
 Docker health checks allow the Docker daemon to periodically test whether a container is still functioning correctly. If the health check command returns a non-zero exit code, Docker marks the container as unhealthy. Orchestrators like Docker Swarm can then automatically restart unhealthy containers. Note that plain `docker run` does not restart unhealthy containers automatically -- it only reports the status.
 
@@ -201,7 +201,7 @@ CONTAINER ID   IMAGE       STATUS                            PORTS
 
 In Kubernetes, you do not use Docker's `HEALTHCHECK`. Instead, you use Kubernetes-native probes (`livenessProbe`, `readinessProbe`, `startupProbe`), which offer more flexible configuration and integrate with the Kubernetes service mesh and scheduling system. See the Kubernetes Probes section below.
 
-#### Networking
+### Networking
 
 Docker provides several networking modes, each suited to different use cases:
 
@@ -215,7 +215,7 @@ Docker provides several networking modes, each suited to different use cases:
 
 In Docker Compose, each service is automatically resolvable by its service name via Docker's built-in DNS. If you define a service called `postgres`, other services in the same Compose file can reach it at hostname `postgres` on its default port.
 
-#### Volumes
+### Volumes
 
 Containers are ephemeral by design: when a container is removed, all data written to its writable layer is lost. Volumes provide persistent storage that survives container restarts and removals.
 
@@ -245,7 +245,7 @@ volumes:
   pgdata:                                   # Declares the named volume
 ```
 
-#### Docker Compose Example
+### Docker Compose Example
 
 Docker Compose defines multi-container applications in a single YAML file. It is the standard tool for local development environments and simple deployments. Below is a production-like example for a web application with a database, cache, and reverse proxy.
 
@@ -337,7 +337,7 @@ This Compose file demonstrates several best practices: health check dependencies
 
 > **Key Takeaway:** Containerization is about reproducibility and isolation. A well-written Dockerfile uses multi-stage builds, optimizes layer caching, runs as non-root, and keeps images minimal. Docker Compose ties multiple containers together for local development. In production, graduate to Kubernetes for orchestration, scaling, and self-healing.
 
-#### Image Registries
+### Image Registries
 
 A registry is the distribution layer for images: you `push` a built image to it from CI and every node `pull`s from it at deploy time. The common choices are Docker Hub (the public default), GitHub Container Registry (`ghcr.io`, convenient when your code already lives on GitHub), AWS ECR, and Google Artifact Registry / GCR. Cloud registries integrate with the cloud's IAM, so nodes authenticate with their instance role rather than a long-lived password.
 
@@ -358,7 +358,7 @@ The following checks were performed on each of these signatures:
 
 **How to read this output:** `cosign sign` operates on the image **digest** (`@sha256:...`), not the tag, because the digest is the only truly immutable identifier — signing a tag would be meaningless since tags can move. The `verify` step is what you wire into an admission controller (e.g., Kyverno or Sigstore's policy-controller): a cluster configured to reject unsigned images will block a deploy if `verify` fails, which is how you stop a compromised registry from injecting a malicious image into production. In an interview, the point is that scanning answers "does this image have known CVEs?" while signing answers the orthogonal question "did this image actually come from us, unmodified?"
 
-#### Container Runtime & OCI
+### Container Runtime & OCI
 
 A container is not a virtual machine. There is no guest kernel and no hardware emulation — a container is **just an ordinary host process** that the kernel has placed into restricted namespaces (so it sees its own PID tree, network interfaces, mounts, and hostname) and constrained with cgroups (so its CPU and memory are capped). This is why containers start in milliseconds and have near-zero overhead compared to a VM, and also why containers share the host kernel (a kernel vulnerability is a weaker isolation boundary than a hypervisor — the reason security-sensitive multi-tenant platforms sometimes reach for microVMs like Firecracker or gVisor).
 
@@ -376,9 +376,9 @@ Because a container is just a process, the operational rules follow directly: ke
 
 ---
 
-### Kubernetes
+## Kubernetes
 
-#### Pods
+### Pods
 
 A Pod is the smallest deployable unit in Kubernetes. It encapsulates one or more containers that share the same network namespace (they can reach each other on `localhost`) and the same storage volumes. In practice, most Pods run a single application container, but multi-container Pods are used for specific patterns.
 
@@ -386,7 +386,7 @@ The **sidecar pattern** adds a helper container alongside the main container. Co
 
 **Init containers** run to completion before any regular containers start. They are used for setup tasks: waiting for a database to become available, running database migrations, downloading configuration files, or populating a shared volume. If an init container fails, Kubernetes restarts the Pod.
 
-#### Deployments
+### Deployments
 
 A Deployment is the standard way to run stateless applications on Kubernetes. You declare the desired state -- which container image to run, how many replicas, what resources to allocate -- and the Deployment controller continuously works to make the actual state match.
 
@@ -493,7 +493,7 @@ spec:
             name: myapp-config-files
 ```
 
-#### Services
+### Services
 
 A Service provides a stable network endpoint for a set of Pods. Pods are ephemeral -- they come and go as Deployments scale or Nodes fail -- so you cannot rely on individual Pod IP addresses. A Service uses label selectors to dynamically discover which Pods to route traffic to, and it provides a single DNS name and IP that remains constant.
 
@@ -523,7 +523,7 @@ spec:
       protocol: TCP
 ```
 
-#### Ingress
+### Ingress
 
 An Ingress resource defines rules for routing external HTTP(S) traffic to Services inside the cluster. Unlike LoadBalancer Services (which are one-to-one), a single Ingress can route traffic for many domains and paths to many different backend Services. This makes it much more cost-effective and flexible for HTTP traffic.
 
@@ -577,7 +577,7 @@ spec:
                   number: 80
 ```
 
-#### ConfigMaps and Secrets
+### ConfigMaps and Secrets
 
 ConfigMaps and Secrets externalize configuration from container images, enabling the same image to run with different settings in different environments (staging vs. production) without rebuilding.
 
@@ -634,7 +634,7 @@ super-secret-api-key
 
 **How to read this output:** Anyone with `get secret` RBAC permission, or read access to an etcd backup, can decode these values in one command -- there is no key, no password, nothing to crack. This is the single most common Kubernetes security misconception in interviews: candidates assume Secrets are encrypted because they look opaque. They are not, unless you explicitly enable encryption at rest on etcd or front them with an external secrets manager. Treat a Kubernetes Secret as "kept out of the image and out of the pod spec," not as "cryptographically protected."
 
-#### Resource Management
+### Resource Management
 
 Every container in Kubernetes should declare resource `requests` and `limits`. Without them, a single misbehaving container can starve other workloads on the same Node.
 
@@ -667,7 +667,7 @@ $ kubectl describe pod myapp-7d9f8c-xk2lp -n production
 
 > **Key Takeaway:** Requests drive scheduling (where a Pod can fit), limits drive enforcement (when a Pod is throttled or killed). Always set memory requests and limits to protect Nodes from leaks; set CPU requests for fair scheduling but be cautious with CPU limits, since they throttle rather than kill. The QoS class that results determines who gets evicted first when a Node runs out of resources.
 
-#### HPA (Horizontal Pod Autoscaler)
+### HPA (Horizontal Pod Autoscaler)
 
 The Horizontal Pod Autoscaler automatically adjusts the number of Pod replicas based on observed metrics. The most common metric is CPU utilization, but you can also scale on memory, custom application metrics (request rate, queue depth), or external metrics.
 
@@ -727,7 +727,7 @@ myapp-hpa   Deployment/myapp   cpu: 84%/70%, ...      3         20        7
 
 For event-driven workloads (scaling based on Kafka lag, SQS queue depth, cron schedules), KEDA (Kubernetes Event-Driven Autoscaling) extends the HPA with a rich set of scalers and can even scale to zero replicas.
 
-#### Probes
+### Probes
 
 Probes are Kubernetes's mechanism for understanding the health of your application. There are three types, each serving a distinct purpose:
 
@@ -770,7 +770,7 @@ startupProbe:
   failureThreshold: 30         # 30 * 5s = 150s max startup time
 ```
 
-#### StatefulSets
+### StatefulSets
 
 StatefulSets are designed for applications that need stable, persistent identity: databases (PostgreSQL, MySQL), distributed systems (Kafka, ZooKeeper, Cassandra), and other stateful workloads.
 
@@ -780,13 +780,13 @@ Unlike Deployments, where Pods are interchangeable, StatefulSet Pods have:
 - **Ordered deployment and scaling:** Pods are created in order (0, 1, 2...) and terminated in reverse order (2, 1, 0). This is critical for leader election and data replication protocols.
 - **Persistent Volume per Pod:** Each Pod gets its own PersistentVolumeClaim that follows the Pod across rescheduling. If `mydb-1` is rescheduled to a different Node, it reattaches the same volume.
 
-#### DaemonSets
+### DaemonSets
 
 A DaemonSet ensures that exactly one copy of a Pod runs on every Node in the cluster (or a subset of Nodes matching a nodeSelector). When a new Node joins the cluster, the DaemonSet automatically schedules a Pod on it; when a Node is removed, the Pod is garbage collected.
 
 Common use cases include log collectors (Fluent Bit, Filebeat), monitoring agents (Prometheus Node Exporter, Datadog Agent), network plugins (Calico, Cilium), and storage drivers (CSI node plugins).
 
-#### RBAC
+### RBAC
 
 Role-Based Access Control (RBAC) in Kubernetes restricts who can do what within the cluster. It follows the principle of least privilege: users and service accounts should have only the permissions they need.
 
@@ -794,7 +794,7 @@ Role-Based Access Control (RBAC) in Kubernetes restricts who can do what within 
 
 For example, your CI/CD service account might need permission to create and update Deployments in the `production` namespace but nothing else. Your monitoring agent might need read-only access to Pods and Nodes across all namespaces.
 
-#### Network Policies
+### Network Policies
 
 Network Policies are firewall rules for pod-to-pod traffic. By default, all Pods in a Kubernetes cluster can communicate with each other. Network Policies allow you to restrict this, implementing a "default deny" posture where only explicitly allowed traffic flows.
 
@@ -802,7 +802,7 @@ This is critical for security: if one service is compromised, the attacker canno
 
 Note that Network Policies require a CNI plugin that supports them (Calico, Cilium, Weave). The default kubenet does not enforce Network Policies.
 
-#### Scheduling: Affinity, Taints, Topology Spread, and PDBs
+### Scheduling: Affinity, Taints, Topology Spread, and PDBs
 
 The default scheduler will place a Pod on any Node with enough free `requests`. Production workloads usually need finer control over *where* Pods land and *how* they are disrupted.
 
@@ -873,7 +873,7 @@ Cannot evict pod as it would violate the pod's disruption budget.
 
 **How to read this output:** The Node was `cordoned` (marked unschedulable) immediately, but the eviction is *blocked* because evicting that Pod would drop availability below the PDB's `minAvailable: 2`. The drain doesn't fail — it retries, waiting for a replacement Pod to come up elsewhere first, which is exactly the point: the PDB turns a node upgrade from "rip Pods out and hope" into a controlled, zero-dip rotation. The classic gotcha is a PDB with `minAvailable` equal to the replica count (e.g., `minAvailable: 3` on a 3-replica Deployment): nothing can ever be evicted, and node drains hang forever.
 
-#### Storage: PersistentVolumes, PVCs, and StorageClasses
+### Storage: PersistentVolumes, PVCs, and StorageClasses
 
 Pod-local storage is ephemeral — it dies with the Pod. Durable storage in Kubernetes is modeled with three objects that separate *what is asked for* from *what is provided*:
 
@@ -913,7 +913,7 @@ spec:
 
 `volumeBindingMode: WaitForFirstConsumer` is a subtle but critical setting in multi-AZ clusters: it delays creating the disk until the Pod is scheduled, so the disk is provisioned in the *same* availability zone as the Pod — otherwise a zonal EBS volume can be created in `us-east-1a` while the Pod gets scheduled in `us-east-1b` and can never mount it. StatefulSets use a `volumeClaimTemplates` block to give each Pod (`mydb-0`, `mydb-1`) its own PVC automatically.
 
-#### Vertical and Cluster Autoscaling
+### Vertical and Cluster Autoscaling
 
 HPA (covered above) adds *more Pods*. Two other autoscalers solve different problems:
 
@@ -937,7 +937,7 @@ Events:
 
 **How to read this output:** The `Pending` Pod with `FailedScheduling: Insufficient cpu` is the trigger — there is genuinely no room on the existing 4 Nodes. The Cluster Autoscaler watches for exactly these unschedulable Pods and emits `TriggeredScaleUp`, growing the `eks-spot` node group from 4 to 5. The Pod stays `Pending` for the minute or two it takes the new Node to boot and join, which is the latency interviewers probe for: HPA reacts in seconds, but if no Node has capacity you also pay the Node-provisioning delay, so latency-sensitive services keep some headroom (or over-provision with low-priority "balloon" Pods) rather than scaling Nodes on the critical path.
 
-#### Helm, Kustomize, and Operators
+### Helm, Kustomize, and Operators
 
 Raw YAML doesn't compose well: deploying the same app to staging and production means duplicating manifests with small differences. Three tools address this.
 
@@ -968,7 +968,7 @@ The rule of thumb: Helm for packaging/redistribution and complex parameterizatio
 
 **Operators** encode *operational knowledge* into software. An Operator is a **Custom Resource Definition (CRD)** — a new object type like `kind: PostgresCluster` — plus a **controller** that watches those objects and continuously reconciles reality to match them. Where a Deployment knows how to roll stateless Pods, a database Operator knows how to take backups, fail over a leader, and run a version upgrade safely. This is the same reconciliation pattern Kubernetes itself uses, extended to domain-specific lifecycles (the Prometheus Operator, the Strimzi Kafka Operator, cloud database operators).
 
-#### GitOps (Argo CD / Flux)
+### GitOps (Argo CD / Flux)
 
 GitOps inverts the deployment flow: instead of CI **pushing** `kubectl apply` into the cluster, a controller running *inside* the cluster continuously **pulls** the desired state from Git and reconciles the cluster to match. Git becomes the single source of truth — the live cluster state is whatever the manifests in the repo say it should be.
 

@@ -2,7 +2,7 @@
 
 # 5.3 Authentication & Authorization
 
-### Authentication
+## Authentication
 
 **OAuth 2.0 Flows**
 
@@ -608,7 +608,7 @@ The ID token contains claims like `sub` (user identifier), `email`, `name`, `ema
 
 > **Key Takeaway:** Use OAuth 2.0 Authorization Code + PKCE for user-facing applications, Client Credentials for service-to-service, and API keys for simple external integrations. Always use asymmetric signing (RS256/ES256) for JWTs in distributed systems. Short-lived access tokens + refresh token rotation is the gold standard for session management.
 
-### Authorization
+## Authorization
 
 **RBAC (Role-Based Access Control)**
 

@@ -2,11 +2,11 @@
 
 # 10.2 System Thinking
 
-### Trade-off Analysis Framework
+## Trade-off Analysis Framework
 
 Every architectural decision involves trade-offs. There is no perfect choice -- only choices that are better or worse for a specific context. The mark of a senior engineer is not knowing the "right" answer but being able to articulate the trade-offs clearly and make a deliberate, well-reasoned choice.
 
-#### The Three Questions
+### The Three Questions
 
 Before diving into options, answer three fundamental questions:
 
@@ -16,7 +16,7 @@ Before diving into options, answer three fundamental questions:
 
 3. **What is the reversibility?** Jeff Bezos distinguishes between one-way doors (irreversible decisions) and two-way doors (easily reversible decisions). For two-way doors, decide quickly and iterate. For one-way doors, invest more time in analysis. Database schema choices, public API contracts, programming language selection, and architectural style (monolith vs. microservices) are typically one-way doors. Library choices, internal API designs, and configuration parameters are typically two-way doors.
 
-#### Common Trade-offs in Backend Systems
+### Common Trade-offs in Backend Systems
 
 **Consistency vs. Availability** -- The CAP theorem states that in the presence of a network partition, you must choose between consistency and availability. In practice, this manifests as: do you return stale data to keep the system available, or do you return an error to maintain consistency? Banking systems choose consistency. Social media feeds choose availability.
 
@@ -30,7 +30,7 @@ Before diving into options, answer three fundamental questions:
 
 **Monolith vs. Microservices** -- Monoliths are simpler to develop, test, deploy, and debug. Microservices enable independent scaling, independent deployment, and technology diversity. Start with a monolith; extract services only when you have clear, evidence-based reasons (team scaling, independent scaling needs, different technology requirements).
 
-#### Trade-off Analysis Matrix Example
+### Trade-off Analysis Matrix Example
 
 Below is a filled-in evaluation matrix for a real decision: choosing a primary database for a new e-commerce platform that handles product catalog, orders, and user data.
 
@@ -122,7 +122,7 @@ RISKS:
 
 ---
 
-### Constraints First
+## Constraints First
 
 The single most common mistake in technical decision-making is jumping to a solution before the problem is fully understood. Engineers love solutions; we reach for the database, the framework, the pattern we already know, and then retrofit the requirements to justify it. The senior discipline is the opposite: **clarify the constraints before you evaluate a single option.** A solution can only be judged "good" or "bad" relative to the requirements it must satisfy, so until those are written down, any debate about options is unanchored.
 
@@ -139,7 +139,7 @@ A practical habit: before any design discussion, write a short requirements bloc
 
 ---
 
-### Prefer Boring Technology
+## Prefer Boring Technology
 
 There is a strong, well-documented bias in engineering toward novelty: new languages, new databases, new frameworks feel exciting and look good on a resume. The senior counter-instinct, articulated memorably by Dan McKinley, is to **prefer boring technology** -- technology that is mature, well-understood, and predictable -- and to treat your appetite for novelty as a scarce, budgeted resource.
 
@@ -153,11 +153,11 @@ This connects directly to the simplicity-versus-flexibility and build-versus-buy
 
 ---
 
-### Back-of-Envelope Estimation
+## Back-of-Envelope Estimation
 
 Back-of-envelope estimation is the ability to quickly approximate the scale of a system: how many servers you need, how much storage, what throughput, what latency. This skill is essential for system design (both in interviews and in real architecture work) because it separates feasible designs from fantasy.
 
-#### Know Your Numbers
+### Know Your Numbers
 
 Memorize these reference points. They do not need to be exact -- order of magnitude is what matters.
 
@@ -198,7 +198,7 @@ Memorize these reference points. They do not need to be exact -- order of magnit
 - 2^30 = ~1 Billion (1 GB)
 - 2^40 = ~1 Trillion (1 TB)
 
-#### Step-by-Step Walkthrough: Design Twitter's Home Timeline
+### Step-by-Step Walkthrough: Design Twitter's Home Timeline
 
 Let us walk through a complete back-of-envelope estimation for one of the most classic system design scenarios: serving Twitter's home timeline (the feed of tweets from people you follow).
 
@@ -318,7 +318,7 @@ In practice, you would have more servers (50-100+) for:
 
 Sanity check: These numbers are in the right ballpark for a system of Twitter's scale. The fan-out write volume of 1M/sec confirms that a naive fan-out-on-write approach for all users is impractical, validating the need for the hybrid approach.
 
-#### Estimate vs. Actual: Calibrate Over Time
+### Estimate vs. Actual: Calibrate Over Time
 
 The same humility that applies to sizing systems applies even more sharply to estimating *work*. An estimate exists to support a decision -- should we commit to this quarter? do we need to cut scope? -- not to predict the future with precision. Communicate estimates as **ranges with explicit assumptions** ("3 to 5 days, assuming the third-party API behaves like its docs claim"), never as false-precision single numbers, because a single number is read as a promise and a range is read as the uncertainty it actually is.
 
@@ -330,11 +330,11 @@ The way you get better at estimating is not by thinking harder up front; it is b
 
 ---
 
-### Incident Management
+## Incident Management
 
 Incidents are inevitable in any system of sufficient complexity. The question is not whether they will happen but how well your team handles them. Effective incident management minimizes impact, accelerates recovery, and -- most importantly -- drives systemic improvements that prevent recurrence.
 
-#### The Incident Lifecycle
+### The Incident Lifecycle
 
 The incident lifecycle has five phases, each with distinct goals and activities:
 
@@ -348,7 +348,7 @@ The incident lifecycle has five phases, each with distinct goals and activities:
 
 **5. Postmortem** -- After the incident is fully resolved, conduct a blameless postmortem to learn from it and prevent recurrence. This is the most important phase because it is what transforms an incident from a crisis into an improvement opportunity.
 
-#### Roles During an Incident
+### Roles During an Incident
 
 Clear roles prevent chaos. Three roles are essential:
 
@@ -358,7 +358,7 @@ Clear roles prevent chaos. Three roles are essential:
 
 **Communication Lead** -- Manages external and internal communication. Posts updates to the status page, notifies affected customers, updates stakeholders in the incident channel. Frequency depends on severity: SEV1 gets updates every 15 minutes, SEV2 every 30 minutes.
 
-#### On-Call Best Practices
+### On-Call Best Practices
 
 On-call rotations should be weekly or bi-weekly, with the rotation scheduled well in advance. Every alert that pages an on-call engineer should have a corresponding runbook: a step-by-step guide that any engineer on the team can follow to diagnose and mitigate the issue. The format should be: Alert name --> What it means --> How to diagnose --> How to mitigate --> When to escalate.
 
@@ -366,7 +366,7 @@ If an on-call engineer is paged more than twice per shift for non-actionable ale
 
 Compensate on-call fairly. Engineers who carry pagers outside business hours are providing a service that has a real cost (interrupted sleep, restricted freedom, stress). Many organizations provide additional pay, compensatory time off, or both.
 
-#### Incident Classification
+### Incident Classification
 
 ```
 +-------+-------------------+-------------------------------+------------------+
@@ -394,13 +394,13 @@ Compensate on-call fairly. Engineers who carry pagers outside business hours are
 
 > **Common pitfall:** Severity inflation and severity timidity are both dangerous. Teams that page everyone at SEV1 for minor degradations train responders to ignore the pager (alert fatigue), while teams that under-declare to avoid scrutiny rob themselves of the response resources and postmortem rigor a real outage demands. Define severity by concrete, measurable user impact -- not by who is watching or how stressful the incident feels in the moment.
 
-#### Blameless Postmortem
+### Blameless Postmortem
 
 The principle of blameless postmortems is not that nobody is accountable -- it is that the focus is on systemic causes rather than individual blame. The question is not "who messed up?" but "what about our systems, processes, and safeguards allowed this to happen, and how do we fix those?"
 
 When people fear blame, they hide information. When they feel safe, they share the full truth, and the full truth is what you need to actually fix the problem.
 
-#### Incident Postmortem Template with Example
+### Incident Postmortem Template with Example
 
 ```
 =========================================================================
@@ -603,11 +603,11 @@ because they could not acquire a database connection.
 
 ---
 
-### Technology Evaluation
+## Technology Evaluation
 
 Choosing technologies -- frameworks, databases, languages, cloud services, third-party tools -- is one of the most consequential decisions an engineering team makes. A poor technology choice can haunt a team for years through maintenance burden, hiring difficulty, performance limitations, or vendor lock-in. A strong evaluation process reduces the risk of costly mistakes.
 
-#### The ThoughtWorks Technology Radar Model
+### The ThoughtWorks Technology Radar Model
 
 The Technology Radar, popularized by ThoughtWorks, provides a useful classification framework for how your organization relates to technologies:
 
@@ -621,7 +621,7 @@ The Technology Radar, popularized by ThoughtWorks, provides a useful classificat
 
 Maintaining a team-level Technology Radar creates transparency about technology choices and prevents the "resume-driven development" problem where engineers introduce technologies because they want to learn them, not because they are the best choice for the team.
 
-#### Evaluation Criteria
+### Evaluation Criteria
 
 When evaluating a technology, assess it across these dimensions:
 
@@ -641,7 +641,7 @@ When evaluating a technology, assess it across these dimensions:
 
 **Team skill gap** -- How many engineers on your team have experience with this technology? What is the learning curve? Is there a training budget and timeline? Hiring: how many candidates in your market know this technology?
 
-#### Technology Evaluation Scorecard Example
+### Technology Evaluation Scorecard Example
 
 Below is a filled-in scorecard for evaluating a web framework for a new backend API service.
 
@@ -735,7 +735,7 @@ DECISION: Proceed with Spring Boot 3.x.
 FOLLOW-UP: Re-assess Quarkus in Q2 2026 if we pursue serverless migration.
 ```
 
-#### Proof of Concept Guidelines
+### Proof of Concept Guidelines
 
 When the evaluation scorecard does not produce a clear winner, or when the decision is high-stakes and irreversible, run a Proof of Concept (PoC). A PoC is not an MVP -- it does not test business value. It tests **technical feasibility**: "Can this technology actually do what we need it to do under realistic conditions?"
 

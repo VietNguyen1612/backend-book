@@ -2,9 +2,9 @@
 
 # 9.2 Testing Practices
 
-### Test Design Principles
+## Test Design Principles
 
-#### F.I.R.S.T. Principles
+### F.I.R.S.T. Principles
 
 The F.I.R.S.T. acronym captures five qualities that every good test should have.
 
@@ -18,7 +18,7 @@ The F.I.R.S.T. acronym captures five qualities that every good test should have.
 
 **Timely.** Tests should be written alongside the code, not weeks later as an afterthought. When you write a function, write its tests before you move on. Test-Driven Development (TDD) takes this further by writing the test *before* the implementation. Whether or not you practice strict TDD, the principle is: do not accumulate a testing debt that you will never repay.
 
-#### Determinism: Time, Randomness, Ordering, and Flaky Tests
+### Determinism: Time, Randomness, Ordering, and Flaky Tests
 
 The *Repeatable* principle deserves concrete techniques, because non-determinism is the single largest source of flaky tests -- tests that pass and fail without any code change. A flaky test is arguably worse than no test: it trains the team to ignore red builds ("just re-run it"), and that learned blindness eventually lets a real regression slip through. The four classic sources of non-determinism each have a standard fix.
 
@@ -75,7 +75,7 @@ def test_cache_warmup_under_concurrency():
 
 > **Common pitfall:** Re-running until green (`--reruns`) is a band-aid, not a cure. Auto-retry hides flakiness instead of fixing it, and a test that needs three attempts to pass is also a test that can let a one-in-three real bug through. Use retries only as a temporary stopgap while a quarantined test is being properly fixed, and track the rerun rate so flakiness cannot quietly accumulate.
 
-#### Test Coverage
+### Test Coverage
 
 Test coverage measures what fraction of your code is exercised by your test suite. **Branch coverage** is strictly more informative than line coverage because it counts whether both the true and false branches of every conditional have been tested. A line that contains `if x > 0: return x` is "covered" by line coverage if any test executes it, but branch coverage also asks whether a test triggered the case where `x <= 0`.
 
@@ -97,7 +97,7 @@ exclude_lines = [
 ]
 ```
 
-#### Test Data with factory_boy and Faker
+### Test Data with factory_boy and Faker
 
 Hardcoded test data scattered throughout test files is brittle and hard to maintain. When the `Book` model gains a new required field, every test that manually constructs a `Book` must be updated. **factory_boy** solves this by defining a single factory class per model, with sensible defaults for every field. Tests override only the fields relevant to their scenario; everything else gets a default. **Faker** integrates with factory_boy to generate realistic-looking data (names, emails, addresses, ISBNs), which is more readable than "test123" and can reveal bugs related to data length or character sets.
 
@@ -191,7 +191,7 @@ tests/test_book_model.py::TestBookModel::test_discount_price PASSED             
 
 Using factories means that when the `Book` model adds a `language` field with a default, you update `BookFactory` once and all existing tests continue to work.
 
-#### Mutation Testing with mutmut
+### Mutation Testing with mutmut
 
 Code coverage tells you what code your tests *execute*, but it says nothing about whether your tests would *detect a bug*. Mutation testing answers that question directly. A mutation testing tool like **mutmut** makes small changes (mutations) to your source code -- replacing `>` with `>=`, changing `True` to `False`, swapping `+` with `-` -- and then runs your test suite against each mutated version. If your tests still pass despite the mutation, that mutant "survived," which means your tests are not actually verifying that behavior. A high mutation kill rate (the percentage of mutants your tests detect) is a much stronger quality signal than coverage alone.
 
@@ -248,7 +248,7 @@ def test_bulk_discount_reduces_price():
     assert discounted == 90.0
 ```
 
-#### Contract Testing with Pact
+### Contract Testing with Pact
 
 In a microservices architecture, each service depends on APIs provided by other services. Traditional integration tests require all services to be running simultaneously, which is fragile and slow. **Contract testing** with Pact takes a different approach: the *consumer* (the service making the API call) defines a contract -- "I will send this request and expect this response" -- and the *provider* (the service that implements the API) independently verifies that it satisfies that contract. If both sides pass their respective tests, you can be confident the services will work together in production, without ever running them at the same time.
 
@@ -341,11 +341,11 @@ Verifying a pact between BookstoreWeb and BookService
 
 ---
 
-### Testing in Production (Safely)
+## Testing in Production (Safely)
 
 No amount of pre-production testing fully predicts how a system behaves once it meets reality. Real traffic has patterns no synthetic load reproduces; production data has a scale, skew, and messiness that staging never matches; and third-party dependencies behave differently against real accounts than against sandboxes. "Testing in production" is therefore not an admission of inadequate testing -- it is a deliberate, controlled discipline for validating the things that *can only* be validated with real traffic. The non-negotiable prerequisite is a strong safety net: rich observability (metrics, logs, traces, SLOs) to *see* a problem within seconds, and a fast, rehearsed rollback to *undo* it before it spreads. Without those two, testing in production is just gambling.
 
-#### Feature Flags: Gradual Rollout and Instant Kill
+### Feature Flags: Gradual Rollout and Instant Kill
 
 A feature flag decouples *deploying* code from *releasing* a feature. The new code path ships to production dormant, wrapped in a runtime check, and you turn it on for a controlled audience -- internal users first, then 1%, 5%, 25%, 100% of traffic -- while watching your dashboards at each step. The flag's most important property is the **kill switch**: if error rates climb, you flip it off in seconds without a redeploy, instantly reverting every user to the old path.
 
@@ -360,7 +360,7 @@ def checkout(cart, user, flags):
 
 Flags should target by user/cohort (so a percentage rollout is *consistent* per user, not random per request), be cleaned up once a feature is fully rolled out (stale flags accumulate into untestable combinatorial branches), and be auditable -- who flipped what, when. A managed flag service (LaunchDarkly, Unleash, Flagsmith) provides the targeting, audit log, and instant propagation; a hand-rolled config flag works for simple on/off cases.
 
-#### Canary Releases with Automated Analysis
+### Canary Releases with Automated Analysis
 
 A canary release routes a small slice of *real* traffic (say 5%) to the new version while the remaining 95% stays on the stable version, then **automatically compares** the two cohorts' golden signals -- error rate, latency percentiles, saturation -- and promotes or rolls back based on the comparison. The key word is *automated*: a human watching graphs is slow and subjective, so tools like Argo Rollouts or Flagger run a statistical analysis (often against Prometheus metrics) and abort the rollout the moment the canary's metrics diverge from the baseline beyond a threshold.
 
@@ -389,21 +389,21 @@ Canary failed! Scaling down new-pricing-engine.prod
 
 **How to read this output:** The rollout climbed to 10% of traffic, then the analysis engine measured the canary's p99 latency at `812ms` against the `500ms` threshold and *halted on its own* -- no human was watching at 3 a.m. After the failure count hit `5/5` it automatically scaled the canary back to zero, returning all traffic to the stable version. The point to articulate is the closed loop: the canary limited the blast radius to 10% of users, the metric comparison detected the regression objectively, and the rollback contained it -- the same change shipped at 100% with no canary would have been a full outage.
 
-#### Shadow (Dark) Traffic
+### Shadow (Dark) Traffic
 
 Shadowing mirrors real production requests to a new version *in parallel* with the live one, but discards the shadow's response so users never see it. This lets you exercise new code against the full fidelity of production traffic -- real query distributions, real payloads, real concurrency -- with zero user-facing risk, which is ideal for validating a rewritten service or a new model before it serves anyone. The critical caveat is side effects: a shadowed request must not write to the real database, send real emails, or charge real cards, so shadowing is safe for read paths but requires careful isolation (a shadow datastore, stubbed outbound calls) for anything that mutates state.
 
-#### Synthetic Monitoring
+### Synthetic Monitoring
 
 Synthetic monitoring runs scripted probes -- a robot that logs in, searches for a book, and adds it to a cart -- against production on a fixed schedule (every minute, from multiple regions). Unlike real-user monitoring, which only tells you about problems *after* users hit them, synthetics catch a broken critical path proactively, often before any real user is awake to notice, and they verify availability from the *outside* (through your real DNS, CDN, and load balancer) the way a customer actually experiences it. A failing synthetic is one of the highest-signal pager alerts you can wire up, because it maps directly to a broken user journey rather than an ambiguous internal metric.
 
-#### Chaos Engineering
+### Chaos Engineering
 
 Chaos engineering deliberately injects failures into production (or production-like) systems to verify that resilience mechanisms -- retries, timeouts, circuit breakers, failover, autoscaling -- actually work *before* an unplanned outage tests them for you. The discipline is experimental, not reckless: you form a hypothesis ("if one of the three payment-service replicas dies, success rate stays above 99.9%"), define a steady-state metric, inject the smallest possible failure with a tight blast radius, and abort immediately if the steady state breaks. Tools like Chaos Monkey (kill instances), Gremlin, and Litmus inject node kills, added latency, packet loss, CPU exhaustion, or dependency outages.
 
 A **game day** is the human side of the same idea: a scheduled exercise where the team intentionally triggers a failure scenario and practices the response -- did the alert fire, did the runbook work, did the on-call engineer know what to do? Game days test the *organization and its tooling*, not just the software, and routinely surface gaps (a missing dashboard, an out-of-date runbook, an alert that pages the wrong team) that no automated test could find.
 
-#### Disaster Recovery: RTO, RPO, and Actually Testing It
+### Disaster Recovery: RTO, RPO, and Actually Testing It
 
 Two numbers define your disaster-recovery target. **RPO (Recovery Point Objective)** is the maximum acceptable *data loss*, measured in time -- "we can tolerate losing at most 5 minutes of data" -- which dictates how frequently you back up or replicate. **RTO (Recovery Time Objective)** is the maximum acceptable *downtime* -- "we must be back up within 1 hour" -- which dictates how fast your restore-and-failover procedure must be. The two are independent: a system can have a tiny RPO (continuous replication, near-zero data loss) but a large RTO if the failover is a slow manual process.
 

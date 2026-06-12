@@ -2,7 +2,7 @@
 
 # 6.3 Real-World System Design Examples
 
-### A Reusable Framework
+## A Reusable Framework
 
 Every system design question -- in an interview or on the job -- yields to the same disciplined sequence. The mistake candidates make is jumping straight to boxes and arrows; the senior move is to *drive out the requirements and the numbers first*, because those determine every later choice. Apply these steps in order, and state your assumptions out loud as you go.
 
@@ -22,7 +22,7 @@ Every system design question -- in an interview or on the job -- yields to the s
 
 The examples below all follow this skeleton. As you read them, notice the recurring moves: separate read and write paths, push slow work onto async streams, cache the hot subset, make every operation idempotent, and choose consistency deliberately per operation rather than system-wide.
 
-### URL Shortener
+## URL Shortener
 
 A URL shortener takes a long URL (like `https://example.com/products/electronics/laptops?sort=price&page=3`) and produces a short alias (like `https://short.ly/a3Xk9p`) that redirects to the original. This is a classic system design problem because it touches on key generation, storage, caching, and analytics.
 
@@ -94,7 +94,7 @@ With 6 characters of Base62 encoding, you get 62^6 = 56.8 billion unique codes -
 
 > **Key Takeaway:** A URL shortener is deceptively simple but exercises every read-heavy system design muscle: pick a short-code scheme that matches your constraints (Base62-on-counter for compactness, hash for determinism, random for unpredictability), accept the 100:1 read/write ratio by caching the hot 20% in Redis, and push analytics off the redirect path onto an async event stream so a click never waits on a write.
 
-### Distributed Rate Limiter
+## Distributed Rate Limiter
 
 Rate limiting controls how many requests a client can make within a time window. It protects services from abuse, ensures fair usage, and prevents cascading failures from traffic spikes.
 
@@ -377,7 +377,7 @@ request 7: allowed=False
 
 > **Key Takeaway:** The three algorithms trade memory for accuracy: fixed window is cheapest (one counter) but allows 2x bursts at window boundaries; sliding window log is exact but stores every timestamp; token bucket sits in between and is the usual default because it cleanly separates burst size from sustained rate. Whichever you pick, make the increment-and-check atomic (a Redis Lua script or pipeline) so concurrent requests across servers cannot both slip through on the same remaining slot.
 
-### Chat System
+## Chat System
 
 A real-time chat system requires persistent bidirectional connections, reliable message delivery, online presence tracking, and efficient storage for potentially billions of messages.
 
@@ -460,7 +460,7 @@ PRESENCE TRACKING:
 
 > **Key Takeaway:** Real-time chat is a routing problem on top of a storage problem. The hard part is that connections are stateful and pinned to one server, so you keep a `user_id -> server_id` map in Redis and forward across servers via an internal bus -- this decoupling is what lets you scale WebSocket servers horizontally. Persist durable messages, cache the recent tail per conversation, and let ephemeral signals (typing, presence) live only in Redis with a TTL so they self-clean and never bloat your database.
 
-### Notification System
+## Notification System
 
 A notification system delivers messages to users across multiple channels (email, push notifications, SMS, in-app, webhooks) with user-controlled preferences, deduplication, and reliability guarantees.
 
@@ -572,7 +572,7 @@ A preferences matrix is stored per user: `(user_id, notification_type, channel) 
 
 > **Key Takeaway**: When designing real-world systems, start with the requirements (functional and non-functional), estimate the scale (see the next section on back-of-envelope calculations), then design the architecture layer by layer. Separate read paths from write paths. Decouple components with message queues. Cache aggressively on the read path. Make every component horizontally scalable and every operation idempotent. Draw the architecture diagram first, then dive into the details of each component.
 
-### News Feed / Timeline
+## News Feed / Timeline
 
 A news feed (Twitter timeline, Instagram home, Facebook feed) shows each user a personalized, reverse-chronological (or ranked) stream of posts from the accounts they follow. It is the canonical example of the **read-vs-write-path trade-off**, because the feed is read constantly (every app open) but the underlying posts are written comparatively rarely -- and the follow graph is wildly skewed (most users have hundreds of followers; a celebrity has tens of millions).
 
@@ -616,7 +616,7 @@ The core tension is **fan-out on write (push)** versus **fan-out on read (pull)*
 
 > **Key Takeaway:** The feed is a deliberate decision about *which path pays the cost*. Push (fan-out on write) makes reads cheap and writes expensive; pull (fan-out on read) does the reverse. Neither extreme survives the skewed follow graph, so production feeds go hybrid -- push for normal accounts, pull-and-merge for celebrities -- store post IDs (not bodies) in capped per-user Redis lists, hydrate on read, paginate by cursor, and accept eventual consistency as the price of scale.
 
-### Typeahead / Search Autocomplete
+## Typeahead / Search Autocomplete
 
 Autocomplete suggests completions as the user types each character, so latency requirements are brutal: suggestions must feel instantaneous (single-digit milliseconds server-side) because a request fires on nearly every keystroke. The workload is overwhelmingly read-heavy and the suggestion set changes slowly, which points the design squarely at precomputation and caching rather than computing completions on the fly.
 
@@ -649,7 +649,7 @@ ARCHITECTURE:
 
 > **Key Takeaway:** Autocomplete is a precomputation problem disguised as a search problem. Because reads vastly outnumber changes and latency must feel instant, you build a trie of popular queries offline with the **top-k cached at every prefix node**, serve it from memory, refresh it in batches, and debounce on the client. Do not compute completions per request, and do not update the structure per search -- both turn a trivially fast lookup into a bottleneck.
 
-### Proximity / Geo Service ("nearby", ride-share)
+## Proximity / Geo Service ("nearby", ride-share)
 
 A proximity service answers "what is near (lat, lng) within radius R?" -- nearby restaurants, available drivers, friends close by -- over potentially millions of points, many of them *moving* (drivers updating location every few seconds). The naive approach (compute the distance from the query point to every point and filter) is O(N) per query and collapses immediately at scale, so the entire design is about a **spatial index** that lets you look at only the points in the relevant neighborhood.
 
@@ -687,7 +687,7 @@ You rarely implement these by hand: **PostGIS** (PostgreSQL's spatial extension)
 
 > **Key Takeaway:** Never scan all points. Project 2D space onto a locality-preserving 1D key (geohash/S2/H3) or a quadtree so "nearby" reduces to a prefix/cell lookup, then *only* scan the matching cell and its neighbors. Use PostGIS for durable static places and an in-memory, TTL'd geo-index (Redis GEO) for high-churn live positions, shard by region, and always query neighboring cells to avoid missing points just across a boundary.
 
-### Object Storage / File Upload Service
+## Object Storage / File Upload Service
 
 When users upload avatars, videos, documents, or backups, the temptation is to stream the bytes through your application servers to storage. **Don't.** A 2 GB video flowing through an app server ties up that server's memory, bandwidth, and a worker thread for the entire upload, and it scales terribly. The whole design hinges on getting your application *out of the data path* and letting clients talk to object storage (S3, GCS, Azure Blob) directly, while your backend handles only metadata and authorization.
 
@@ -726,7 +726,7 @@ UPLOAD FLOW (pre-signed URL -- app server never touches the bytes):
 
 > **Key Takeaway:** Keep your servers out of the byte path. Hand clients **pre-signed, time-limited URLs** so they upload and download directly to object storage; use **multipart** for large, resumable uploads; store only **metadata** (key, hash, size, owner, status) in your database; serve via a **CDN** with signed URLs for private content; and use a **content hash** for integrity and dedup. Your app's job is authorization and metadata, not moving gigabytes.
 
-### Payment / Wallet System
+## Payment / Wallet System
 
 A payments or wallet system is the archetypal **consistency-critical** design: money must never be created or destroyed, a customer must never be double-charged, and every movement must be auditable. Here you deliberately invert the usual scalability instincts -- you favor **correctness over availability**, reach for a relational database with ACID transactions for the ledger, and treat idempotency not as an optimization but as a hard requirement.
 
@@ -784,7 +784,7 @@ Retry (client timed out, sends the SAME key):
 
 > **Key Takeaway:** Payments flip the usual priorities: choose correctness over availability, use an ACID relational ledger with **immutable double-entry** records (balance is derived, fully auditable, money can't be conjured), make **idempotency keys mandatory** so inevitable retries don't double-charge, coordinate multi-service flows with **sagas + compensations** rather than 2PC, and treat every provider webhook as untrusted-until-signature-verified and possibly-duplicate.
 
-### Distributed Cache / Key-Value Store (the Dynamo design)
+## Distributed Cache / Key-Value Store (the Dynamo design)
 
 How do you build a cache or key-value store that holds more data than one machine and survives node failures? This is the **Amazon Dynamo** design, and it underlies DynamoDB, Cassandra, Riak, and the patterns in Redis Cluster and Memcached fleets. It is worth studying because it composes three ideas already covered -- consistent hashing, replication, and quorums -- into one coherent, highly-available store with **tunable** consistency.
 

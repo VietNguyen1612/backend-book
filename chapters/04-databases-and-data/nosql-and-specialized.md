@@ -2,11 +2,11 @@
 
 # 4.2 NoSQL & Specialized Databases
 
-### Redis
+## Redis
 
 Redis is an in-memory data structure store used as a cache, message broker, and general-purpose database. Its power comes from its rich set of data structures, atomic operations, and sub-millisecond latency.
 
-#### Data Structures
+### Data Structures
 
 **Strings** are the simplest Redis type. A string can hold any binary data up to 512 MB -- text, serialized JSON, integers, or raw bytes. Strings support atomic increment/decrement, making them useful for counters.
 
@@ -143,7 +143,7 @@ OK
 -- Only 3 unique visitors, even though "user:1" was added twice
 ```
 
-#### Use Cases with Code Examples
+### Use Cases with Code Examples
 
 **Caching with TTL:**
 
@@ -256,7 +256,7 @@ Notification: {'type': 'new_message', 'from': 'alice', 'preview': 'Hey, are you 
 
 > **Common pitfall:** A connection sitting in `pubsub.listen()` cannot issue other commands on that same connection. Run subscribers on a dedicated connection (or thread/process), not the one your application uses for normal reads and writes.
 
-#### Persistence
+### Persistence
 
 **RDB (Redis Database)** snapshots save the entire dataset to a binary file at configured intervals. The snapshot is a compact, point-in-time representation. It is fast to load on startup but you can lose data since the last snapshot.
 
@@ -274,7 +274,7 @@ appendonly yes
 appendfsync everysec    # AOF: fsync once per second (good balance)
 ```
 
-#### Clustering and High Availability
+### Clustering and High Availability
 
 **Redis Sentinel** provides high availability without sharding. It monitors primary and replica instances, automatically promotes a replica to primary upon failure, and notifies clients of the topology change. Use Sentinel when your dataset fits on a single machine.
 
@@ -296,7 +296,7 @@ appendfsync everysec    # AOF: fsync once per second (good balance)
   +-------------------+    +-------------------+    +-------------------+
 ```
 
-#### Lua Scripting
+### Lua Scripting
 
 Lua scripts execute atomically on the Redis server, meaning no other command can run between the start and end of the script. This eliminates race conditions without requiring external locking. Scripts also reduce round-trips by performing multiple operations in a single call.
 
@@ -335,7 +335,7 @@ if not allowed:
     raise RateLimitExceeded()
 ```
 
-#### Eviction Policies
+### Eviction Policies
 
 When Redis reaches its configured `maxmemory` limit, it needs a strategy for what to do with new writes. The `maxmemory-policy` setting controls this behavior:
 
@@ -355,11 +355,11 @@ maxmemory-policy allkeys-lru
 
 ---
 
-### MongoDB
+## MongoDB
 
 MongoDB is a document database that stores data as BSON (Binary JSON) documents. Each document is a self-contained unit that can have a different structure from other documents in the same collection, providing schema flexibility.
 
-#### Document Model
+### Document Model
 
 The document model encourages denormalization: instead of normalizing data into multiple tables with foreign keys (as in relational databases), you embed related data directly in the document. Design your schema around your query patterns, not around eliminating data duplication.
 
@@ -389,13 +389,13 @@ The document model encourages denormalization: instead of normalizing data into 
 }
 ```
 
-#### When to Use MongoDB
+### When to Use MongoDB
 
 MongoDB is appropriate when your data has varied or evolving schemas (e.g., product catalogs where each category has different attributes), when your data is naturally document-oriented (CMS content, user profiles, IoT device data), or when you need rapid prototyping with flexible schemas.
 
 MongoDB is not the best fit when you have heavily relational data that requires multi-table JOINs, when you need strict ACID transactions across multiple documents (though MongoDB 4.0+ supports multi-document transactions, they are slower than single-document operations), or when your queries require complex aggregations that relational databases handle naturally.
 
-#### Indexing
+### Indexing
 
 MongoDB uses B-tree indexes similar to relational databases. The `explain()` method is equivalent to PostgreSQL's `EXPLAIN ANALYZE`:
 
@@ -428,7 +428,7 @@ The `explain("executionStats")` call returns a large JSON document; the fields t
 
 **How to read this output:** The goal is `totalKeysExamined` and `totalDocsExamined` being close to `nReturned` -- here all three are 37, meaning the compound index `{ status: 1, created_at: -1 }` satisfied both the filter and the sort, so MongoDB walked exactly the rows it returned. If you saw `"stage": "COLLSCAN"` or `totalDocsExamined` in the thousands while `nReturned` was 37, the query is scanning the whole collection and the index is not being used (often because the sort direction does not match the index). A second red flag is a `SORT` stage in the plan: it means MongoDB had to sort in memory rather than reading rows in index order, which fails outright once the result exceeds the 100 MB sort limit. This is the MongoDB equivalent of reading a PostgreSQL `EXPLAIN ANALYZE`, and interviewers expect you to name the keys-examined-vs-returned ratio as the headline metric.
 
-#### Aggregation Pipeline
+### Aggregation Pipeline
 
 The aggregation pipeline is MongoDB's framework for data transformation and analysis. Each stage transforms the documents as they pass through:
 
@@ -468,7 +468,7 @@ A typical result set looks like this (one document per year/month/category group
 
 **How to read this output:** Each stage reshaped the stream that flowed into it. `$unwind: "$items"` was the pivotal step -- it exploded each order into one document per line item, so an order with three items became three documents before the `$group`. That is why `order_count` counts line items in a category, not distinct orders; a frequent bug is reading this number as "orders placed." `$round` exists because `$multiply` on floating-point prices accumulates noise (1059.9700000000001), so you round at the projection stage rather than trusting raw float sums. In an interview, the expected insight is that ordering `$match` before `$unwind` lets MongoDB use an index to discard non-shipped orders early, keeping the expensive unwind off the full collection.
 
-#### Replication and Sharding
+### Replication and Sharding
 
 Replica sets provide high availability through automatic failover. A replica set consists of a primary (receives all writes) and one or more secondaries (replicate from the primary). If the primary goes down, secondaries hold an election and one is promoted.
 
@@ -478,11 +478,11 @@ Sharding distributes data across multiple replica sets (shards) using a shard ke
 
 ---
 
-### Elasticsearch
+## Elasticsearch
 
 Elasticsearch is a distributed search and analytics engine built on Apache Lucene. It stores data as JSON documents and builds an inverted index that maps every term to the documents containing that term.
 
-#### Inverted Index
+### Inverted Index
 
 An inverted index is the core data structure that makes full-text search fast. When a document is indexed, Elasticsearch tokenizes the text (splits it into terms), applies analyzers (lowercasing, stemming, stop-word removal), and records which documents contain each term.
 
@@ -505,7 +505,7 @@ Inverted Index (after analysis):
   search        -> [3]
 ```
 
-#### Queries and Mappings
+### Queries and Mappings
 
 ```json
 // Define an explicit mapping
@@ -552,7 +552,7 @@ POST /articles/_search
 }
 ```
 
-#### Scaling
+### Scaling
 
 Elasticsearch scales by distributing index data across shards (horizontal scaling) and replicating shards for fault tolerance and read throughput. For time-based data (logs, events), the standard pattern is to create one index per time period and use aliases for transparent rollover:
 
@@ -575,15 +575,15 @@ PUT /_ilm/policy/logs_policy
 
 ---
 
-### Cassandra & Wide-Column Stores
+## Cassandra & Wide-Column Stores
 
 Apache Cassandra (and its API-compatible cousin ScyllaDB, plus relatives like HBase and Bigtable) is a wide-column store built for one thing above all: massive, always-available write throughput across many nodes, with no single point of failure. It is a classic **AP** system in CAP terms -- it favors availability and partition tolerance over strong consistency. Reasoning about Cassandra means unlearning relational instincts.
 
-#### Query-First, Denormalized Modeling
+### Query-First, Denormalized Modeling
 
 In a relational database you model entities and normalize, then write queries against them. In Cassandra you do the opposite: you start from the exact queries your application will run, and design **one table per query pattern**. There are no joins and no ad-hoc queries, so any data you need together must be stored together -- you duplicate data across tables freely, because writes are cheap and disk is cheaper than a slow scatter-gather. If a new query pattern appears later, you typically add a new table and backfill it, rather than reshaping existing ones.
 
-#### Partition Key and Clustering Columns
+### Partition Key and Clustering Columns
 
 The primary key in Cassandra is `(partition key, clustering columns)`, and the split is the single most important modeling decision:
 
@@ -617,7 +617,7 @@ LIMIT 50;
 
 **How to read this output:** The query is fast because `room_id` (the partition key) routes it to exactly one partition on one set of replicas, and the rows come back already ordered by `sent_at DESC` thanks to the clustering order -- no sort step, no cross-node coordination. The anti-pattern to recognize: a query that filters only on `sent_at` (omitting `room_id`) would force an `ALLOW FILTERING` full-cluster scan, which Cassandra refuses by default precisely because it does not scale. In an interview, the expected instinct is "what is my partition key, and does every query name it?" -- if a query cannot name the partition key, you modeled the wrong table.
 
-#### Tunable Consistency (R + W > N)
+### Tunable Consistency (R + W > N)
 
 Cassandra lets you choose a **consistency level per query** rather than baking it into the database. With a replication factor of `N`, if the number of replicas that must acknowledge a write (`W`) plus the number that must respond to a read (`R`) is greater than `N`, then any read is guaranteed to see the latest acknowledged write -- this is the `R + W > N` rule for strong consistency on that operation.
 
@@ -631,13 +631,13 @@ Write at ONE   (W=1) + Read at ONE   (R=1):    1 + 1 = 2 < 3  -> fast, but may r
 
 **How to read this:** Tuning these knobs is how you trade consistency for latency and availability *per operation* instead of globally. A view counter can use `ONE/ONE` for speed and tolerate occasional staleness; a "has this user already claimed the coupon?" check uses `QUORUM/QUORUM` so it never double-grants. The reason this is a frequent interview topic: it makes concrete that "consistency" is not binary -- in a Dynamo-style system you dial it, and the `R + W > N` arithmetic is the proof you can reason about it.
 
-#### Anti-Entropy, Repair, and Tombstones
+### Anti-Entropy, Repair, and Tombstones
 
 Because writes can succeed with only `W` replicas acknowledging, replicas drift apart and must be reconciled. Cassandra uses several mechanisms: **hinted handoff** (a coordinator temporarily stores writes destined for a node that is down, then replays them when it returns), **read repair** (when a read at higher consistency finds mismatched replicas, the newest value is pushed to the stale ones in the background), and **anti-entropy repair** using **Merkle trees** (a periodic `nodetool repair` builds hash trees of data ranges so nodes can efficiently find and exchange only the differing ranges).
 
 Deletes are special. Because the storage is LSM-based and immutable on disk, a delete writes a **tombstone** marker rather than removing data in place; the actual data is purged only during compaction after `gc_grace_seconds`. Tombstones are a notorious operational footgun: a workload that deletes heavily (or, worse, queues built on Cassandra that delete processed rows) accumulates tombstones that must be scanned and skipped on every read, eventually causing query timeouts. The standard advice is to model data so it expires via TTL or partition rollover instead of bulk deletes.
 
-#### DynamoDB Parallels
+### DynamoDB Parallels
 
 Amazon DynamoDB is a managed key-value/wide-column store that shares Cassandra's Dynamo-paper lineage, and the concepts map closely:
 
@@ -651,15 +651,15 @@ Amazon DynamoDB is a managed key-value/wide-column store that shares Cassandra's
 
 ---
 
-### Graph Databases
+## Graph Databases
 
 Graph databases (Neo4j being the best known, alongside Amazon Neptune, JanusGraph, and others) model data as a network of **nodes** (entities), **edges** (relationships), and **properties** on both. Unlike a relational schema where a relationship is implied by a foreign key and reconstructed at query time via a JOIN, a graph database stores relationships as **direct physical pointers** between nodes.
 
-#### Why Pointer-Based Traversal Wins
+### Why Pointer-Based Traversal Wins
 
 That pointer-based storage is the entire point. In a relational database, following a relationship N hops deep means N successive JOINs, and each JOIN's cost grows with table size (you are repeatedly searching an index). In a native graph database, traversing from a node to its neighbors is a pointer dereference whose cost is independent of total graph size -- a property called **index-free adjacency**. This is why "find all friends-of-friends-of-friends" or "is there any path between account A and account B through shared devices" stays fast in a graph database but degenerates into an unmanageable pile of self-joins in SQL.
 
-#### Cypher and Gremlin
+### Cypher and Gremlin
 
 Neo4j's query language is **Cypher**, which expresses graph patterns visually as ASCII-art: nodes in parentheses, relationships in brackets with arrows.
 
@@ -684,21 +684,21 @@ LIMIT 5;
 
 **How to read this output:** The query walks four hops -- Alice -> her products -> other buyers -> their other products -- and the `strength` column counts how many distinct co-buyers connect Alice to each recommendation, so "USB-C Hub" is recommended because 37 people who bought the same things Alice did also bought it. The `WHERE NOT (alice)-[:BOUGHT]->(reco)` clause filters out items Alice already owns. Expressing this in SQL would require three or four self-joins on an orders table and would slow down as the table grows; the graph traversal cost depends only on Alice's local neighborhood, not the total number of users. **Gremlin** (from the Apache TinkerPop framework) is the main alternative -- an imperative, step-by-step traversal language used by Neptune, JanusGraph, and others, in contrast to Cypher's declarative pattern matching.
 
-#### When to Use (and When Not To)
+### When to Use (and When Not To)
 
 Reach for a graph database when relationships are the primary thing you query: social networks (friends, follows), recommendation engines, fraud rings (shared cards/devices/addresses forming suspicious clusters), network and dependency analysis, knowledge graphs, and identity resolution. Avoid it for plain tabular data with shallow relationships (relational JOINs are perfectly fine and far more familiar), and for heavy aggregation or analytics over the whole dataset (a columnar OLAP store is the right tool -- graph databases are optimized for deep traversal of a local neighborhood, not for scanning and summing everything).
 
 ---
 
-### Vector Databases & Embeddings
+## Vector Databases & Embeddings
 
 Vector databases power semantic search and retrieval-augmented generation (RAG) by storing and searching **embeddings** -- numeric representations of meaning.
 
-#### Embeddings and Similarity
+### Embeddings and Similarity
 
 An embedding model (for text, images, audio, etc.) maps an input to a high-dimensional vector (commonly hundreds to a couple thousand dimensions) such that semantically similar inputs land geometrically close together. Searching then becomes a geometry problem: given a query vector, find the stored vectors nearest to it. The distance metric matters -- **cosine similarity** (angle between vectors, the most common for text), **dot product**, and **Euclidean (L2) distance** are the usual choices, and the metric must match how the embedding model was trained. This is the backbone of "find documents that *mean* the same thing" rather than "find documents that contain the same keywords."
 
-#### Approximate Nearest Neighbor (ANN)
+### Approximate Nearest Neighbor (ANN)
 
 Exact nearest-neighbor search compares the query against every stored vector -- linear in the number of vectors, which is far too slow at millions or billions of vectors. Vector databases therefore build **Approximate Nearest Neighbor (ANN)** indexes that trade a small amount of recall for enormous speed and memory gains:
 
@@ -706,7 +706,7 @@ Exact nearest-neighbor search compares the query against every stored vector -- 
 - **IVF (Inverted File / clustering)**: partition vectors into clusters; at query time search only the few nearest clusters. Cheaper memory, tunable via how many clusters you probe.
 - **Product Quantization (PQ)**: compress each vector into a compact code, drastically reducing memory at some accuracy cost; often combined with IVF (`IVF+PQ`).
 
-#### pgvector vs Dedicated Stores
+### pgvector vs Dedicated Stores
 
 The first decision is whether you even need a separate database. **`pgvector`** adds a `vector` column type and ANN indexes (HNSW and IVFFlat) directly to PostgreSQL, so your embeddings live next to your relational data -- no extra system to operate, and you can filter on normal columns and join in the same query.
 
@@ -735,7 +735,7 @@ LIMIT 5;
 
 **How to read this output:** The `<=>` operator is cosine *distance*, so `1 - distance` gives a similarity score where higher is more relevant -- the top hit at 0.91 is nearly on-topic with the query even if it shares no exact keywords, which is exactly what keyword search would miss. Note the `WHERE tenant_id = 42` runs as a **pre-filter** so the vector search only ranks documents the tenant is allowed to see; getting filtering and vector ranking to cooperate efficiently is the central operational challenge of vector search. Dedicated stores -- **Pinecone** (fully managed), **Milvus** and **Qdrant** and **Weaviate** (open-source, horizontally scalable) -- exist for when embedding volume, query throughput, or advanced filtering outgrows what a single PostgreSQL instance can serve. The honest default for most applications: start with `pgvector` and only graduate to a dedicated store when you measure a real limit.
 
-#### Hybrid Search
+### Hybrid Search
 
 Pure vector search has blind spots -- it can miss exact terms (a product SKU, a person's name, a rare acronym) because those carry little semantic signal. **Hybrid search** combines vector similarity with classic keyword scoring (**BM25**) and metadata filtering, then fuses the rankings (e.g. reciprocal rank fusion). A typical pipeline pre-filters by metadata (tenant, date range, language) to shrink the candidate set, runs both a BM25 keyword query and an ANN vector query, and blends the two scores. This consistently beats either approach alone for real-world relevance, which is why production RAG and search systems almost always go hybrid rather than vector-only.
 
@@ -743,7 +743,7 @@ Pure vector search has blind spots -- it can miss exact terms (a product SKU, a 
 
 ---
 
-### Time-Series Databases
+## Time-Series Databases
 
 Time-series databases are optimized for the specific workload pattern of time-stamped data: high-throughput appends, time-range queries, and downsampling/aggregation. While general-purpose databases can handle time-series data, specialized databases provide better compression, faster queries, and built-in retention policies.
 
@@ -810,11 +810,11 @@ Other notable time-series databases include **InfluxDB** (purpose-built for metr
 
 ---
 
-### Analytics: OLTP vs OLAP and Columnar Storage
+## Analytics: OLTP vs OLAP and Columnar Storage
 
 The single most important architectural distinction in data systems is **OLTP vs OLAP**, and it determines which storage layout -- row-oriented or column-oriented -- you want.
 
-#### OLTP vs OLAP
+### OLTP vs OLAP
 
 **OLTP (Online Transaction Processing)** is the world of your application's primary database: many small, concurrent reads and writes, each touching a few rows (place an order, update a profile, fetch a cart). Data is normalized, indexed for point lookups, and stored **row-oriented** (all of a row's columns sit together on a page) so that reading or writing a whole record is one efficient page access. PostgreSQL, MySQL, and InnoDB are OLTP engines.
 
@@ -822,7 +822,7 @@ The single most important architectural distinction in data systems is **OLTP vs
 
 The cardinal rule: **do not run heavy analytics on your transactional primary.** A single `SELECT SUM(amount) ... GROUP BY ...` over the orders table can saturate I/O, blow out the buffer pool, and lock-contend with the OLTP traffic that pays the bills. Instead, ship OLTP data to a dedicated analytics store (via CDC, ETL/ELT, or a read replica feeding a warehouse) and run the heavy queries there.
 
-#### Columnar Storage
+### Columnar Storage
 
 In a **column-oriented** store, values of the same column are stored contiguously rather than values of the same row. This flips the performance characteristics to favor analytics:
 
@@ -847,7 +847,7 @@ Query: SELECT country, SUM(amount) GROUP BY country
 
 **How to read this:** For the `GROUP BY country` query, the column store touches only the `country` and `amount` columns and skips `id` and `name` entirely -- on a table with 50 columns that is the difference between reading 4% of the data and 100% of it. The `country` column compresses to almost nothing because consecutive values repeat. This is the mechanical reason columnar engines run analytical aggregations 10-1000x faster than a row-oriented OLTP database, and why "just add an index" does not close the gap -- the win is in the storage layout, not the index.
 
-#### ClickHouse
+### ClickHouse
 
 **ClickHouse** is the leading open-source columnar OLAP database, built for sub-second aggregations over billions of rows. Its core is the **MergeTree** engine family, which stores data in column files sorted by a chosen `ORDER BY` key and continuously merges small inserted parts into larger sorted parts in the background (the same log-structured idea as LSM, applied to columnar analytics).
 

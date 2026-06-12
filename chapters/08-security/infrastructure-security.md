@@ -2,11 +2,11 @@
 
 # 8.2 Infrastructure Security
 
-### Secrets Management
+## Secrets Management
 
 Secrets -- API keys, database credentials, encryption keys, certificates -- are the crown jewels of your infrastructure. A single leaked secret can lead to a full system compromise. Proper secrets management means storing secrets securely, rotating them regularly, auditing access, and ensuring they never appear in source code or logs.
 
-#### HashiCorp Vault
+### HashiCorp Vault
 
 HashiCorp Vault is a dedicated secrets management tool that provides dynamic secrets (generated on demand with short TTLs), encryption as a service, PKI certificate management, and fine-grained access control with audit logging.
 
@@ -176,7 +176,7 @@ decrypted_ssn = enc.decrypt(encrypted_ssn)
 # "123-45-6789"
 ```
 
-#### AWS Secrets Manager / Parameter Store
+### AWS Secrets Manager / Parameter Store
 
 For AWS-hosted applications, AWS Secrets Manager and Systems Manager Parameter Store provide managed secret storage with IAM-based access control and optional automatic rotation.
 
@@ -217,7 +217,7 @@ def get_parameter(name: str, region: str = "us-east-1") -> str:
 SECRET_KEY = get_parameter("/prod/myapp/django-secret-key")
 ```
 
-#### GCP Secret Manager
+### GCP Secret Manager
 
 On Google Cloud, Secret Manager is the managed equivalent, with versioned secrets and IAM-based access control. Access is granted to a service account rather than to a distributed key.
 
@@ -237,7 +237,7 @@ SECRET_KEY = get_gcp_secret("my-project", "django-secret-key")
 
 The client authenticates via **Application Default Credentials** -- on GKE or Cloud Run it picks up the workload's bound service account automatically, so no static key file ever lands on disk.
 
-#### Kubernetes: external-secrets and Workload Identity
+### Kubernetes: external-secrets and Workload Identity
 
 A raw Kubernetes `Secret` is only base64-encoded (not encrypted) in etcd, and committing it to git defeats the purpose. The **External Secrets Operator (ESO)** solves this: secrets live in a real backend (Vault, AWS/GCP Secret Manager) and ESO syncs them into native `Secret` objects at runtime, so the cluster manifest contains only a *reference*, never the value.
 
@@ -261,7 +261,7 @@ spec:
         property: password
 ```
 
-#### Workload Identity / Cloud IAM Roles vs Static Keys
+### Workload Identity / Cloud IAM Roles vs Static Keys
 
 The most important secrets-management principle for cloud workloads is to **eliminate long-lived static keys entirely**. Instead of baking an access key into the app, bind the workload's identity to a cloud IAM role and let the platform mint short-lived credentials automatically:
 
@@ -271,7 +271,7 @@ The most important secrets-management principle for cloud workloads is to **elim
 
 These credentials are **dynamic and short-lived**: they expire in minutes to hours and rotate transparently, so a leaked token has a tiny exploitation window and there is no static key to steal in the first place. The same logic underpins Vault's dynamic database credentials shown above -- a unique, auto-expiring username/password per workload beats one shared, permanent DB password. Prefer this model over static keys everywhere it is available.
 
-#### Environment Variables and .env Files
+### Environment Variables and .env Files
 
 The Twelve-Factor App methodology recommends storing configuration in environment variables. For local development, `.env` files provide a convenient way to manage these variables without committing secrets to version control.
 
@@ -405,7 +405,7 @@ secrets:
 #   --from-literal=DATABASE_PASSWORD='your-password'
 ```
 
-#### Secret Detection in CI/CD
+### Secret Detection in CI/CD
 
 Preventing secrets from being committed to version control is critical. Once a secret is in a git repository, it remains in the history even after deletion. Automated secret detection tools can catch mistakes before they become breaches.
 
@@ -453,7 +453,7 @@ Timestamp: 2026-06-04 10:31:55 +0000
 
 > **Common pitfall:** Removing a leaked secret with a follow-up commit feels like a fix but is not -- anyone with the repo can `git checkout` the old commit and read it. Always rotate the credential, and only then optionally rewrite history with `git filter-repo` or BFG.
 
-#### Encryption
+### Encryption
 
 All data should be encrypted both at rest and in transit. Application-level encryption provides an additional layer of protection for particularly sensitive fields.
 
@@ -530,9 +530,9 @@ server {
 
 ---
 
-### Compliance & Best Practices
+## Compliance & Best Practices
 
-#### GDPR (General Data Protection Regulation)
+### GDPR (General Data Protection Regulation)
 
 GDPR is the European Union's data protection regulation that applies to any organization processing data of EU residents, regardless of where the organization is based. Non-compliance can result in fines up to 4% of annual global revenue or 20 million euros, whichever is greater.
 
@@ -649,7 +649,7 @@ class DataBreachLog(models.Model):
     reported_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
 ```
 
-#### CCPA (California Consumer Privacy Act)
+### CCPA (California Consumer Privacy Act)
 
 CCPA (as amended by the CPRA) is the U.S. analogue to GDPR for California residents. The technical obligations overlap heavily with GDPR -- right to know what data you hold, right to delete, right to data portability -- so a system built for GDPR erasure and export (above) largely satisfies CCPA. The notable differences:
 
@@ -667,7 +667,7 @@ def track_for_ads(request, user):
     enqueue_ad_event(user)
 ```
 
-#### PCI-DSS (Payment Card Data)
+### PCI-DSS (Payment Card Data)
 
 If you touch cardholder data, PCI-DSS applies. The single most important architectural decision is **scope reduction**: the less card data flows through your systems, the smaller (and cheaper) your compliance burden.
 
@@ -688,7 +688,7 @@ def charge(request):
     Payment.objects.create(user=request.user, provider_token=token, last4="4242")
 ```
 
-#### SOC 2, ISO 27001, and SBOM
+### SOC 2, ISO 27001, and SBOM
 
 - **SOC 2 / ISO 27001** are control *frameworks*, not laws. You demonstrate that you operate a set of controls -- access control, change management, monitoring, incident response, vendor management -- and an independent auditor attests to it (SOC 2 Type II audits the controls *over a period*, typically 6-12 months). For engineering, this mostly means: enforce least-privilege access, log and review changes, run the monitoring/alerting and incident processes you claim to, and keep the evidence (access reviews, ticket history, on-call records).
 - **SBOM (Software Bill of Materials)**: a machine-readable inventory of every component and dependency in your software (formats: CycloneDX, SPDX). When a new CVE drops (think Log4Shell), an SBOM lets you answer "are we affected, and where?" in minutes instead of days, and it is increasingly required by customers and regulators.
@@ -702,12 +702,12 @@ cyclonedx-py environment -o sbom.json
 grype sbom:./sbom.json
 ```
 
-#### Data Residency and Privacy by Design
+### Data Residency and Privacy by Design
 
 - **Data residency / sovereignty**: some jurisdictions require that personal data be stored (and sometimes processed) within specific geographic boundaries. Architect for it by pinning storage to in-region buckets/databases, partitioning data by region, and ensuring backups and logs do not silently cross borders.
 - **Privacy by design**: bake privacy into the architecture rather than bolting it on. In practice this means data minimization (don't collect what you don't need), purpose limitation (use data only for the stated reason), encryption at rest and in transit by default, short retention windows, and pseudonymization/anonymization wherever the raw identity isn't required.
 
-#### Dependency Scanning
+### Dependency Scanning
 
 Third-party dependencies are a major attack vector. A single vulnerable library can compromise your entire application. Automated scanning and updating is essential.
 
@@ -766,7 +766,7 @@ requests  2.31.0   PYSEC-2024-47       2.32.0
 
 > **Common pitfall:** Pinning exact versions in `requirements.txt` makes builds reproducible but also freezes you on vulnerable releases until something forces an upgrade. Pinning is correct -- but it only works paired with automated scanning that nudges those pins forward.
 
-#### Penetration Testing and Static/Dynamic Analysis
+### Penetration Testing and Static/Dynamic Analysis
 
 Regular security testing is non-negotiable for production systems. A combination of automated tools and manual penetration testing provides the most comprehensive coverage.
 
@@ -822,7 +822,7 @@ semgrep --config auto ./myapp/
 
 **How to read a SAST finding:** each issue carries a rule ID (`B602`), a *severity* (how bad it is if exploited) and a *confidence* (how sure the tool is it is a real match), plus the exact file and line. The severity/confidence split is the key insight -- in CI you typically gate on high-severity, high-confidence findings (`bandit -r ./myapp/ -ll` filters to medium-and-up) so the build fails on genuine `shell=True` command injection while a noisy low-confidence guess does not block every merge. SAST proves a pattern *exists* in source; DAST tools like OWASP ZAP prove a vulnerability is *reachable* on the running app -- you want both because a dangerous-looking line behind dead code is lower priority than the same line on a live request path.
 
-#### Zero-Trust Architecture
+### Zero-Trust Architecture
 
 Zero-trust is a security model based on the principle "never trust, always verify." Unlike traditional perimeter-based security where everything inside the network is trusted, zero-trust treats every request as potentially hostile, regardless of its origin.
 

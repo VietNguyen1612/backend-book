@@ -2,9 +2,9 @@
 
 # 2.3 Advanced Patterns
 
-### Decorators & Context Managers
+## Decorators & Context Managers
 
-#### Function Decorators: Wrapping Behavior
+### Function Decorators: Wrapping Behavior
 
 A decorator is a function that takes a function and returns a modified function. Always use `@functools.wraps` to preserve the original function's metadata (`__name__`, `__doc__`, `__module__`).
 
@@ -116,7 +116,7 @@ Querying database for user 42...
 
 **How to read this output:** The "Querying database" line appears exactly once. The first call is a cache miss, so it runs the body and stores `(result, now)` keyed by `args`; the second call is a cache hit inside the TTL window, so it returns the stored value without touching the database. This is the whole point of memoization — in a real backend, that single suppressed query is a saved round-trip to Postgres on a hot path. After `cache_clear()` the next call would print again.
 
-#### Class-Based Decorators
+### Class-Based Decorators
 
 When your decorator needs to maintain state, a class-based decorator is cleaner.
 
@@ -188,7 +188,7 @@ Rate limit exceeded. Try again in 9.9s
 
 > **Common pitfall:** This limiter is not thread-safe. Two threads can both pass the `len(self.timestamps) >= self.calls` check before either appends, letting more calls through than the limit allows. Under real concurrency, guard the timestamp list with a `threading.Lock`.
 
-#### Context Managers: Resource Management
+### Context Managers: Resource Management
 
 Context managers ensure resources are properly cleaned up, even when exceptions occur. They implement the `__enter__` / `__exit__` protocol.
 
@@ -277,9 +277,9 @@ Result: 499999500000, Time: 0.0182s
 
 ---
 
-### Generators & Iterators
+## Generators & Iterators
 
-#### Generator Functions: Lazy Evaluation
+### Generator Functions: Lazy Evaluation
 
 Generators produce values on demand using `yield`. They are memory-efficient because they compute one value at a time instead of building an entire collection.
 
@@ -371,7 +371,7 @@ Generator: 200 bytes
 
 **How to read this output:** The list materializes all 10 million squares up front, so its size scales with the data — hundreds of megabytes. The generator stores only its execution frame and current position, so `getsizeof` reports a small constant (~200 bytes) no matter how many values it will eventually yield. This is the difference between a process that OOM-kills on a large dataset and one that streams it in constant memory. The exact MB figure depends on the platform's pointer size and list over-allocation, but the order-of-magnitude gap is the takeaway: reach for a generator whenever you only iterate once and don't need random access or `len()`.
 
-#### `yield from`: Sub-Generator Delegation
+### `yield from`: Sub-Generator Delegation
 
 `yield from` delegates iteration to another iterable, passing values through transparently in both directions.
 
@@ -417,7 +417,7 @@ tree = TreeNode("root", [
 print(list(tree))  # ['root', 'A', 'A1', 'A2', 'B', 'B1']
 ```
 
-#### The Iterator Protocol
+### The Iterator Protocol
 
 Any object implementing `__iter__()` and `__next__()` is an iterator. Understanding this protocol lets you create custom iterables for your domain.
 
@@ -510,9 +510,9 @@ for batch in itertools.batched(range(10), 3):
 
 ---
 
-### Type Hints & Static Analysis
+## Type Hints & Static Analysis
 
-#### Core Type Annotations
+### Core Type Annotations
 
 Type hints make your code self-documenting and enable static analysis tools to catch bugs before runtime. They have zero runtime cost (except when introspected).
 
@@ -560,7 +560,7 @@ def newest_style(value: str | int | None) -> str:
     return str(value) if value is not None else "none"
 ```
 
-#### Generics with TypeVar and Protocol
+### Generics with TypeVar and Protocol
 
 ```python
 from typing import TypeVar, Generic, Protocol, runtime_checkable
@@ -631,7 +631,7 @@ render([Circle(), Square()])
 print(isinstance(Circle(), Drawable))  # True
 ```
 
-#### TypedDict and Literal
+### TypedDict and Literal
 
 ```python
 from typing import TypedDict, Literal, Required, NotRequired
@@ -666,7 +666,7 @@ set_log_level("INFO")     # OK
 # set_log_level("TRACE")  # mypy error: unexpected value
 ```
 
-#### mypy: Static Type Checking
+### mypy: Static Type Checking
 
 ```python
 # -- Running mypy --
@@ -710,7 +710,7 @@ result = legacy_function()  # type: ignore[no-untyped-call]
 # disallow_untyped_defs = false
 ```
 
-#### Pydantic: Runtime Validation
+### Pydantic: Runtime Validation
 
 ```python
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -784,11 +784,11 @@ except ValidationError as e:
 
 ---
 
-### Dataclasses, Enums & Modeling
+## Dataclasses, Enums & Modeling
 
 Pydantic (above) is the right tool at *untrusted boundaries* where you parse-don't-validate. For internal value objects and DTOs that you build in trusted code, the standard library's `@dataclass`, `NamedTuple`, and `enum` are lighter and have zero dependencies.
 
-#### `@dataclass`: Boilerplate-Free Value Objects
+### `@dataclass`: Boilerplate-Free Value Objects
 
 `@dataclass` auto-generates `__init__`, `__repr__`, and `__eq__` from annotated fields. The flags control how strict and how cheap the resulting class is.
 
@@ -839,7 +839,7 @@ True
 
 **How to read this output:** The `repr` and the comparison both come for free — `order=True` makes `Point` sort like the tuple `(x, y)`, which is why `Point(1,2) < Point(3,4)` is `True`. The `hash(...)` line only works because `frozen=True` froze the fields; a normal mutable dataclass is *unhashable* (its `__hash__` is set to `None`) precisely so you can't accidentally use a mutable object as a dict key and then mutate it out from under the hash table. The `750` proves `__post_init__` ran after the generated `__init__` populated the simple fields — the canonical place to compute derived fields and validate invariants. `default_factory` is mandatory for `list`/`dict`/`set` defaults because a bare `[]` would be shared across every instance (the same mutable-default bug as in function arguments).
 
-#### `NamedTuple` vs `dataclass` vs `dict`
+### `NamedTuple` vs `dataclass` vs `dict`
 
 ```python
 from typing import NamedTuple
@@ -855,7 +855,7 @@ lat, lng = c               # unpacks like a tuple
 
 Choose by need: a `NamedTuple` is immutable, indexable, tuple-compatible (great for fixed records, dict keys, and code that already iterates tuples), but you cannot add methods/behavior comfortably and every instance is immutable. A `@dataclass` is the default for anything with behavior or mutation, supports `frozen`/`slots`/`order`, and reads as a real class. A plain `dict` has no fixed schema, no attribute access, and no type checking — fine for truly dynamic data, but reaching for a dataclass turns runtime `KeyError`s and typos into static, autocompleted attributes.
 
-#### Enums: Names Instead of Magic Strings
+### Enums: Names Instead of Magic Strings
 
 ```python
 from enum import Enum, IntEnum, StrEnum, Flag, auto
@@ -909,11 +909,11 @@ Perm.READ|WRITE
 
 ---
 
-### Dates, Times & Time Zones
+## Dates, Times & Time Zones
 
 Date handling is a perennial source of production incidents. One rule prevents most of them: **store and compute in UTC, convert to local only for display.**
 
-#### Aware vs Naive, and the `utcnow()` Trap
+### Aware vs Naive, and the `utcnow()` Trap
 
 A *naive* `datetime` has no `tzinfo` and is ambiguous — it could mean any zone. An *aware* datetime carries its zone. Always work with aware datetimes for anything real.
 
@@ -944,7 +944,7 @@ TypeError: can't subtract offset-naive and offset-aware datetimes
 
 **How to read this output:** The `None` is the entire bug in one line — `utcnow()` gives you a value that *is* UTC but doesn't *say* so, so the moment you compare or subtract it against an aware datetime Python refuses (the `TypeError`). That refusal is protective: the alternative would be silently treating a naive value as local time and producing an answer off by your UTC offset. Use `datetime.now(timezone.utc)` everywhere and the whole class of "off by 5 hours in production but not on my laptop" bugs disappears.
 
-#### Zones, DST, and Serialization
+### Zones, DST, and Serialization
 
 ```python
 from datetime import datetime, timezone
@@ -980,9 +980,9 @@ For measuring *durations* (timeouts, latency), use `time.monotonic()` instead of
 
 ---
 
-### Numbers, Precision & Money
+## Numbers, Precision & Money
 
-#### Floats Lie; Use Decimal for Money
+### Floats Lie; Use Decimal for Money
 
 `float` is IEEE-754 double-precision binary floating point. Many decimal fractions have no exact binary representation, so arithmetic accumulates tiny errors.
 
@@ -1027,7 +1027,7 @@ print(2 ** 200)
 
 ---
 
-### Strings, Bytes & Encoding
+## Strings, Bytes & Encoding
 
 `str` is a sequence of Unicode *code points*; `bytes` is a sequence of raw *octets*. They are different types and mixing them raises `TypeError`. The mantra: **encode `str` to `bytes`, decode `bytes` to text — always with an explicit `utf-8`.**
 
@@ -1066,7 +1066,7 @@ The two strings above look identical on screen but compare unequal because one i
 
 ---
 
-### Serialization
+## Serialization
 
 Turning objects into bytes for storage or transport. The right format depends on who reads it back and whether you trust them.
 
@@ -1104,7 +1104,7 @@ TypeError: Object of type datetime is not JSON serializable
 
 ---
 
-### Pattern Matching (3.10+)
+## Pattern Matching (3.10+)
 
 `match`/`case` is structural pattern matching — far more than a `switch`. It *destructures* the subject and can bind variables while it matches, which makes it ideal for parsing variant/tagged data, command dispatch, and walking ASTs.
 
@@ -1167,9 +1167,9 @@ def classify(c: Color):
 
 ---
 
-### Concurrency Patterns
+## Concurrency Patterns
 
-#### `concurrent.futures`: High-Level Concurrency
+### `concurrent.futures`: High-Level Concurrency
 
 ```python
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
@@ -1245,7 +1245,7 @@ with ThreadPoolExecutor(max_workers=3) as executor:
             print(f"Got result: {f.result()[0]}")
 ```
 
-#### Multiprocessing: Shared State and IPC
+### Multiprocessing: Shared State and IPC
 
 ```python
 import multiprocessing as mp
@@ -1307,7 +1307,7 @@ if __name__ == "__main__":
             print(result, end=" ")
 ```
 
-#### Threading Primitives
+### Threading Primitives
 
 ```python
 import threading

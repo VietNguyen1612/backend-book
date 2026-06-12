@@ -4,7 +4,7 @@
 
 Section 6.1 introduced the caching *patterns* (cache-aside, write-through, write-behind) and where a cache sits in an architecture. This section goes a level deeper into the mechanics you actually tune in production: the cache hierarchy and its latency tiers, HTTP caching semantics, how CDNs really work, the hard problem of invalidation, and the two failure modes that take caches down -- **stampedes** and **hot keys**.
 
-### The Cache Hierarchy
+## The Cache Hierarchy
 
 A request can be answered at any of several tiers, each an order of magnitude slower than the one before it. The goal of a caching strategy is to answer as far *left* as possible.
 
@@ -22,7 +22,7 @@ A request can be answered at any of several tiers, each an order of magnitude sl
 
 The lesson is to **layer** caches, not pick one. A fingerprinted JS bundle is served from the browser cache on repeat views, from a CDN edge for new visitors, and only rarely from your origin. A hot product row is served from a per-process LRU for microseconds, falling back to Redis, falling back to Postgres. Each tier shaves load off the next.
 
-#### Effective latency and why hit ratio dominates
+### Effective latency and why hit ratio dominates
 
 Average latency is `hit_ratio * t_hit + (1 - hit_ratio) * t_miss`. Because `t_miss` is often 10-100x `t_hit`, a *small* miss rate dominates the average:
 
@@ -35,7 +35,7 @@ Average latency is `hit_ratio * t_hit + (1 - hit_ratio) * t_miss`. Because `t_mi
 
 **How to read these numbers:** going from 99% to 90% hit ratio is only a 9-point drop, but it nearly *quadruples* average latency, because every miss costs 50x a hit. This is why chasing the last few points of hit ratio (origin shielding, longer TTLs, stampede protection) is worth real effort, and why a cache that silently drops to an 80% hit ratio under load can look like an origin outage.
 
-### HTTP Caching Semantics
+## HTTP Caching Semantics
 
 The browser and CDN tiers are governed by HTTP response headers. Getting these right is free caching; getting them wrong either leaks stale data or defeats the cache entirely.
 
@@ -77,7 +77,7 @@ def product_json(request, pk):
     ...
 ```
 
-### How CDNs Actually Work
+## How CDNs Actually Work
 
 A CDN is a globally distributed reverse-proxy cache. The mechanics worth understanding:
 
@@ -87,7 +87,7 @@ A CDN is a globally distributed reverse-proxy cache. The mechanics worth underst
 - **Invalidation: purge vs versioned URLs.** Purging (telling the CDN to drop a key) is eventually consistent and rate-limited; prefer **content-fingerprinted URLs** for static assets (`app.4f3a1c.js` + `immutable`) so a deploy *changes the URL* and never needs a purge. Reserve purge for HTML and API responses you cannot version.
 - **Signed URLs / tokens** gate private content at the edge (time-limited, optionally IP-bound) without a round-trip to your origin for authorization.
 
-### Cache Invalidation
+## Cache Invalidation
 
 > "There are only two hard things in Computer Science: cache invalidation and naming things." -- Phil Karlton
 
@@ -99,7 +99,7 @@ The strategies, from simplest to strongest:
 - **Versioned keys** -- embed a version in the key (`user:42:v7`); bumping the version atomically "invalidates" all derived entries without deleting them. Great for invalidating a whole computed view at once.
 - **Negative caching** -- cache *misses* (404s) for a short TTL so an attacker requesting random non-existent IDs cannot turn every request into a database query (cache penetration). Pair with a Bloom filter for high-cardinality keyspaces.
 
-### Cache Stampede (Thundering Herd)
+## Cache Stampede (Thundering Herd)
 
 When a popular key expires, every concurrent request misses at once and hits the origin simultaneously -- the recomputation that was supposed to be amortized across thousands of reads now happens thousands of times in a burst, often toppling the database.
 
@@ -166,7 +166,7 @@ def get_single_flight(r, db, key, ttl):
 
 Note that Django's `cache.get_or_set()` is convenient but **not** stampede-safe -- under concurrency every missing request runs the callable. Reach for one of the patterns above on genuinely hot keys.
 
-### Hot Keys
+## Hot Keys
 
 A *hot key* is a single key so popular that the one cache node owning it (by consistent hashing) saturates -- a stampede is a hot key in time; a hot key is concentration in space. Mitigations:
 

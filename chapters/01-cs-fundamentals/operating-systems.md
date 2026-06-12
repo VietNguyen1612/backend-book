@@ -2,9 +2,9 @@
 
 # 1.3 Operating Systems
 
-### Processes & Threads
+## Processes & Threads
 
-#### Processes
+### Processes
 
 A **process** is an instance of a running program with its own independent memory space (code, data, heap, stack), file descriptors, and other OS resources. Processes are isolated from each other by the OS; one process cannot directly access another's memory.
 
@@ -36,7 +36,7 @@ Process Memory Layout:
 
 **Context switching** between processes is expensive (~1-10 microseconds) because the OS must save and restore the entire process state: CPU registers, program counter, stack pointer, memory maps (page tables), and flush the TLB (Translation Lookaside Buffer).
 
-#### Threads
+### Threads
 
 A **thread** is a lightweight unit of execution within a process. Threads within the same process share the same memory space (heap, data, code) but have their own **stack** and **register state**. Thread context switches are cheaper than process switches because memory maps do not change.
 
@@ -109,7 +109,7 @@ Threaded: 1.0s
 
 > **Common pitfall:** Reaching for `threading` to speed up CPU-bound Python (image resizing, parsing, math). The GIL serializes bytecode execution, so threaded CPU work runs no faster — and sometimes slower due to lock contention — than a single thread. Use `multiprocessing` or a native extension that releases the GIL.
 
-#### Coroutines
+### Coroutines
 
 **Coroutines** are user-space cooperative multitasking. Unlike threads, coroutines are not preempted by the OS — they explicitly yield control. This eliminates context-switch overhead (~100ns vs ~1-10us for threads) and avoids most synchronization issues.
 
@@ -149,7 +149,7 @@ All results: ['data from api/users', 'data from api/products', 'data from api/or
 
 **How to read this output:** All three "Starting" lines print first because `asyncio.gather` schedules every coroutine before the event loop blocks on any of them. The "Completed" lines then arrive in *delay order* (0.5s products, 0.8s orders, 1.0s users) — not submission order — proving the waits overlapped on a single thread. Yet `results` preserves submission order, because `gather` returns values positionally regardless of finish order. This single-threaded concurrency is what lets one FastAPI/ASGI worker juggle thousands of in-flight requests without the per-thread stack cost.
 
-#### Process States
+### Process States
 
 ```
 Process State Diagram:
@@ -171,7 +171,7 @@ Process State Diagram:
                        parent waits)
 ```
 
-#### IPC (Inter-Process Communication)
+### IPC (Inter-Process Communication)
 
 Since processes have isolated memory, they need explicit mechanisms to communicate:
 
@@ -205,13 +205,13 @@ print(counter.value)   # 1
 print(list(data))      # [2.0, 4.0, 6.0]
 ```
 
-#### Copy-on-Write (COW) Fork
+### Copy-on-Write (COW) Fork
 
 When a process calls `fork()`, the child gets a copy of the parent's memory. But the OS does not actually copy the memory pages immediately. Instead, both processes share the same physical pages (marked read-only). Only when one process **writes** to a page does the OS make a copy of that page. This makes forking fast even for large processes.
 
 **Real-world use:** Redis uses COW fork for `BGSAVE` (background persistence). The child process writes the dataset to disk while the parent continues serving requests. Only pages modified by the parent during the save are actually copied.
 
-#### Green Threads
+### Green Threads
 
 **Green threads** (user-space threads) are managed by the language runtime rather than the OS kernel. The runtime multiplexes many green threads onto fewer OS threads (M:N threading model).
 
@@ -219,7 +219,7 @@ When a process calls `fork()`, the child gets a copy of the parent's memory. But
 - **Go goroutines**: preemptive green threads multiplexed onto OS threads (M:N)
 - **Erlang processes**: lightweight, isolated, message-passing green threads
 
-#### Zombie and Orphan Processes
+### Zombie and Orphan Processes
 
 When a child process exits, it does not vanish immediately. The kernel keeps a tiny record (PID, exit status, resource usage) until the **parent** retrieves it with `wait()`/`waitpid()` — an act called **reaping**. A child that has exited but not yet been reaped is a **zombie** (`Z`/`defunct` in `ps`): it holds no memory, just a slot in the process table. A few zombies are harmless; a parent that *never* reaps leaks PID-table entries until the system can no longer fork ("resource temporarily unavailable").
 
@@ -252,11 +252,11 @@ $ ps -o pid,ppid,stat,comm
 
 ---
 
-### CPU Architecture & Caches
+## CPU Architecture & Caches
 
 Asymptotic complexity assumes every memory access costs the same. On real hardware it does not — by orders of magnitude. Understanding the memory hierarchy explains why two algorithms with identical Big-O can differ 10-100x in wall-clock time.
 
-#### The Memory Hierarchy
+### The Memory Hierarchy
 
 Memory gets larger and slower at every level. The approximate latencies (the famous "numbers every programmer should know") span seven orders of magnitude:
 
@@ -275,7 +275,7 @@ Network (same DC)~0.5 ms             ~6 days
 
 The whole game of performance engineering is **keeping the hot working set in the fast levels**. A cache miss to main memory costs ~100x an L1 hit; a page fault to disk costs ~100,000x. This is *why* algorithms with good locality (arrays, sequential scans) routinely beat "asymptotically equal" pointer-chasing structures (linked lists, scattered trees).
 
-#### Cache Lines and Prefetching
+### Cache Lines and Prefetching
 
 The CPU never fetches a single byte — it fetches a whole **cache line** (typically **64 bytes**). Touch one element of an array and its neighbors come along for free. So **sequential access is nearly free** (each line serves ~8-16 elements, and the hardware **prefetcher** detects the stride and fetches the *next* line before you ask), while **random access thrashes the cache** (every access may pull a fresh line and evict a useful one).
 
@@ -302,7 +302,7 @@ col-major (j, i):  3.10 s   (~5x slower — identical work, worse locality)
 
 **How to read this output:** Both loops do exactly N² increments, yet the column-major version is several times slower purely because it strides across memory and defeats the prefetcher — each inner step lands on a different cache line. (In a C/NumPy contiguous array the gap is even larger; pure-Python list-of-lists hides some of it behind interpreter overhead.) The lesson for backend work: iterate data in the order it is laid out (row-major for C/NumPy arrays, the index order for database scans), and prefer compact, contiguous structures for hot paths.
 
-#### False Sharing
+### False Sharing
 
 A subtle multi-threaded trap: two threads modifying **different** variables that happen to land on the **same cache line**. Even though there is no logical sharing, the cache-coherence protocol invalidates the line on every write, ping-ponging it between cores and destroying performance.
 
@@ -319,11 +319,11 @@ Fix: pad/align so each hot per-thread variable sits on its own cache line.
 
 This is why high-performance concurrent code **pads** per-thread counters/state to 64 bytes (e.g., Java's `@Contended`, padded structs in C, per-core sharded counters). If a multi-threaded program scales *worse* than single-threaded for no obvious reason, false sharing is a prime suspect.
 
-#### NUMA
+### NUMA
 
 On multi-socket servers, memory is **Non-Uniform**: each CPU socket has a local memory bank it reaches quickly, and accessing another socket's memory crosses an interconnect (slower, higher latency). The OS tries to allocate a thread's memory on its local node, but a thread migrated to another socket — or memory allocated before the thread was pinned — pays the cross-node penalty. Latency-sensitive workloads (databases, low-latency services) **pin threads and memory** with `numactl --cpunodebind --membind` or thread affinity to stay local.
 
-#### Branch Prediction & Speculative Execution
+### Branch Prediction & Speculative Execution
 
 Modern CPUs are deeply pipelined: they start executing instructions *after* a branch (`if`) before knowing whether the branch is taken. The **branch predictor** guesses the outcome to keep the pipeline full; a correct guess is free, but a **misprediction** flushes the pipeline and costs ~10-20 cycles. This is the well-known reason that processing **sorted** data can be dramatically faster than unsorted — predictable branches (e.g., `if value > threshold` on sorted input) are almost always guessed right.
 
@@ -340,9 +340,9 @@ Modern CPUs are deeply pipelined: they start executing instructions *after* a br
 
 ---
 
-### Memory Management
+## Memory Management
 
-#### Virtual Memory
+### Virtual Memory
 
 Each process sees a contiguous address space (e.g., 0 to 2^48 on 64-bit systems) that is **virtual** — it does not correspond directly to physical RAM. The OS maintains a **page table** that maps virtual pages to physical frames (or marks them as not-present, triggering a page fault that may load from disk).
 
@@ -366,11 +366,11 @@ Virtual Memory Mapping:
   Huge pages: 2MB or 1GB (reduces TLB pressure for large working sets)
 ```
 
-#### TLB (Translation Lookaside Buffer)
+### TLB (Translation Lookaside Buffer)
 
 The TLB is a small, fast CPU cache that stores recent virtual-to-physical page translations. A TLB hit avoids a full page table walk (which may involve multiple memory accesses). The TLB typically holds 64-1024 entries, so with 4KB pages, it covers 256KB to 4MB of memory. **Huge pages** (2MB) allow the same number of TLB entries to cover 128MB to 2GB, dramatically reducing TLB misses for applications with large working sets (databases, JVMs, Redis).
 
-#### Stack vs Heap
+### Stack vs Heap
 
 ```
 Function Call Stack:
@@ -395,7 +395,7 @@ The **stack** is fast (allocation = moving the stack pointer) but limited in siz
 
 Memory allocators like **jemalloc** (used by Redis, Rust) and **tcmalloc** (Google) reduce heap fragmentation and improve multi-threaded allocation performance through thread-local caches and size-class segregation.
 
-#### Python Memory Management
+### Python Memory Management
 
 Python uses a two-layer garbage collection strategy:
 
@@ -454,7 +454,7 @@ gc.enable()
 gc.collect()  # Manually collect when latency is not critical
 ```
 
-#### Memory-Mapped Files
+### Memory-Mapped Files
 
 `mmap` maps a file (or anonymous memory) into the process's virtual address space. The OS lazily loads pages on demand and can share the mapping between processes.
 
@@ -488,7 +488,7 @@ Found at offset 48213: b'Jun  4 09:12:01 host app[1234]: error: connection refus
 
 **Real-world use:** Database page caches (SQLite, MongoDB), shared memory IPC, large file processing without loading into RAM, efficient log scanning.
 
-#### OOM Killer and Memory Monitoring
+### OOM Killer and Memory Monitoring
 
 When Linux runs out of memory, the **OOM killer** selects and kills a process to free RAM. It chooses based on an OOM score (higher = more likely to be killed) influenced by memory usage and `oom_score_adj`. In containerized environments, **cgroups** set hard memory limits per container — exceeding the limit kills the container, not a random process.
 
@@ -522,11 +522,11 @@ VmRSS:     156432 kB
 
 ---
 
-### Concurrency & Synchronization Primitives
+## Concurrency & Synchronization Primitives
 
 The moment two threads (or processes) touch shared mutable state, you need synchronization. These primitives are the vocabulary of every concurrent system, and getting them wrong produces the hardest bugs in backend engineering — ones that appear only under load and vanish when you attach a debugger.
 
-#### Race Conditions and Critical Sections
+### Race Conditions and Critical Sections
 
 A **race condition** is a bug where the result depends on the unpredictable *interleaving* of operations on shared state. The classic example is `counter += 1`, which is not atomic — it is read, add, write, and two threads can interleave to lose an update.
 
@@ -551,7 +551,7 @@ print(counter)                # expected 400000 — but often less
 
 **How to read this output:** Four threads each adding 100,000 *should* yield 400,000, but the result is lower and varies run-to-run because increments interleave and overwrite each other. (In CPython the GIL makes a *single* bytecode atomic, but `+=` compiles to several bytecodes, so the race survives even under the GIL — a common misconception in interviews.) The region of code that must not run concurrently — here, the read-modify-write — is the **critical section**, and it must be protected by a lock.
 
-#### Mutex, Semaphore, Condition Variable
+### Mutex, Semaphore, Condition Variable
 
 - **Mutex (mutual exclusion lock):** only one holder at a time. Wrap the critical section in `lock.acquire()`/`release()` — in Python always via a `with` block so it is released on every path, including exceptions.
 - **Semaphore:** a counter permitting up to **N** concurrent holders. A binary semaphore (N=1) behaves like a mutex; larger N **bounds concurrency** — e.g., "at most 10 simultaneous outbound DB connections."
@@ -586,17 +586,17 @@ def consumer():
 
 > **Common pitfall:** Waiting on a condition variable with `if` instead of `while`. A thread can wake up **without** the predicate being true — a **spurious wakeup** (and even without true spuriousness, another thread may have grabbed the item first). Always loop: `while not predicate: cond.wait()`. This single mistake causes "impossible" empty-queue pops under load.
 
-#### Spinlocks, Futexes, and Read-Write Locks
+### Spinlocks, Futexes, and Read-Write Locks
 
 - **Spinlock:** instead of sleeping, the thread **busy-waits** in a tight loop until the lock frees. Cheap for *very short* critical sections on multicore (no context-switch cost); wasteful otherwise (burns a CPU). Used inside kernels and lock-free libraries.
 - **Futex (fast userspace mutex, Linux):** the building block of `pthread` mutexes. The uncontended case is resolved entirely in user space with an atomic compare-and-swap (no syscall); only when there is contention does it fall into the kernel to sleep/wake. This is why an uncontended lock is nearly free.
 - **Read-write lock:** allows **many concurrent readers OR one exclusive writer**. Ideal for read-heavy shared state (a config cache read constantly, written rarely). The risk is **writer starvation** — a steady stream of readers can keep a writer waiting forever unless the lock is writer-preferring.
 
-#### Atomic Operations and CAS
+### Atomic Operations and CAS
 
 **Compare-and-swap (CAS)** is a hardware instruction that atomically does "if this memory still equals the value I read, replace it; otherwise tell me it changed." It is the foundation of **lock-free** programming: reference counts, lock-free queues, and **optimistic concurrency control** (read a version, compute, then CAS — retry if someone else won). Lock-free code avoids the deadlock/priority-inversion failures of locks, at the cost of subtle correctness reasoning (the "ABA problem", memory ordering).
 
-#### Deadlock, Livelock, Starvation
+### Deadlock, Livelock, Starvation
 
 A **deadlock** is a cycle of threads each holding a resource the next one needs. It requires **all four Coffman conditions** simultaneously — break any one and deadlock is impossible:
 
@@ -620,7 +620,7 @@ The most practical defense is a **global lock-ordering discipline**: define a to
 - **Livelock:** threads keep changing state in response to each other but make no progress (two people stepping aside in a corridor, repeatedly, in the same direction). They are not blocked — they are busy doing nothing useful.
 - **Starvation:** a thread *never* gets the resource because others keep jumping ahead (e.g., writer starvation under a reader-preferring RW lock).
 
-#### Priority Inversion
+### Priority Inversion
 
 A **low**-priority thread holds a lock that a **high**-priority thread needs; meanwhile a **medium**-priority thread preempts the low one, so the low thread can't run to release the lock — and the high-priority thread is stuck waiting on the medium one indirectly. The fix is **priority inheritance**: the lock-holder temporarily inherits the priority of the highest-priority waiter so it can finish and release. This famously caused the **Mars Pathfinder** to repeatedly reset on the surface of Mars in 1997, fixed by enabling priority inheritance remotely.
 
@@ -628,23 +628,23 @@ A **low**-priority thread holds a lock that a **high**-priority thread needs; me
 
 ---
 
-### Scheduling
+## Scheduling
 
 The OS scheduler decides which runnable thread gets the CPU next. How it does this — and how you size your own thread/worker pools on top of it — directly determines a service's throughput and tail latency.
 
-#### Preemptive vs Cooperative
+### Preemptive vs Cooperative
 
 - **Preemptive scheduling:** the OS forcibly interrupts a running thread on a timer (the **time slice** / quantum) and switches to another. No thread can monopolize the CPU. This is how OS threads and processes are scheduled. The cost is **context-switch overhead** and cache pollution on every switch.
 - **Cooperative scheduling:** a task runs until it **voluntarily yields** (asyncio coroutines at `await`, generators at `yield`). Simpler to reason about — no preemption means no surprise interleavings between yield points, so you need far fewer locks. The danger is that **one CPU-bound task that never yields stalls everything** (a synchronous `time.sleep` or a heavy computation inside an async event loop freezes the whole loop).
 
-#### The Linux CFS (and EEVDF)
+### The Linux CFS (and EEVDF)
 
 Linux's longtime default was the **Completely Fair Scheduler (CFS)**, which allocates CPU *proportionally* rather than via fixed time slices. Each task accumulates **virtual runtime (vruntime)** — roughly, how much CPU it has consumed, weighted by priority. The scheduler always runs the task with the **smallest vruntime**, so threads that have run less get the CPU next, approximating "everyone gets a fair share." (Recent kernels, 6.6+, replaced CFS with **EEVDF**, which adds latency-sensitivity but keeps the same fair-share spirit.)
 
 - **`nice` value** (-20 to +19): biases a task's share. Lower nice = higher priority = larger CPU slice; a "nicer" (higher) value yields more to others. It weights vruntime accumulation, not a hard guarantee.
 - **Real-time classes** (`SCHED_FIFO`, `SCHED_RR`): for latency-critical work that must run ahead of all normal tasks. A runaway `SCHED_FIFO` thread can lock up a core, so these are used sparingly (audio, control loops, some trading systems).
 
-#### Pool Sizing
+### Pool Sizing
 
 The most common practical scheduling decision a backend engineer makes is **how many workers/threads to run**. Oversubscribing — far more busy threads than cores — degrades throughput via context-switch thrash and cache pollution, while undersubscribing leaves cores idle. The rule of thumb depends on what the work *does*:
 
@@ -669,9 +669,9 @@ Little's Law sanity check:  concurrency = throughput x latency
 
 ---
 
-### I/O Models
+## I/O Models
 
-#### Blocking I/O
+### Blocking I/O
 
 The simplest model: a thread calls `read()` or `write()` and **blocks** (sleeps) until the operation completes. While waiting, the thread cannot do anything else.
 
@@ -689,11 +689,11 @@ Blocking I/O:
 
 This works fine when each connection gets its own thread (**thread-per-connection** model), but threads are expensive (~8MB stack each). Supporting 10,000 concurrent connections would require 10,000 threads = ~80GB of stack memory alone, plus the overhead of context switching.
 
-#### Non-Blocking I/O
+### Non-Blocking I/O
 
 With non-blocking I/O, `read()` returns immediately with either data or an `EAGAIN`/`EWOULDBLOCK` error indicating no data is available yet. The application must poll repeatedly — this is **busy-waiting** and wastes CPU cycles.
 
-#### I/O Multiplexing
+### I/O Multiplexing
 
 I/O multiplexing lets a single thread monitor multiple file descriptors and react when any of them becomes ready. This is the foundation of event-driven servers.
 
@@ -763,7 +763,7 @@ sel.register(server, selectors.EVENT_READ, accept)
 #         callback(key.fileobj, mask)
 ```
 
-#### io_uring
+### io_uring
 
 `io_uring` (Linux 5.1+) is the latest evolution in async I/O. It uses two ring buffers in shared memory — a **submission queue** (SQ) and a **completion queue** (CQ) — between the application and the kernel. After initial setup, submissions and completions require **no system calls**, dramatically reducing overhead.
 
@@ -785,7 +785,7 @@ io_uring Architecture:
   Used by modern high-performance servers and databases.
 ```
 
-#### Zero-Copy I/O
+### Zero-Copy I/O
 
 **`sendfile()`** sends file data directly from the kernel's page cache to a socket without ever copying it to user space. Traditional file serving requires: disk -> kernel buffer -> user buffer -> kernel socket buffer -> NIC. With sendfile: disk -> kernel buffer -> NIC (two fewer copies).
 
@@ -793,7 +793,7 @@ io_uring Architecture:
 
 **Real-world use:** Nginx uses sendfile for static file serving. Kafka uses sendfile to send log segments to consumers.
 
-#### Buffered I/O and Page Cache
+### Buffered I/O and Page Cache
 
 The Linux kernel maintains a **page cache** that caches file data in RAM. Reads first check the page cache; writes go to the page cache and are flushed to disk later (write-back caching).
 
@@ -805,9 +805,9 @@ The Linux kernel maintains a **page cache** that caches file data in RAM. Reads 
 
 ---
 
-### File Systems
+## File Systems
 
-#### Inodes and File Descriptors
+### Inodes and File Descriptors
 
 An **inode** stores metadata about a file: permissions, ownership, timestamps, size, and pointers to data blocks. The filename is stored in the directory (which maps names to inode numbers). This is why hard links work — multiple names can point to the same inode.
 
@@ -836,7 +836,7 @@ $ ls /proc/$(pidof nginx)/fd | wc -l
 
 **How to read this output:** The soft limit (1024) is the per-process ceiling on open file descriptors, and every socket, pipe, and open file counts against it. A busy server with 312 descriptors is fine, but a connection leak — sockets never closed — marches that count toward 1024, at which point `accept()`/`open()` start failing with `EMFILE: Too many open files` and the service stops accepting connections while still appearing "up." This is why production deployments raise `LimitNOFILE` (see the systemd unit below) and why "Too many open files" is a classic incident signature pointing at a descriptor leak, not a memory problem.
 
-#### Page Cache
+### Page Cache
 
 The kernel's page cache is a transparent read/write cache for file data. It is responsible for the phenomenon where the second read of a file is dramatically faster than the first.
 
@@ -844,7 +844,7 @@ Read-ahead: the kernel detects sequential access patterns and pre-reads upcoming
 
 Dirty pages: pages modified in the cache but not yet written to disk. The kernel flushes them asynchronously via `pdflush`/`writeback` threads. Use `sync`, `fsync`, or `fdatasync` when you need durability guarantees.
 
-#### Journaling
+### Journaling
 
 **Journaling** protects against corruption from crashes (power loss, kernel panic). Before modifying the filesystem's main data structures, the changes are first written to a journal (write-ahead log). If a crash occurs, the filesystem replays the journal on mount to reach a consistent state.
 
@@ -854,7 +854,7 @@ Dirty pages: pages modified in the cache but not yet written to disk. The kernel
 - **ordered** (default): writes data to its final location first, then journals metadata
 - **writeback**: journals only metadata, data may be written after metadata (fastest but data may be stale after crash)
 
-#### Common Filesystems
+### Common Filesystems
 
 | Filesystem | Best For | Key Features |
 |---|---|---|
@@ -864,7 +864,7 @@ Dirty pages: pages modified in the cache but not yet written to disk. The kernel
 | tmpfs | Temporary data | RAM-backed, contents lost on reboot |
 | overlayfs | Container layers | Union mount, Docker image layers |
 
-#### Disk I/O Patterns
+### Disk I/O Patterns
 
 Sequential I/O is **much** faster than random I/O, especially on HDDs (100x difference). SSDs narrow the gap but sequential is still faster (3-5x).
 
@@ -892,9 +892,9 @@ This is why B-Trees (with their high branching factor and sequential leaf scanni
 
 ---
 
-### Linux Fundamentals
+## Linux Fundamentals
 
-#### Signals
+### Signals
 
 Signals are asynchronous notifications sent to processes. The most important ones for backend developers:
 
@@ -932,7 +932,7 @@ signal.signal(signal.SIGHUP, reload_config)
 # that need graceful shutdown (e.g., a background worker)
 ```
 
-#### Cgroups and Namespaces (Containers)
+### Cgroups and Namespaces (Containers)
 
 **Cgroups** (Control Groups) limit and account for resource usage per process group:
 
@@ -971,7 +971,7 @@ Container = Cgroups + Namespaces:
   +----------------------------------------------------------+
 ```
 
-#### systemd
+### systemd
 
 systemd is the default init system on most modern Linux distributions. It manages services through **unit files**:
 
@@ -1012,7 +1012,7 @@ journalctl -u myapp -f           # Follow logs for the service
 journalctl -u myapp --since "1 hour ago"  # Recent logs
 ```
 
-#### Debugging Tools
+### Debugging Tools
 
 | Tool | Purpose | Example |
 |---|---|---|
@@ -1021,7 +1021,7 @@ journalctl -u myapp --since "1 hour ago"  # Recent logs
 | `perf` | CPU profiling | `perf top`, `perf record -g ./myapp` |
 | `bpftrace` | Dynamic tracing (eBPF) | `bpftrace -e 'tracepoint:syscalls:sys_enter_open { printf("%s\n", str(args->filename)); }'` |
 
-#### Network Stack
+### Network Stack
 
 Linux's **netfilter** framework provides packet filtering and manipulation. **iptables** (legacy) and **nftables** (modern replacement) define rules organized into chains:
 

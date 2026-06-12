@@ -2,11 +2,11 @@
 
 # 1.4 Networking
 
-### The Layered Model & Lower Layers
+## The Layered Model & Lower Layers
 
 Before the TCP and HTTP details, it helps to see where each protocol sits. Networking is built in **layers**, each one adding its own header around the data from the layer above (**encapsulation**) and stripping it on the way back up.
 
-#### OSI vs TCP/IP and Encapsulation
+### OSI vs TCP/IP and Encapsulation
 
 The 7-layer OSI model is the academic reference; the 4-layer **TCP/IP model** is what the internet actually runs on. The mapping that matters in practice:
 
@@ -30,7 +30,7 @@ A router rewrites the link header per hop but leaves the IP packet intact.
 
 The discipline of layering is why you can debug at one level without the others: a `tcpdump` shows you IP/TCP headers; `curl -v` shows you the application layer; an MTU problem (link layer) manifests as application hangs precisely because the layers are normally independent.
 
-#### IP Addressing
+### IP Addressing
 
 - **IPv4:** 32-bit, written as a dotted quad (`93.184.216.34`) — ~4.3 billion addresses, long since exhausted (the reason NAT exists).
 - **IPv6:** 128-bit, written in hex groups (`2606:2800:220:1::34`) — effectively unlimited; restores end-to-end addressability.
@@ -38,7 +38,7 @@ The discipline of layering is why you can debug at one level without the others:
 - **Loopback:** `127.0.0.1` (`::1` in IPv6) — the host talking to itself, never leaves the machine.
 - **Link-local:** `169.254.0.0/16` (IPv6 `fe80::/10`) — auto-assigned, valid only on the local segment. The address `169.254.169.254` is the well-known **cloud metadata endpoint** (AWS/GCP/Azure), which is why SSRF protections specifically block it.
 
-#### CIDR and Subnetting
+### CIDR and Subnetting
 
 CIDR notation (`10.0.1.0/24`) says how many leading bits are the **network** portion; the rest identify hosts. The prefix length is the whole game:
 
@@ -54,13 +54,13 @@ Smaller number after the slash = BIGGER network (more host bits).
 
 This is the math behind **VPC/subnet design** and every **security-group / firewall rule** ("allow `10.0.0.0/8` inbound") — sizing a subnet too small (`/28` = 14 hosts) and running out of IPs for pods/instances is a common cloud-networking mistake.
 
-#### ARP, ICMP, NAT
+### ARP, ICMP, NAT
 
 - **ARP (Address Resolution Protocol):** maps an IP address to a MAC address on the **local** segment. Before a host can send a frame to `10.0.1.5`, it broadcasts "who has 10.0.1.5?" and caches the MAC reply.
 - **ICMP:** the network's control/diagnostic channel — `ping` (echo request/reply), `traceroute`, "destination unreachable", and the critical "**fragmentation needed**" message that drives Path MTU Discovery. Blocking ICMP wholesale (a common over-zealous firewall rule) breaks MTU discovery and causes the silent large-payload hangs covered later.
 - **NAT (Network Address Translation):** rewrites private source addresses to a shared public one (with port translation, PAT) so many internal hosts share one public IP. NAT is **why most devices aren't directly reachable from the internet** — connections must be initiated *outbound*. This is the reason inbound webhooks need a public endpoint, and why peer-to-peer apps resort to **hole-punching** through NAT.
 
-#### Routing, BGP, and Anycast
+### Routing, BGP, and Anycast
 
 The internet is a mesh of **autonomous systems** (ASes — ISPs, clouds, large networks) that exchange reachability information via **BGP (Border Gateway Protocol)**. BGP decides, hop by AS-hop, how a packet reaches a distant network. **Anycast** layers on top: the *same* IP address is announced from many locations worldwide, and BGP naturally routes each client to the **nearest** one. Anycast is the backbone of **CDNs**, public DNS resolvers (`8.8.8.8`, `1.1.1.1` answer from hundreds of sites under one IP), and **DDoS absorption** (attack traffic is spread across many points of presence instead of one).
 
@@ -68,9 +68,9 @@ The internet is a mesh of **autonomous systems** (ASes — ISPs, clouds, large n
 
 ---
 
-### TCP/IP Deep Dive
+## TCP/IP Deep Dive
 
-#### The Three-Way Handshake
+### The Three-Way Handshake
 
 TCP establishes a connection with a three-way handshake that takes **one round-trip time (RTT)**. This latency is unavoidable for every new TCP connection, which is why connection pooling and keep-alive are so important.
 
@@ -107,7 +107,7 @@ Connection Teardown (Four-Way):
 
 **SYN flood attack:** An attacker sends many SYN packets with spoofed source IPs. The server allocates resources for each half-open connection, eventually exhausting memory. **SYN cookies** defend against this: the server encodes connection state in the initial sequence number and does not allocate resources until the third handshake packet (ACK) arrives with the correct cookie.
 
-#### Flow Control and Congestion Control
+### Flow Control and Congestion Control
 
 **Flow control** prevents the sender from overwhelming the receiver. The receiver advertises a **window size (rwnd)** indicating how much data it can buffer. The sender cannot send more than `min(cwnd, rwnd)` bytes of unacknowledged data.
 
@@ -140,7 +140,7 @@ TCP Congestion Control Phases:
          of the network, better for high-bandwidth long-delay networks
 ```
 
-#### TCP Tuning Options
+### TCP Tuning Options
 
 **TCP_NODELAY** disables Nagle's algorithm. Nagle's algorithm buffers small outgoing packets and waits for either: (a) enough data to fill a full-size packet, or (b) an ACK for previously sent data. This reduces small-packet overhead on the network but adds latency. For interactive or real-time applications, disable it:
 
@@ -192,7 +192,7 @@ sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 5)      # Probes before 
 # not just network-level connectivity.
 ```
 
-#### Socket Buffer Tuning
+### Socket Buffer Tuning
 
 The **Bandwidth-Delay Product (BDP)** determines the optimal socket buffer size: `BDP = bandwidth * RTT`. For a 1 Gbps link with 50ms RTT: BDP = 125 MB/s * 0.05s = 6.25 MB. If your socket buffer is smaller than BDP, you cannot fully utilize the link.
 
@@ -217,7 +217,7 @@ net.ipv4.tcp_rmem = 4096	131072	6291456
 
 > **Common pitfall:** These `sysctl -w` changes are lost on reboot. Persist them in `/etc/sysctl.conf` (or a file in `/etc/sysctl.d/`) and apply with `sysctl -p`.
 
-#### TCP vs UDP
+### TCP vs UDP
 
 | Feature | TCP | UDP |
 |---|---|---|
@@ -230,9 +230,9 @@ net.ipv4.tcp_rmem = 4096	131072	6291456
 
 ---
 
-### HTTP Protocol
+## HTTP Protocol
 
-#### HTTP/1.1
+### HTTP/1.1
 
 HTTP/1.1 introduced **persistent connections** (Connection: keep-alive) — the TCP connection stays open for multiple request/response cycles instead of closing after each one. This avoids the per-request TCP handshake overhead.
 
@@ -240,7 +240,7 @@ HTTP/1.1 introduced **persistent connections** (Connection: keep-alive) — the 
 
 **Chunked transfer encoding** allows the server to start sending a response before knowing its total size (e.g., streaming API responses, server-sent events).
 
-#### HTTP/2
+### HTTP/2
 
 HTTP/2 addresses HTTP/1.1's major limitations:
 
@@ -267,7 +267,7 @@ Key features:
 - **HPACK header compression**: compresses headers using a dynamic table. HTTP/1.1 headers can be 500-800 bytes per request; HPACK reduces this dramatically.
 - **Server push**: server can send resources before the client requests them (e.g., push CSS and JS along with the HTML response).
 
-#### HTTP/3
+### HTTP/3
 
 HTTP/3 replaces TCP with **QUIC** (built on UDP), solving TCP's fundamental limitations:
 
@@ -291,7 +291,7 @@ HTTP/3 (QUIC) Advantages:
                                            can be sent immediately (no handshake)
 ```
 
-#### Caching Headers
+### Caching Headers
 
 Understanding HTTP caching is critical for performance:
 
@@ -339,7 +339,7 @@ Key caching headers:
 - **`ETag`**: content fingerprint for conditional requests
 - **`Vary: Accept-Encoding`**: cache separate versions based on this header
 
-#### Important HTTP Headers
+### Important HTTP Headers
 
 ```
 Request/Response Headers for Backend Engineers:
@@ -356,11 +356,11 @@ Request/Response Headers for Backend Engineers:
 
 ---
 
-### Proxies, Gateways & Load Balancers
+## Proxies, Gateways & Load Balancers
 
 A proxy is an intermediary that sits between client and server and relays requests. The single most important distinction — and a frequent interview question — is *which side* it fronts.
 
-#### Forward Proxy vs Reverse Proxy
+### Forward Proxy vs Reverse Proxy
 
 ```
 Forward proxy (fronts the CLIENTS):
@@ -383,11 +383,11 @@ A **forward proxy** acts on behalf of the *clients* — it makes outbound reques
 
 A **reverse proxy** acts on behalf of the *servers* — it terminates the client's connection and forwards it to one of several backends. This is where most backend infrastructure lives: it does **TLS termination** (decrypt once at the edge so backends speak plain HTTP), **caching**, **compression**, and **load balancing** across a pool of identical app servers. A **load balancer** is a reverse proxy specialized for distributing traffic (round-robin, least-connections, consistent-hash) with health checks that pull dead backends out of rotation.
 
-#### API Gateway
+### API Gateway
 
 An **API gateway** is a reverse proxy that is **application-aware**. Beyond routing, it centralizes cross-cutting concerns so individual services don't each reimplement them: **authentication/authorization**, **rate limiting**, request **routing and aggregation** (fan out to several services and combine responses), and **protocol translation** (e.g., REST in front, gRPC behind). It is the single front door to a fleet of microservices (Kong, AWS API Gateway, Envoy-based meshes).
 
-#### Tunneling, CONNECT, and the X-Forwarded-For Trap
+### Tunneling, CONNECT, and the X-Forwarded-For Trap
 
 Because a forward proxy can't read encrypted HTTPS, browsers use the HTTP **`CONNECT`** method to ask the proxy to open a raw TCP **tunnel** to the destination; the TLS handshake then passes through opaquely. This is how proxies pass HTTPS without decrypting it.
 
@@ -406,9 +406,9 @@ Client 1.2.3.4 -> Proxy A -> Proxy B (reverse proxy) -> app server
 
 ---
 
-### DNS
+## DNS
 
-#### Recursive Resolution
+### Recursive Resolution
 
 When your browser needs to resolve `api.example.com`, this is what happens:
 
@@ -436,7 +436,7 @@ DNS Resolution: api.example.com
   Subsequent queries for api.example.com return immediately from cache.
 ```
 
-#### Record Types
+### Record Types
 
 | Type | Purpose | Example |
 |---|---|---|
@@ -450,7 +450,7 @@ DNS Resolution: api.example.com
 | PTR | Reverse DNS (IP to name) | `34.216.184.93.in-addr.arpa -> api.example.com` |
 | CAA | Certificate Authority Authorization | `example.com -> 0 issue "letsencrypt.org"` |
 
-#### TTL Strategies
+### TTL Strategies
 
 **Low TTL (30-300 seconds):** Use for services that need fast failover. If a server goes down, DNS can redirect traffic within seconds. Cost: more DNS queries, higher load on authoritative nameservers.
 
@@ -470,18 +470,18 @@ DNS TTL Strategy for Zero-Downtime Migration:
   Day +2:  Raise TTL back to 3600s
 ```
 
-#### DNS-Based Load Balancing
+### DNS-Based Load Balancing
 
 - **Round-robin:** Return multiple A records; clients pick one (often the first). Simple but uneven — does not account for server load.
 - **Weighted:** Return records with weights (e.g., 70% to server A, 30% to server B). Available in Route53, CloudFlare.
 - **GeoDNS/Latency-based:** Return the IP of the geographically or latency-closest server. Used by CDNs and global services.
 - **Health-checked failover:** DNS provider monitors server health and removes unhealthy servers from responses.
 
-#### Split-Horizon DNS
+### Split-Horizon DNS
 
 Split-horizon DNS returns different answers based on the client's network. Internal clients resolve `db.example.com` to the private IP `10.0.1.5`, while external clients resolve it to a public IP or get NXDOMAIN. This avoids hairpin NAT and keeps internal traffic on the private network.
 
-#### DNSSEC
+### DNSSEC
 
 DNSSEC adds cryptographic signatures to DNS records, creating a **chain of trust** from the root zone down to individual records. It prevents DNS spoofing and cache poisoning attacks. Key record types: DNSKEY (public key), RRSIG (signature), DS (delegation signer).
 
@@ -489,9 +489,9 @@ DNSSEC adds cryptographic signatures to DNS records, creating a **chain of trust
 
 ---
 
-### TLS/SSL
+## TLS/SSL
 
-#### TLS 1.3 Handshake
+### TLS 1.3 Handshake
 
 TLS 1.3 drastically simplified the handshake, reducing it from 2 RTTs (TLS 1.2) to **1 RTT**. It removed all insecure cipher suites and only supports AEAD ciphers (AES-128-GCM, AES-256-GCM, ChaCha20-Poly1305).
 
@@ -517,7 +517,7 @@ TLS 1.3 Handshake (1-RTT):
                   (using previously established keys — replay risk!)
 ```
 
-#### Certificate Chain
+### Certificate Chain
 
 ```
 Certificate Chain of Trust:
@@ -538,7 +538,7 @@ Certificate Chain of Trust:
 
 **Certificate pinning** for mobile apps: the app embeds the expected certificate (or public key hash) and rejects connections with any other certificate, even if it is technically valid. This prevents man-in-the-middle attacks using fraudulently issued certificates.
 
-#### mTLS (Mutual TLS)
+### mTLS (Mutual TLS)
 
 In standard TLS, only the server presents a certificate. In **mTLS**, both sides authenticate each other with certificates. This is the primary mechanism for service-to-service authentication in microservice architectures.
 
@@ -560,11 +560,11 @@ Standard TLS:                       Mutual TLS (mTLS):
 
 **SPIFFE/SPIRE** provides automatic workload identity management — each service gets a short-lived X.509 certificate that identifies it. This is how service meshes like Istio and Linkerd implement zero-trust networking.
 
-#### OCSP Stapling
+### OCSP Stapling
 
 Without stapling, the client must contact the CA's OCSP responder to check if the server's certificate has been revoked. This adds latency and reveals which sites the client is visiting. With **OCSP stapling**, the server periodically fetches its own revocation status from the CA and includes it (signed by the CA) in the TLS handshake. The client gets freshness proof without a separate round trip.
 
-#### Let's Encrypt and ACME
+### Let's Encrypt and ACME
 
 Let's Encrypt provides free TLS certificates using the **ACME protocol**. Two main validation methods:
 
@@ -589,7 +589,7 @@ This certificate expires on 2026-09-02.
 
 **How to read this output:** Note `fullchain.pem` — point your server at this, not `cert.pem`, because it bundles the leaf *plus* the intermediate(s). Serving only the leaf is the single most common cause of "certificate verify failed" errors from clients that don't happen to cache the intermediate. The 90-day expiry is deliberate: Let's Encrypt certs are short-lived to force automation, so the `certbot renew` timer (which renews when ~30 days remain) is not optional — a forgotten renewal is a self-inflicted outage. The `--deploy-hook` only fires when a renewal actually happens, so reloading nginx there is safe to run on every timer tick.
 
-#### SNI (Server Name Indication)
+### SNI (Server Name Indication)
 
 **SNI** is a TLS extension where the client includes the requested hostname in the ClientHello message (before encryption). This allows a single IP address to serve multiple TLS-protected domains, each with its own certificate. Without SNI, you would need one IP address per domain. All modern clients support SNI.
 
@@ -597,9 +597,9 @@ This certificate expires on 2026-09-02.
 
 ---
 
-### Network Debugging
+## Network Debugging
 
-#### tcpdump
+### tcpdump
 
 `tcpdump` captures raw packets on a network interface. It is the most fundamental network debugging tool, available on virtually every Linux system.
 
@@ -620,11 +620,11 @@ tcpdump -i any port 53 -nn
 tcpdump -r capture.pcap -A  # ASCII output
 ```
 
-#### Wireshark
+### Wireshark
 
 Wireshark provides a GUI for packet analysis. Open `.pcap` files from tcpdump, follow TCP streams to see full HTTP conversations, decode protocols automatically, and generate statistics (conversation lengths, retransmission rates, latency distribution).
 
-#### curl
+### curl
 
 `curl` is essential for testing HTTP endpoints with precise control:
 
@@ -660,7 +660,7 @@ The `-w` timing template is the highest-value trick here. It prints a cumulative
 
 **How to read this output:** Each value is the *cumulative* time from the start of the request, so you read the gaps between them, not the absolute numbers. DNS took 4ms; the TCP connect added ~34ms (`Connect - DNS`), the TLS handshake added ~82ms (`TLS - Connect`), and the server then took ~122ms to produce the first byte (`TTFB - TLS`). In a real incident this instantly tells you *where* the latency lives: a large `TLS - Connect` gap means a slow handshake (missing OCSP stapling, far-away server), while a large `TTFB - TLS` gap means the application itself is slow. The tiny gap between `TTFB` and `Total` here means the response body downloaded almost instantly. This is the first command to run when someone reports "the API feels slow."
 
-#### traceroute / mtr
+### traceroute / mtr
 
 `traceroute` shows the network path (hops) between your machine and a destination. `mtr` combines traceroute with continuous ping for ongoing monitoring.
 
@@ -680,7 +680,7 @@ mtr api.example.com
 # 5. api.example.com            0.0%   10   28.4  28.1  27.5  29.0   0.5
 ```
 
-#### ss / netstat
+### ss / netstat
 
 `ss` (Socket Statistics) is the modern replacement for `netstat`:
 
@@ -702,7 +702,7 @@ ss -ant state time-wait | wc -l
 ss -ant dst :5432   # All connections to PostgreSQL
 ```
 
-#### dig
+### dig
 
 `dig` queries DNS records with detailed output:
 
@@ -735,7 +735,7 @@ api.example.com.	276	IN	A	93.184.216.34
 
 **How to read this output:** The number `276` is the remaining TTL in seconds — it counts *down* on repeated queries as the resolver's cache ages, which is how you confirm a record is being served from cache versus fetched fresh. The `ANSWER SECTION` shows the resolved record type and value, and `SERVER` confirms which resolver answered. When planning a migration, watch that TTL drop toward your lowered value before you cut over; when debugging a stale record, compare the TTL across `dig @8.8.8.8` and `dig @1.1.1.1` to see if one resolver is still caching the old answer. `dig +trace` is the tool of choice when resolution fails entirely — it walks the delegation from the root down so you can see exactly which nameserver returns the wrong (or no) answer.
 
-#### MTU and Fragmentation
+### MTU and Fragmentation
 
 The **Maximum Transmission Unit (MTU)** is the largest packet size a network link can carry (typically 1500 bytes for Ethernet). When a packet exceeds the MTU, it must be fragmented (split into smaller pieces) or dropped (if the "Don't Fragment" flag is set).
 

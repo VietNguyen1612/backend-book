@@ -2,11 +2,11 @@
 
 # 4.3 Data Management
 
-### Migration Strategies
+## Migration Strategies
 
 Database migrations are one of the highest-risk operations in production systems. A bad migration can lock tables, corrupt data, or cause downtime. Understanding which changes are safe and which require careful planning is essential.
 
-#### Additive Changes
+### Additive Changes
 
 Additive changes are always safe because they do not modify existing structures or data. They include adding new tables, adding nullable columns, and adding indexes concurrently.
 
@@ -68,7 +68,7 @@ class Migration(migrations.Migration):
     ]
 ```
 
-#### Breaking Changes and the Expand-Contract Pattern
+### Breaking Changes and the Expand-Contract Pattern
 
 Breaking changes -- renaming columns, changing column types, adding NOT NULL constraints without defaults, or dropping columns -- require careful multi-phase deployment to avoid downtime. The expand-contract pattern (also known as parallel change) handles this safely.
 
@@ -164,7 +164,7 @@ ALTER TABLE users ALTER COLUMN email SET NOT NULL;
 ALTER TABLE users DROP CONSTRAINT users_email_not_null;
 ```
 
-#### Schema Versioning
+### Schema Versioning
 
 Always version-control your migrations and never modify a migration that has already been applied to a shared database. Each migration framework tracks which migrations have been applied:
 
@@ -177,9 +177,9 @@ Always version-control your migrations and never modify a migration that has alr
 
 ---
 
-### Data Patterns
+## Data Patterns
 
-#### Soft Delete
+### Soft Delete
 
 Soft delete replaces physical deletion with a logical flag -- typically a `deleted_at` timestamp column. Instead of `DELETE FROM users WHERE id = 42`, you execute `UPDATE users SET deleted_at = NOW() WHERE id = 42`. The row remains in the database and can be recovered.
 
@@ -240,7 +240,7 @@ User.all_objects.all()   # All users including deleted
 
 Soft delete considerations: remember that every query must include the filter (use a default manager or view), foreign key cascades do not trigger soft deletes (handle in application code), and you should establish a data retention policy to periodically hard-delete old soft-deleted records.
 
-#### Audit Trail
+### Audit Trail
 
 An audit trail records who changed what, and when. This is essential for compliance (GDPR, SOX, HIPAA), debugging, and accountability. The two main approaches are trigger-based (database level) and application-level.
 
@@ -324,7 +324,7 @@ For a product that was created and then re-priced twice, the history loop prints
 
 **How to read this output:** each historical record is a full snapshot of the row at that moment, not a diff -- `simple-history` writes a new row to `historicalproduct` on every save, tagged with `history_type` (`+` create, `~` update, `-` delete) and `history_user`. The two `~` rows are the price changes; the `+` row is the original create. The final `19.99` is what `as_of(Jan 1)` returned: it walked back through history to the version that was live on that date, which is the production-grade way to answer "what price did this customer actually see at checkout?" during a billing dispute. The cost to be aware of: this doubles your write volume and grows the history table unboundedly, so a retention/archival policy is required for hot tables.
 
-#### Multi-Tenancy
+### Multi-Tenancy
 
 Multi-tenancy is the pattern of serving multiple customers (tenants) from a single application deployment. There are three common strategies, each with different trade-offs:
 
@@ -362,7 +362,7 @@ SELECT * FROM orders;  -- Queries tenant_42.orders
 
 The trade-off spectrum: Row-level is cheapest and simplest to operate but has the weakest isolation. Database-level provides the strongest isolation but is expensive and complex. Schema-level is a middle ground. Most SaaS applications start with row-level and only move to schema or database-level for enterprise customers with strict compliance requirements.
 
-#### Event Sourcing
+### Event Sourcing
 
 Event sourcing stores every change to application state as an immutable event, rather than overwriting the current state. The current state is derived by replaying all events from the beginning (or from a snapshot).
 
@@ -428,11 +428,11 @@ CREATE TABLE snapshots (
 
 ---
 
-### Storing Money & Time Correctly
+## Storing Money & Time Correctly
 
 Two data types are wrong in a surprising number of production systems, and both failures are expensive: money stored as floating point, and timestamps stored without time-zone awareness. Getting these right is a hallmark of an experienced engineer and a frequent interview probe.
 
-#### Money
+### Money
 
 **Never store money as `float` or `double`.** Binary floating point cannot represent most decimal fractions exactly, so `0.1 + 0.2` is not `0.3`, and these tiny errors compound across millions of rows until your ledger no longer balances. There are two correct approaches:
 
@@ -463,7 +463,7 @@ GROUP BY currency;
 
 **How to read this output:** The totals carry their full declared scale (`.5500`, `.0000`) because `NUMERIC` preserves precision through aggregation -- summing a million rows yields a value that still balances to the cent, which a `double` column would not guarantee. Notice the `GROUP BY currency`: you must never sum amounts across currencies, and storing the currency per row is what makes that mistake structurally impossible. The remaining decision the schema cannot make for you is the **rounding policy** -- when you must collapse those 4 fractional digits to 2 for a customer-facing charge, decide and document whether you use banker's rounding (round-half-to-even) or round-half-up, because tax and billing regulations often mandate a specific rule and inconsistency between services causes off-by-a-cent reconciliation failures.
 
-#### Time
+### Time
 
 Store timestamps as **`timestamptz`** (timestamp with time zone), not naive `timestamp`. Despite the name, `timestamptz` does not store a time zone -- it stores an absolute instant in UTC and converts to the session's time zone on the way out. Naive `timestamp` stores wall-clock digits with no anchor, so the same value means different instants depending on who reads it, which silently breaks ordering, intervals, and DST transitions.
 
@@ -497,7 +497,7 @@ FROM events;
 
 **How to read this output:** Both rows are stored as the same UTC hour (`18:00:00+00`), yet `AT TIME ZONE 'Europe/Berlin'` renders them two different wall-clock times -- `20:00` in June (CEST, UTC+2) and `19:00` in December (CET, UTC+1). That is DST handled correctly *for free*, precisely because the zone is an IANA name rather than a frozen offset. Had you stored a naive `timestamp` plus a `-01:00`-style offset, the winter event would have displayed an hour wrong. This single example is why "always store UTC, convert at the edges, keep the IANA zone separately" is the standard answer to the time-handling interview question.
 
-#### Constrained State Types
+### Constrained State Types
 
 A status or state column should never be free text. A typo (`'shiped'`) or an invented value silently corrupts your data and breaks every query that filters on it. Constrain the allowed values at the database level using a `CHECK` constraint, a native enum type, or a reference table with a foreign key:
 
@@ -519,11 +519,11 @@ ALTER TABLE orders ADD CONSTRAINT orders_status_fk
 
 ---
 
-### Connection & Resource Management
+## Connection & Resource Management
 
 A database has a hard, finite ceiling on concurrent connections, and every connection consumes real server resources. In PostgreSQL each connection is a separate OS process using several megabytes of RAM, so the default `max_connections` of 100 is a genuine limit, not a suggestion. Mismanaging connections turns a healthy database into an outage faster than almost any query problem.
 
-#### Pool to the Database's Limit, Not Your App's Ambition
+### Pool to the Database's Limit, Not Your App's Ambition
 
 Always use a connection pool -- PgBouncer in front of the database, plus your framework's pool (SQLAlchemy's `QueuePool`, Django's `CONN_MAX_AGE`). The critical sizing rule is counter-intuitive: **size the total pool to what the database can handle, not to your application's concurrency.** Ten app servers each opening a pool of 50 connections is 500 connections demanded against a `max_connections` of 100 -- the database will reject connections and effectively go down. More connections than the DB can serve does not increase throughput; past the point where active connections roughly match CPU cores plus effective spindles, added connections only increase context-switching and lock contention, *reducing* throughput.
 
@@ -543,7 +543,7 @@ engine = create_engine(
 
 **How to read this configuration:** `pool_size + max_overflow` (here 15) is this *one process's* hard ceiling -- multiply by the number of processes/replicas and that total must stay comfortably under the database's `max_connections` (with headroom for migrations, monitoring, and superuser sessions). `pool_timeout=3` is the safety valve that matters most under load: when every connection is busy, a request waits at most 3 seconds and then fails fast, rather than piling up an unbounded queue of stalled requests that exhausts the web server's worker threads -- the mechanism by which one slow query cascades into a total outage.
 
-#### Timeouts at Every Layer
+### Timeouts at Every Layer
 
 An unbounded wait anywhere in the stack is a latent outage. Set explicit timeouts at each layer so a single stuck operation cannot hold resources indefinitely:
 
@@ -561,7 +561,7 @@ SET idle_in_transaction_session_timeout = '10s';   -- abort transactions left op
 
 > **Common pitfall:** Setting a generous `statement_timeout` but forgetting `idle_in_transaction_session_timeout`. A query that finishes quickly but leaves its transaction open (because the app then does slow work before COMMIT) still holds row locks and pins dead tuples from VACUUM -- the timeout that catches this is the idle-in-transaction one, not the statement one.
 
-#### Serverless and the Connection-Exhaustion Trap
+### Serverless and the Connection-Exhaustion Trap
 
 Serverless functions (AWS Lambda, Cloud Functions) break the pooling model: the platform may spin up hundreds or thousands of concurrent function instances, and each one that opens its own database connection multiplies straight onto the database. A traffic spike that launches 1,000 Lambda instances against a `max_connections` of 100 exhausts the database instantly, even though each function is only doing trivial work. The fixes:
 
@@ -572,9 +572,9 @@ Serverless functions (AWS Lambda, Cloud Functions) break the pooling model: the 
 
 ---
 
-### ETL & Data Pipelines
+## ETL & Data Pipelines
 
-#### ETL vs ELT
+### ETL vs ELT
 
 **ETL (Extract, Transform, Load)** is the traditional pattern: extract data from source systems, transform it (clean, enrich, aggregate, reshape) in a processing layer, and then load the transformed data into the destination (data warehouse). This approach makes sense when the destination has limited compute resources or when you want to minimize the data stored.
 
@@ -620,7 +620,7 @@ After the TRANSFORM step, inspecting `df.head()` shows the reshaped frame that g
 
 **How to read this output:** the `email` column is gone (intentionally dropped for PII compliance before anything touches the warehouse), replaced by the non-identifying `email_domain`. `user_segment` comes from `pd.cut`, which buckets `order_count` into labeled bins -- 41 orders lands in `power`, 0 lands in `new`. Watch the row with no `last_login_at`: pandas propagates the missing value as `NaT`, and the arithmetic yields `NaN` for `days_since_login` rather than raising. That silent null is the classic ETL trap -- it loads cleanly but skews every downstream "average days since login" metric, which is exactly the kind of defect the Great Expectations checks later in this section are meant to catch before the data reaches a dashboard.
 
-#### Orchestration with Apache Airflow
+### Orchestration with Apache Airflow
 
 Apache Airflow is the standard tool for orchestrating data pipelines as DAGs (Directed Acyclic Graphs). Each node in the DAG is a task, and edges define dependencies.
 
@@ -677,7 +677,7 @@ with DAG(
     extract >> transform >> load >> validate
 ```
 
-#### CDC (Change Data Capture)
+### CDC (Change Data Capture)
 
 Change Data Capture captures row-level changes (INSERT, UPDATE, DELETE) from the database's transaction log and streams them as events. This is the foundation of real-time data integration.
 
@@ -719,7 +719,7 @@ A Debezium change event looks like this:
 
 CDC enables several powerful patterns: keeping a search index (Elasticsearch) in sync with the primary database, invalidating caches when data changes, replicating data to a warehouse in near-real-time, and driving event-driven architectures without modifying application code.
 
-#### Data Quality
+### Data Quality
 
 Data quality is not an afterthought -- bad data leads to bad decisions. Implement validation at multiple layers:
 
@@ -777,7 +777,7 @@ Data quality dimensions to monitor include:
 - **Schema**: Do column types and names match expectations? Did an upstream schema change break the pipeline?
 - **Accuracy**: Do values fall within expected ranges? Are foreign key references valid?
 
-#### Batch vs Streaming (Lambda and Kappa)
+### Batch vs Streaming (Lambda and Kappa)
 
 Pipelines process data in one of two paradigms. **Batch** processing runs periodically over a bounded chunk of accumulated data -- nightly aggregations, hourly rollups -- using tools like Airflow-scheduled jobs or Spark. It is simple, easy to reason about and reprocess, but introduces latency (results are as fresh as the last run). **Streaming** processes events one at a time (or in micro-batches) as they arrive, using engines like Kafka Streams or Apache Flink, giving near-real-time results at the cost of more operational complexity and harder semantics around ordering and late-arriving data.
 
@@ -786,7 +786,7 @@ Two reference architectures combine or choose between them:
 - **Lambda architecture** runs a **batch layer** (accurate, complete, recomputed periodically) *and* a **speed layer** (fast, approximate, streaming) in parallel, merging their outputs at query time. It gives both correctness and low latency but forces you to maintain the same logic twice, in two codebases.
 - **Kappa architecture** drops the batch layer entirely: everything is a stream, and "reprocessing" means replaying the event log from the beginning through the same streaming code. One codebase, simpler to maintain, but it demands a durable, replayable log (Kafka) and streaming logic robust enough to also serve as your batch backfill.
 
-#### Apache Kafka
+### Apache Kafka
 
 Kafka is a distributed, durable, append-only **commit log** that sits at the heart of most streaming and CDC pipelines. The core concepts:
 
@@ -814,7 +814,7 @@ for message in consumer:
 
 **How to read this code:** `enable_auto_commit=False` plus a manual `commit()` *after* `process()` is the standard at-least-once pattern -- if the worker crashes between processing and committing, the message is re-delivered and processed again on restart. That is why downstream processing must be **idempotent** (e.g. UPSERT on a natural key): at-least-once guarantees no message is lost but explicitly allows duplicates. Choosing `enable_auto_commit=True` would silently commit on a timer and risk losing in-flight messages on a crash -- the classic "we lost events but the offsets said we processed them" incident.
 
-#### Warehouse, Lake, and Lakehouse
+### Warehouse, Lake, and Lakehouse
 
 The destination for analytical data has evolved through three models:
 
@@ -842,11 +842,11 @@ The dominant organizing principle within these is the **medallion architecture**
 
 ---
 
-### Dimensional Modeling (Analytics Schemas)
+## Dimensional Modeling (Analytics Schemas)
 
 Transactional (OLTP) databases are normalized to make writes safe and non-redundant. Analytical (OLAP) databases are modeled the opposite way -- **dimensionally** -- to make large aggregate reads fast and intuitive for BI tools. Dimensional modeling, popularized by Ralph Kimball, is the standard way to structure the **gold** tier of a warehouse.
 
-#### Star Schema
+### Star Schema
 
 A **star schema** has a central **fact table** surrounded by **dimension tables**. The fact table records measurable business *events* -- one row per event -- holding numeric **measures** (quantities, amounts) plus foreign keys to the dimensions. Dimension tables hold the descriptive *context* you slice and filter by (who, what, when, where): customer, product, date, store. The shape -- one fact in the middle, dimensions radiating out -- is the "star."
 
@@ -883,15 +883,15 @@ ORDER BY d.year, d.month, revenue DESC;
 
 The star schema joins are simple (fact-to-dimension, one hop each) and BI tools generate them automatically, which is exactly why this layout dominates analytics.
 
-#### Snowflake Schema
+### Snowflake Schema
 
 A **snowflake schema** normalizes the dimensions further -- e.g. `dim_product` splits into `dim_product -> dim_category -> dim_department`. It saves some storage and avoids update anomalies in dimensions, but adds more joins and complexity to every query. In practice the star schema is usually preferred: storage is cheap, dimension tables are small, and query simplicity and speed matter more for analytics. Snowflake only when a dimension is genuinely large and volatile.
 
-#### Grain
+### Grain
 
 Before writing a single column, define the **grain**: exactly what one row in the fact table represents. "One row per order"? "One row per order *line item*"? "One row per product per day (a daily snapshot)"? The grain determines what you can and cannot measure -- you can always roll a fine grain up, but you can never recover detail a coarse grain threw away. Getting the grain wrong (mixing order-level and line-item-level rows in one fact table, for instance) poisons every aggregate built on top, double-counting or under-counting silently. Declaring the grain first is the most important step in the whole exercise.
 
-#### Slowly Changing Dimensions (SCD)
+### Slowly Changing Dimensions (SCD)
 
 Dimension attributes change over time -- a customer relocates, a product is recategorized. **Slowly Changing Dimensions** are the standard strategies for handling that change, and the choice hinges on whether you need history:
 

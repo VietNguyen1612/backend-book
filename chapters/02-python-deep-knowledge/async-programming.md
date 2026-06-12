@@ -2,9 +2,9 @@
 
 # 2.2 Async Programming
 
-### asyncio
+## asyncio
 
-#### The Event Loop: Cooperative Multitasking
+### The Event Loop: Cooperative Multitasking
 
 The event loop is the heart of `asyncio`. It runs in a single thread and manages the execution of coroutines cooperatively. When a coroutine hits an `await`, it yields control back to the event loop, which can then run other coroutines. This is fundamentally different from threading (preemptive multitasking).
 
@@ -94,7 +94,7 @@ Concurrent: 3.0s
   OS decides when to switch. Need locks for shared state.
 ```
 
-#### `asyncio.gather()`, `asyncio.wait()`, and `asyncio.create_task()`
+### `asyncio.gather()`, `asyncio.wait()`, and `asyncio.create_task()`
 
 These are the three main ways to run coroutines concurrently. They serve different purposes.
 
@@ -165,7 +165,7 @@ background completed in 2s
 
 > **Common pitfall:** A bare `asyncio.create_task(...)` whose return value you don't store can be garbage-collected mid-flight, silently cancelling the task. Always keep a reference (assign it, or hold it in a set) until the task completes — this is exactly the bug `TaskGroup` is designed to prevent.
 
-#### Async Synchronization Primitives
+### Async Synchronization Primitives
 
 ```python
 import asyncio
@@ -233,7 +233,7 @@ Produced: item_9
 
 **How to read this output:** Production and consumption are *interleaved*, not batched — the producer emits an item every 0.1s while each worker takes 0.3s to process, so two workers roughly keep pace with one producer. The two consumer lines never appear truly simultaneously because this is a single thread cooperatively switching at each `await`. In production this is the canonical job-queue shape: a fast ingest path feeding a bounded `Queue(maxsize=5)` that applies backpressure (the producer's `await queue.put(...)` blocks once five items are buffered), with a pool of workers draining it. The semaphore example above caps concurrency the same way — only 3 of the 10 URLs are in-flight at any instant.
 
-#### `asyncio.to_thread()` and `asyncio.run()`
+### `asyncio.to_thread()` and `asyncio.run()`
 
 ```python
 import asyncio
@@ -270,7 +270,7 @@ blocking result
 
 **What's happening:** `blocking_io_operation()` calls `time.sleep(2)`, which would freeze the loop if called directly. `asyncio.to_thread(...)` hands it to a worker thread and `await`s the result, so the event loop stays free to run other coroutines during those 2 seconds. This is the standard escape hatch for legacy synchronous libraries (a sync DB driver, `requests`, file I/O, a CPU-light C extension) inside an otherwise-async service. Note it only helps for *blocking I/O*; CPU-bound work still contends for the GIL and belongs in a process pool instead.
 
-#### Structured Concurrency with TaskGroup (Python 3.11+)
+### Structured Concurrency with TaskGroup (Python 3.11+)
 
 `TaskGroup` provides structured concurrency: tasks are managed as a group, and if any task raises an exception, all other tasks in the group are cancelled. This is much safer than loose `create_task()` calls where exceptions can be silently lost.
 
@@ -320,9 +320,9 @@ Processed a Processed b Processed c
 
 ---
 
-### Async Frameworks
+## Async Frameworks
 
-#### FastAPI: Async-First API Framework
+### FastAPI: Async-First API Framework
 
 FastAPI is built on Starlette and Pydantic, offering async-first design with automatic data validation and OpenAPI documentation.
 
@@ -376,7 +376,7 @@ def sync_handler():
     return {"status": "ok"}
 ```
 
-#### ASGI Servers
+### ASGI Servers
 
 ASGI (Asynchronous Server Gateway Interface) is the async evolution of WSGI. Multiple servers implement the ASGI spec.
 
@@ -399,7 +399,7 @@ ASGI (Asynchronous Server Gateway Interface) is the async evolution of WSGI. Mul
 #     --log-level info
 ```
 
-#### Django Async Support
+### Django Async Support
 
 Django has been adding async support incrementally since version 3.1.
 
@@ -451,9 +451,9 @@ async def my_async_view(request):
 
 ---
 
-### Common Async Patterns
+## Common Async Patterns
 
-#### Connection Pooling
+### Connection Pooling
 
 Reusing connections avoids the overhead of establishing new TCP connections for every request.
 
@@ -511,7 +511,7 @@ Assuming the `users` table has a couple of active rows, the `print(dict(row))` l
 
 **How to read this output:** `conn.fetch(...)` returns a list of `asyncpg.Record` objects; wrapping each in `dict(row)` turns it into a plain mapping so you can see every column. The important detail is invisible in the output but central in production: `pool.acquire()` borrowed an *existing* connection rather than opening a new TCP+TLS+auth handshake (often 20-100ms), and returned it to the pool when the `async with` block exited. Under load this is the difference between reusing 20 warm connections and hammering Postgres with thousands of short-lived ones until it hits `max_connections` and starts refusing clients. The `$1` placeholder also keeps the query parameterized, so it is immune to SQL injection.
 
-#### Backpressure: Preventing Memory Exhaustion
+### Backpressure: Preventing Memory Exhaustion
 
 When a producer creates work faster than consumers can process it, memory grows unboundedly. Backpressure mechanisms throttle the producer.
 
@@ -558,7 +558,7 @@ async def main():
     )
 ```
 
-#### Cancellation and Timeouts
+### Cancellation and Timeouts
 
 ```python
 import asyncio
@@ -616,7 +616,7 @@ Timed out via context manager
 
 > **Common pitfall:** Cleanup inside an `except asyncio.CancelledError` block must not itself `await` something slow without its own timeout — if the surrounding scope is being torn down (e.g. a shutdown timeout), a long cleanup `await` can be cancelled again or hang the shutdown. Keep cancellation cleanup fast and bounded.
 
-#### Testing Async Code
+### Testing Async Code
 
 ```python
 import pytest

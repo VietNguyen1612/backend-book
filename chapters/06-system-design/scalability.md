@@ -2,7 +2,7 @@
 
 # 6.1 Scalability
 
-### Horizontal vs Vertical Scaling
+## Horizontal vs Vertical Scaling
 
 **Vertical Scaling (Scale Up)** means upgrading the hardware of a single machine -- more CPU cores, more RAM, faster SSDs, better network cards. This approach is attractive because it requires zero changes to your application code. A single-threaded application that runs on 1 CPU and 4 GB of RAM will run just as well on a machine with 64 CPUs and 512 GB of RAM (it will just have more headroom). Databases, in particular, benefit from vertical scaling because coordinating writes across multiple machines is inherently difficult. The downsides are clear: there is a hard ceiling on how large a single machine can get (you cannot buy a server with 1 million CPUs), and cost increases non-linearly. Going from 16 GB to 32 GB of RAM might cost 2x, but going from 512 GB to 1 TB can cost 5-10x due to specialized hardware.
 
@@ -17,7 +17,7 @@ Auto-scaling is the automated version of horizontal scaling. Cloud providers let
 - Read configuration from environment variables or a configuration service (Consul, AWS Parameter Store), not from local config files that might differ per machine.
 - Avoid in-memory caches that cannot tolerate loss -- use them only as a performance optimization layer where a cache miss is handled gracefully.
 
-### Load Balancing
+## Load Balancing
 
 A load balancer sits between clients and a pool of backend servers, distributing incoming requests across the pool. Load balancers are essential for horizontal scaling, high availability, and graceful maintenance.
 
@@ -144,7 +144,7 @@ nginx: configuration file /etc/nginx/nginx.conf test is successful
 
 > **Key Takeaway:** Layer 4 is fast and protocol-agnostic but blind to content; Layer 7 can route on paths, headers, and cookies and terminate TLS at the cost of CPU. Pick the algorithm to match the workload -- round-robin for uniform requests, least-connections for highly variable request durations, and consistent hashing when you are load-balancing a cache tier and want to preserve hit rates as nodes come and go.
 
-### Caching
+## Caching
 
 Caching stores frequently accessed data in a faster storage layer (usually memory) to reduce latency and load on the primary data store. The choice of caching pattern has profound implications for consistency, latency, and failure modes.
 
@@ -366,7 +366,7 @@ A request flows through these layers: check L1, if miss check L2, if miss check 
 
 > **Key Takeaway:** Every caching pattern trades consistency against latency and durability -- cache-aside is simple but can serve stale data, write-through stays consistent at the cost of write latency, write-behind is fastest but can lose data on a crash. The hardest part is never the lookup; it is invalidation and the failure modes (stampede on expiry, penetration on missing keys). Choose TTLs and patterns by asking how much staleness the business can tolerate, not by defaulting to "cache everything."
 
-### CAP Theorem & Consistency
+## CAP Theorem & Consistency
 
 **The CAP Theorem** states that a distributed data store can provide at most two of three guarantees simultaneously: **Consistency** (every read receives the most recent write or an error), **Availability** (every request receives a non-error response, though it may not contain the most recent write), and **Partition Tolerance** (the system continues operating despite network partitions between nodes). Since network partitions are inevitable in distributed systems, the real choice is between CP and AP during a partition event.
 

@@ -2,7 +2,7 @@
 
 # 5.1 RESTful APIs
 
-### REST Principles
+## REST Principles
 
 **Resources Identified by URIs**
 
@@ -282,7 +282,7 @@ Vary: Accept, Accept-Encoding
 
 > **Key Takeaway:** The core of REST is a clean division of labor: the URI names the *resource* (a noun) and the HTTP method names the *action*, while the status code reports the *outcome*. Get those three right -- nouns in paths, correct method semantics including idempotency, and accurate status codes -- and you have a predictable API even without full HATEOAS, which most teams skip.
 
-### API Design Best Practices
+## API Design Best Practices
 
 **Versioning**
 
@@ -776,7 +776,7 @@ Response with partial success (overall HTTP 207 Multi-Status or 200):
 }
 ```
 
-### API Documentation
+## API Documentation
 
 **OpenAPI (Swagger)**
 

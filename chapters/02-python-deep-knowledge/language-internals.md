@@ -2,9 +2,9 @@
 
 # 2.1 Language Internals
 
-### Data Model
+## Data Model
 
-#### Everything Is an Object
+### Everything Is an Object
 
 In Python, **everything** is an object -- integers, strings, functions, classes, modules, even `None`. Every object has three fundamental properties: an **identity** (its memory address, retrieved via `id()`), a **type** (retrieved via `type()`), and a **value**. This uniformity is what makes Python so dynamic and flexible: you can pass functions as arguments, store classes in dictionaries, and introspect anything at runtime.
 
@@ -36,7 +36,7 @@ print(a is b)           # True  -- 'is' compares identity
 print(a == c)           # True  -- '==' compares value
 ```
 
-#### `__slots__`: Memory-Efficient Attribute Storage
+### `__slots__`: Memory-Efficient Attribute Storage
 
 By default, Python objects store their attributes in a per-instance `__dict__` dictionary. This is flexible but costs significant memory -- each dictionary carries overhead for hash tables, resize capacity, and pointer indirection. `__slots__` declares a fixed set of allowed attributes, replacing the dictionary with a compact, tuple-like storage layout.
 
@@ -99,7 +99,7 @@ tracemalloc.stop()
 # Typical result: Slotted ~56 MB, Regular ~160+ MB (saves ~40-60%)
 ```
 
-#### Descriptors: The Machinery Behind Properties and Methods
+### Descriptors: The Machinery Behind Properties and Methods
 
 Descriptors are objects that define any of `__get__`, `__set__`, or `__delete__`. They control what happens when an attribute is accessed on an instance. Descriptors are the foundation of `property`, `classmethod`, `staticmethod`, and ORM field definitions. Understanding descriptors means understanding how Python attribute access actually works.
 
@@ -180,7 +180,7 @@ except ValueError as e:
   [5] AttributeError
 ```
 
-#### Metaclasses: The Class of a Class
+### Metaclasses: The Class of a Class
 
 A metaclass is the "type" of a class. Just as an object is an instance of a class, a class is an instance of its metaclass. The default metaclass is `type`. Metaclasses let you customize class creation itself -- validating class definitions, auto-registering classes, transforming attributes, and more.
 
@@ -246,7 +246,7 @@ print(Plugin._registry)
 
 Use `__init_subclass__` when possible -- it is simpler and covers most use cases (registration, validation, attribute injection). Resort to full metaclasses only when you need to control `__new__` (class creation itself) or modify the class namespace during construction.
 
-#### `__new__` vs `__init__`
+### `__new__` vs `__init__`
 
 `__new__` is the constructor that **creates** the instance. `__init__` is the initializer that **configures** it after creation. For mutable types, you rarely override `__new__`. But for immutable types (like `str`, `int`, `tuple`), you must use `__new__` because by the time `__init__` runs, the object's value is already frozen.
 
@@ -283,7 +283,7 @@ print(a is b)       # True  -- same instance
 print(a.value)      # "second" -- __init__ ran again!
 ```
 
-#### MRO (Method Resolution Order)
+### MRO (Method Resolution Order)
 
 Python uses the **C3 linearization** algorithm to determine the order in which base classes are searched when looking up a method. This is critical in diamond inheritance scenarios. `super()` follows the MRO, not just the "parent" class.
 
@@ -325,7 +325,7 @@ D().who()
 #   super() in B does NOT go to A -- it goes to C (next in MRO)
 ```
 
-#### Dunder (Magic) Methods
+### Dunder (Magic) Methods
 
 Dunder methods let your objects integrate with Python's syntax and built-in functions. Here are the most important ones demonstrated together:
 
@@ -397,7 +397,7 @@ prices = {Money(9.99, "USD"), Money(9.99, "EUR"), Money(9.99, "USD")}
 print(len(prices))    # 2 (duplicates removed)
 ```
 
-#### `__init_subclass__`: Simpler Than Metaclasses
+### `__init_subclass__`: Simpler Than Metaclasses
 
 `__init_subclass__` is called on the parent class whenever a subclass is created. It provides a clean hook for class-level validation, registration, and attribute injection without the complexity of metaclasses.
 
@@ -431,9 +431,9 @@ print(Serializable._versions)
 
 ---
 
-### Memory & Garbage Collection
+## Memory & Garbage Collection
 
-#### Reference Counting
+### Reference Counting
 
 Python's primary garbage collection mechanism is **reference counting**. Every object maintains a count of how many references point to it. When the count drops to zero, the object is deallocated immediately. This gives Python deterministic cleanup behavior -- resources are freed as soon as the last reference disappears.
 
@@ -487,7 +487,7 @@ print("--- Done ---")
      refcount: 0       [MyObject]  --> DEALLOCATED
 ```
 
-#### Generational Garbage Collector
+### Generational Garbage Collector
 
 Reference counting cannot handle **circular references** -- when objects reference each other, their refcounts never reach zero even if they are unreachable from the program. Python's generational GC detects and collects these cycles.
 
@@ -566,7 +566,7 @@ Gen 2: 28571 objects
   Long-lived objects are checked less often --> reduces GC overhead.
 ```
 
-#### Weak References
+### Weak References
 
 A `weakref` is a reference to an object that does **not** increase its reference count. The object can be garbage-collected even if weak references to it exist. Weak references are invaluable for caches, observer patterns, and breaking circular references.
 
@@ -643,7 +643,7 @@ Cleanup: closing connection
 
 > **Common pitfall:** `WeakValueDictionary` only works for objects that *can* be weakly referenced. Built-in types like `int`, `str`, `tuple`, and `list` do **not** support weak references, so caching those values directly raises `TypeError: cannot create weak reference`. Wrap them in a small class (or cache a holder object) if you need weak semantics.
 
-#### Memory Profiling
+### Memory Profiling
 
 Understanding where your program's memory goes is essential for optimizing resource usage. Python provides several tools for memory analysis.
 
@@ -746,7 +746,7 @@ Deep:    574 bytes
 
 > **Common pitfall:** `tracemalloc` only tracks allocations made *after* `start()`, and adds ~25–30% memory overhead itself — keep it off in normal production and enable it only when investigating. Reaching for `sys.getsizeof` to size a nested structure is the classic mistake: it silently undercounts, because it never follows references.
 
-#### Interning: String and Integer Caching
+### Interning: String and Integer Caching
 
 Python automatically caches (interns) small integers and certain strings to save memory and speed up comparisons. Understanding this avoids confusion when using `is` vs `==`.
 
@@ -784,7 +784,7 @@ print(a is b)  # True -- guaranteed same object
 
 ---
 
-### GIL (Global Interpreter Lock)
+## GIL (Global Interpreter Lock)
 
 The GIL is a mutex that protects access to Python objects, ensuring only one thread executes Python bytecode at a time. This simplifies CPython's memory management (reference counting is not thread-safe without it) but means that **CPU-bound** multithreaded programs cannot use multiple cores.
 
@@ -858,7 +858,7 @@ Threaded:   1.27s
   GIL:      ^T1^ ^T2^ ^T3^ (released during I/O, threads overlap)
 ```
 
-#### Workarounds for the GIL
+### Workarounds for the GIL
 
 ```python
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
@@ -908,7 +908,7 @@ Threaded I/O: 0.34s
 
 > **Common pitfall:** Code under a `ProcessPoolExecutor` must live behind an `if __name__ == "__main__":` guard (on Windows and macOS `spawn`), and every argument and return value must be picklable. Passing a lambda, an open file handle, or a database connection into a worker process raises a `PicklingError` or silently re-opens resources you did not expect.
 
-#### PEP 703: Free-Threaded Python (3.13+)
+### PEP 703: Free-Threaded Python (3.13+)
 
 Starting with Python 3.13, an experimental free-threaded build is available that removes the GIL entirely. This is a major change with a gradual transition plan.
 
@@ -937,9 +937,9 @@ print(bool(sysconfig.get_config_var("Py_GIL_DISABLED")))  # True on a free-threa
 
 ---
 
-### CPython Internals
+## CPython Internals
 
-#### Bytecode Compilation and Execution
+### Bytecode Compilation and Execution
 
 Python source code is compiled to **bytecode** -- a low-level, platform-independent representation that runs on CPython's stack-based virtual machine. Understanding bytecode helps you reason about performance and understand what Python actually does with your code.
 
@@ -1009,7 +1009,7 @@ Bytecode:   97007c00640213007c016402130013000100530000000000
 
 **How to read this output:** A `__code__` object is the compiled, immutable result of your function -- the part the VM actually executes. `co_argcount` and `co_varnames` are how tools like `inspect.signature`, debuggers, and frameworks (pytest fixtures, FastAPI dependency injection) discover what a function expects without ever calling it. Notice `co_consts` contains `2` *and* `None`: the literal `2` is the exponent baked in as a constant, and `None` is the implicit return value Python adds to every function. `co_code` is the raw bytecode `dis` was decoding for you -- the same information, just human-readable. In production this matters because the compiler hoists literals into `co_consts` once instead of rebuilding them each call, which is part of why pulling a constant out of a hot loop is rarely worth it but recomputing an expression inside one can be.
 
-#### Frame Objects: The Execution Context
+### Frame Objects: The Execution Context
 
 Every function call creates a **frame object** that holds the execution state: local variables, global references, the code object, and the instruction pointer. Frames form a stack that represents the call chain.
 
@@ -1070,7 +1070,7 @@ Caller locals:    {'x': 10}
 
 > **Common pitfall:** `sys._getframe()` and frame walking are CPython implementation details -- they are fast and ubiquitous in logging/debugging code, but they are not guaranteed on PyPy/other implementations and the overhead is real in hot paths. Reach for them for diagnostics, not for routine control flow.
 
-#### Small Object Allocator (pymalloc)
+### Small Object Allocator (pymalloc)
 
 CPython uses a custom memory allocator optimized for small objects (up to 512 bytes). This avoids the overhead of calling the system's `malloc` for every small allocation (which Python programs do constantly).
 

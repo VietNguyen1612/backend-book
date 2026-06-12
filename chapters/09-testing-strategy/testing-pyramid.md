@@ -6,15 +6,15 @@ The testing pyramid is a model that guides how you distribute your automated tes
 
 The classic failure mode is the inverted pyramid -- the **"ice cream cone"** -- where a team has a thick layer of slow, brittle end-to-end tests on top and almost no unit tests at the bottom. Such a suite takes ages to run, fails intermittently for reasons unrelated to the change under test, and gives imprecise failure messages, so developers stop trusting it. The corrective instinct is to "push coverage down the pyramid": every bug that an E2E test could catch but a faster unit or integration test could catch *just as well* belongs at the lower layer.
 
-#### Testing Trophy vs. Pyramid
+### Testing Trophy vs. Pyramid
 
 The pyramid is a heuristic, not a law. A widely cited counterpoint is Kent C. Dodds's **"testing trophy,"** which argues that for many modern applications -- especially those that are thin layers of glue over frameworks, databases, and libraries -- integration tests deliver the most *confidence per dollar*. The trophy shape (from bottom to top) is a base of static analysis (type checking, linting), then a moderate number of unit tests, a **large bulge of integration tests**, and a thin cap of E2E tests. The reasoning is that in a service that is mostly wiring -- routing, serialization, an ORM query, an HTTP call -- a unit test of any single layer in isolation tells you little, because the bugs live in the *seams between* layers, which only an integration test exercises.
 
 The two models are not really in conflict; they answer the same question for different architectures. A library with rich, algorithm-heavy domain logic (a date-math library, a pricing engine) genuinely wants a fat unit-test base -- the pyramid. A CRUD web service that mostly translates HTTP to SQL wants a fat integration middle -- the trophy. The senior takeaway is to let the *shape of your code* dictate the shape of your test distribution rather than dogmatically chasing one diagram: write the test at the lowest layer that can still give you genuine confidence about the behavior you care about.
 
-### Unit Tests
+## Unit Tests
 
-#### Test a Single Unit in Isolation
+### Test a Single Unit in Isolation
 
 A unit test exercises one function, method, or class in complete isolation from the rest of the system. External dependencies such as databases, HTTP APIs, filesystems, and message queues are replaced with test doubles so that the test runs entirely in memory. This isolation guarantees that a failure points directly at the code under test, not at some transient infrastructure issue. Unit tests should execute in well under one second each, allowing you to run hundreds or thousands of them as part of your normal development workflow. The primary focus of unit tests is business logic -- the rules, calculations, and state transitions that define what your application actually does.
 
@@ -94,7 +94,7 @@ test_order_service.py::test_valid_coupon_applies_discount PASSED          [100%]
 
 **How to read this output:** The `0.03s` total is the whole point of the pyramid's base -- because both `MagicMock` repos run in memory with no database or network, the suite finishes in milliseconds, so you can run thousands of these on every save. The `[ 50%]` / `[100%]` markers are pytest's progress through the collected tests, and each `PASSED` line names the exact test, so a failure here reads like a sentence telling you precisely which business rule broke. In an interview, the takeaway to articulate is that the speed and the pinpoint failure messages are what make unit tests the cheapest place to catch a bug.
 
-#### Arrange-Act-Assert (AAA) Pattern
+### Arrange-Act-Assert (AAA) Pattern
 
 Every unit test should follow the AAA pattern: **Arrange** the preconditions and inputs, **Act** by calling the code under test, and **Assert** that the outcome matches expectations. This three-phase structure makes tests immediately readable -- a developer can scan any test and know what is being set up, what is being exercised, and what is being verified. Keep each test focused on one assertion concept (though you may use multiple `assert` statements if they verify different facets of the same logical outcome). Name your tests descriptively so that a failure message reads like a sentence: `test_expired_coupon_raises_validation_error` tells you exactly what went wrong without opening the file.
 
@@ -144,7 +144,7 @@ def test_apply_valid_coupon_reduces_total(order_service, order_repo):
     order_repo.save.assert_called_once()
 ```
 
-#### Parametrize for Exhaustive Case Coverage
+### Parametrize for Exhaustive Case Coverage
 
 When the same logic must hold across many inputs, use `pytest.mark.parametrize` to avoid duplicating test functions. Each parameter set becomes its own test case with its own pass/fail result. This is especially powerful for boundary values, equivalence classes, and error conditions.
 
@@ -211,7 +211,7 @@ test_shipping.py::test_shipping_rejects_non_positive_weight[-0.01] PASSED
 
 **How to read this output:** The `ids=[...]` labels appear in brackets after the test name, which is exactly why naming your cases pays off -- if `[boundary-5kg]` had failed, the report would name the failing boundary directly instead of leaving you to count anonymous `[3]`-style indices. Note that one parametrized function produced eleven independently-reported results: a single off-by-one in the `<=` comparisons would fail only the relevant boundary case while the rest stayed green, isolating the defect for you.
 
-#### Edge Cases
+### Edge Cases
 
 Thorough unit tests go beyond the "happy path." You must deliberately test empty inputs (empty strings, empty lists, zero-length collections), null or `None` values where the type system permits them, boundary values at the exact transitions of conditional logic, very large inputs that might trigger timeouts or memory issues, special characters and Unicode strings that could break parsing or serialization, and concurrent access patterns if the code is expected to be thread-safe. Each of these categories represents a class of real bugs that will eventually surface in production if left untested.
 
@@ -232,7 +232,7 @@ def test_tokenize_handles_edge_cases(input_text, expected):
     assert tokenize(input_text) == expected
 ```
 
-#### Property-Based Testing with Hypothesis
+### Property-Based Testing with Hypothesis
 
 Traditional example-based tests check specific inputs against known outputs. Property-based testing inverts this: you define invariants (properties) that must hold for *all possible* inputs, and the Hypothesis framework generates hundreds of random test cases automatically. When a test fails, Hypothesis "shrinks" the failing input to the smallest, simplest example that still reproduces the bug. This approach routinely discovers edge cases that a human tester would never think to write by hand -- off-by-one errors, integer overflows, Unicode normalization issues, and more.
 
@@ -303,9 +303,9 @@ AssertionError: assert 'A2' == 'AA'
 
 ---
 
-### Integration Tests
+## Integration Tests
 
-#### Test Component Interactions with Real Dependencies
+### Test Component Interactions with Real Dependencies
 
 Integration tests verify that your code works correctly when it talks to real external systems -- databases, caches, message brokers, and third-party APIs. Unlike unit tests that replace dependencies with mocks, integration tests spin up actual instances (often via Docker containers) so you can catch problems like incorrect SQL, serialization mismatches, misconfigured connection pools, and transaction isolation bugs. These tests are inherently slower than unit tests, so you run fewer of them, but they catch an entirely different class of defect.
 
@@ -388,7 +388,7 @@ test_integration_db.py::test_unique_isbn_constraint PASSED  [100%]
 
 > **Common pitfall:** testcontainers requires a running Docker daemon. In CI this means the job needs Docker-in-Docker or a mounted Docker socket, and the first run is slow because the image must be pulled -- cache the image in CI so every build does not re-download it.
 
-#### API Tests
+### API Tests
 
 API tests send real HTTP requests to your application endpoints and verify the full request/response cycle: URL routing, input validation, serialization, authentication, authorization, and correct status codes. In Django, `TestCase` and Django REST Framework's `APIClient` make this straightforward.
 
@@ -438,7 +438,7 @@ class BookAPITest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 ```
 
-#### Database Tests
+### Database Tests
 
 Database integration tests validate that your migrations run cleanly, queries return correct results, constraints enforce data integrity, and transactions behave as expected. In Django, `TransactionTestCase` disables the default test transaction wrapping, letting you test actual commit/rollback behavior, signals that fire on commit, and concurrency-related issues.
 
@@ -462,7 +462,7 @@ class BookDatabaseTest(TransactionTestCase):
             Book.objects.create(title="Free Book", isbn="0000000000000", price=-5.00)
 ```
 
-#### Test Doubles: Dummies, Stubs, Mocks, Fakes, and Spies
+### Test Doubles: Dummies, Stubs, Mocks, Fakes, and Spies
 
 Understanding the vocabulary of test doubles is essential for writing clean tests. A **dummy** is an object passed only to satisfy a parameter list -- it is never actually used by the code path under test (for example, a placeholder `logger` you must supply to a constructor but whose calls you do not care about). A **stub** returns canned data and has no assertions on how it was called -- you use it to control the indirect inputs to the code under test. A **mock** goes further: it records how it was called and you assert on those interactions (e.g., "was `send_email` called exactly once with this recipient?"). A **fake** is a lightweight but working implementation -- an in-memory database, a local SMTP server -- that behaves realistically but avoids heavy infrastructure. A **spy** wraps the real implementation, allowing it to execute normally while recording calls for later inspection.
 
@@ -533,7 +533,7 @@ def test_cache_is_populated_after_first_call():
         assert book1 == book2
 ```
 
-#### External Third-Party Services: Fakes, Sandboxes, and Record-Replay
+### External Third-Party Services: Fakes, Sandboxes, and Record-Replay
 
 Integration tests must talk to *something*, but they should almost never hit a real third-party API (Stripe, Twilio, a partner's REST service) in CI. Doing so makes the suite slow, flaky (their uptime becomes your build's uptime), non-deterministic, and occasionally expensive or destructive -- nobody wants their CI run to send real SMS messages or charge real cards. There are three responsible alternatives, in rough order of fidelity.
 
@@ -572,9 +572,9 @@ tests/test_currency.py::test_currency_conversion_uses_live_rate PASSED   [100%]
 
 ---
 
-### Performance Testing
+## Performance Testing
 
-#### Load Testing
+### Load Testing
 
 Load testing determines how your system behaves under expected and peak traffic. You simulate concurrent users sending requests and measure response times, throughput, and error rates. **Locust** is a Python-native load testing tool that defines user behavior as plain Python code, making it natural for backend developers who already work in the Python ecosystem. It supports distributed load generation across multiple machines and provides a real-time web UI for monitoring test runs.
 
@@ -655,15 +655,15 @@ GET      /api/books/ [list]                 38    55    88   120   240   310
 
 **How to read this output:** The `name=` labels you set in the locustfile are what group these rows -- without them, `/api/books/42/` and `/api/books/43/` would each be a separate line and the stats would be useless, so grouping by route template is essential. The `@task` weights show up in the request counts: `browse_books` (weight 10) drove ~18k requests while `add_to_cart` (weight 1) drove ~1.8k, roughly the 10:1 ratio you configured. The number that matters most for an SLA is the `95%`/`99%` percentile column, not `Avg` -- here the `search` endpoint's p99 of 940 ms is the tail latency a meaningful slice of real users actually feel, even though the average looks healthy. The `--csv` flag writes the same data to files so CI can diff it against a baseline.
 
-#### Types of Performance Tests
+### Types of Performance Tests
 
 There are four distinct types of performance tests, each answering a different question. **Load testing** simulates expected traffic levels to verify that the system meets its SLA under normal conditions. **Stress testing** pushes traffic beyond the system's designed capacity to find the breaking point -- at what concurrency level do error rates spike or response times become unacceptable? **Soak testing** (also called endurance testing) runs a sustained moderate load for hours or days to detect slow resource leaks: memory that grows monotonically, database connections that are never returned to the pool, or disk usage that creeps up. **Spike testing** sends a sudden burst of traffic (for example, simulating a flash sale) to verify that auto-scaling, rate limiting, and circuit breakers respond correctly.
 
-#### Metrics That Matter
+### Metrics That Matter
 
 The metrics you collect during performance tests determine what you can learn. **Response time** should be measured at multiple percentiles: p50 (median) tells you the typical experience, p95 tells you the experience for most users, and p99 reveals the worst-case tail latency that a significant fraction of users still hits. **Throughput** measured in requests per second tells you how much work the system can do. **Error rate** (percentage of 4xx and 5xx responses) shows when the system begins failing. **Resource usage** -- CPU utilization, memory consumption, database connection pool saturation, and disk I/O -- helps you identify which resource becomes the bottleneck first.
 
-#### Benchmarking and Regression Detection
+### Benchmarking and Regression Detection
 
 Establish a performance baseline by running your load test suite against a known-good version of the system and recording the key metrics. After every significant change, re-run the same tests and compare. Integrate this into your CI pipeline: if p95 latency increases by more than 10% or throughput drops by more than 5%, fail the build. This catches performance regressions before they reach production, when they are cheap to fix and the offending commit is easy to identify.
 

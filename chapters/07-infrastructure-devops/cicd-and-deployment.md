@@ -2,9 +2,9 @@
 
 # 7.2 CI/CD & Deployment
 
-### CI/CD Pipelines
+## CI/CD Pipelines
 
-#### Pipeline Stages
+### Pipeline Stages
 
 A well-designed CI/CD pipeline automates the path from code commit to production deployment. Each stage acts as a quality gate: if any stage fails, the pipeline stops and the team is notified. The typical stages are:
 
@@ -17,17 +17,17 @@ A well-designed CI/CD pipeline automates the path from code commit to production
 7. **Deploy to Staging:** Automatically deploy to a staging environment that mirrors production. Run smoke tests.
 8. **Deploy to Production:** After manual approval (or automatic if all gates pass), deploy to production. Run post-deployment health checks.
 
-#### Parallel Jobs and Matrix Builds
+### Parallel Jobs and Matrix Builds
 
 Independent stages should run concurrently to minimize pipeline duration. Linting, type checking, and unit tests can all run in parallel since they have no dependencies on each other. Matrix builds let you test the same code across multiple configurations -- different Python versions, different operating systems, different database versions -- in parallel.
 
-#### Caching
+### Caching
 
 CI pipelines run in clean environments each time, so without caching, every run downloads and installs all dependencies from scratch. Most CI systems let you cache directories between runs, keyed by a hash of the dependency lockfile. When `requirements.txt` (or `poetry.lock`, `package-lock.json`) doesn't change, the cached dependencies are restored in seconds instead of being reinstalled.
 
 Docker layer caching is equally important. By pushing and pulling cache layers from a registry, subsequent image builds can skip unchanged layers, reducing build times from minutes to seconds.
 
-#### Secret Management
+### Secret Management
 
 CI/CD systems provide mechanisms for injecting secrets (API keys, deployment credentials, signing keys) into pipeline runs without exposing them in code. GitHub Actions uses encrypted secrets; GitLab CI uses protected variables. Key practices:
 
@@ -37,13 +37,13 @@ CI/CD systems provide mechanisms for injecting secrets (API keys, deployment cre
 - Rotate secrets regularly, especially after team member departures.
 - Consider using OIDC federation (e.g., GitHub Actions OIDC with AWS) instead of long-lived credentials.
 
-#### Artifact Management
+### Artifact Management
 
 Build artifacts (Docker images, compiled binaries, packaged bundles) should be stored in a registry or artifact repository with proper versioning. Use immutable tags -- never overwrite a tag like `latest` for production deployments. Instead, tag images with the git SHA, semantic version, or build number (e.g., `registry.example.com/myapp:v1.4.2` or `registry.example.com/myapp:abc123f`).
 
 Popular container registries include Amazon ECR, Google Artifact Registry, GitHub Container Registry (ghcr.io), and Docker Hub.
 
-#### GitHub Actions Example
+### GitHub Actions Example
 
 Below is a comprehensive GitHub Actions workflow that implements all the stages discussed above.
 
@@ -357,25 +357,25 @@ Health check 5 passed
 
 ---
 
-### Deployment Strategies
+## Deployment Strategies
 
-#### Blue-Green Deployment
+### Blue-Green Deployment
 
 Blue-green deployment maintains two identical production environments, called "blue" and "green." At any given time, one environment is live (serving all traffic) and the other is idle. To deploy, you deploy the new version to the idle environment, run tests against it, and then switch the load balancer or DNS to point to it. The switch is atomic: all users see the new version simultaneously.
 
 The primary advantage is instant rollback -- if the new version has problems, switch back to the old environment. The primary disadvantage is cost: you maintain two full environments. In Kubernetes, blue-green can be implemented by running two Deployments with different labels and switching the Service selector.
 
-#### Canary Deployment
+### Canary Deployment
 
 Canary deployment routes a small percentage of production traffic (e.g., 5%) to the new version while the rest continues to hit the old version. You monitor the canary's error rate, latency, and business metrics. If everything looks good, you gradually increase the percentage (10%, 25%, 50%, 100%). If the canary shows elevated errors, you route all traffic back to the old version.
 
 This approach minimizes blast radius: if the new version has a critical bug, only 5% of users are affected. Tools like Argo Rollouts, Flagger, and Istio provide automated canary management with metric-based promotion and automatic rollback.
 
-#### Rolling Update
+### Rolling Update
 
 Rolling update replaces instances of the old version one (or a few) at a time. As each new instance passes its readiness check, an old instance is terminated. This is the default strategy in Kubernetes Deployments and requires no extra infrastructure. The tradeoff is that during the update, some requests hit the old version and some hit the new version. Both versions must be backwards-compatible.
 
-#### Feature Flags
+### Feature Flags
 
 Feature flags decouple deployment from release. You deploy code containing a new feature to production, but the feature is disabled by default (behind an if-statement checking a flag). You can then enable the flag for specific users, a percentage of traffic, specific regions, or all users -- independently of deployment.
 
@@ -388,7 +388,7 @@ This enables:
 
 Popular feature flag services include LaunchDarkly, Unleash, Flagsmith, and ConfigCat.
 
-#### Database Migration Coordination
+### Database Migration Coordination
 
 Database schema changes must be coordinated with application deployments because the old and new versions of the application may run simultaneously (during rolling updates or canary deployments). The safe approach is:
 
@@ -406,9 +406,9 @@ This multi-phase approach avoids downtime but requires careful planning and typi
 
 ---
 
-### Infrastructure as Code
+## Infrastructure as Code
 
-#### Terraform
+### Terraform
 
 Terraform by HashiCorp is the most widely adopted Infrastructure as Code (IaC) tool. You declare the desired state of your infrastructure in HCL (HashiCorp Configuration Language), and Terraform computes and applies the changes needed to reach that state. It supports hundreds of providers (AWS, GCP, Azure, Cloudflare, GitHub, Kubernetes, and more).
 
@@ -675,21 +675,21 @@ Changes to Outputs:
 
 > **Common pitfall:** A `-/+ destroy and then create` on a stateful resource (like the RDS instance or its `db_subnet_group`) can mean Terraform plans to delete your production database to satisfy a config change. Always read the plan, not just the exit code — and protect critical resources with `deletion_protection`, `prevent_destroy` lifecycle blocks, or `ignore_changes` so a careless apply can't wipe data.
 
-#### Declarative vs. Imperative Provisioning
+### Declarative vs. Imperative Provisioning
 
 The principle underneath every IaC tool worth using is **declarative provisioning**: you describe the *desired end state* ("a VPC, an EKS cluster with 3 nodes, an RDS instance"), and the tool figures out the diff between that and reality and applies only the necessary changes. You do not write the steps. This is what makes IaC reproducible and idempotent — running `apply` twice on unchanged code is a no-op, and a half-failed apply can be re-run to converge. An imperative script (`aws ec2 run-instances ...`) instead encodes the *steps*, which are not idempotent (run it twice and you get two instances) and carry no model of current state. Terraform, CloudFormation, and Kubernetes manifests are all declarative for exactly this reason; Ansible is largely declarative at the task level (each module is idempotent) even though playbooks read top-to-bottom.
 
-#### OpenTofu
+### OpenTofu
 
 OpenTofu is the open-source fork of Terraform, created by the community after HashiCorp relicensed Terraform from the open-source MPL to the source-available BSL in 2023. It is a drop-in replacement: the same HCL, the same provider ecosystem, the same `init`/`plan`/`apply` workflow, and (currently) state-file compatibility. It is now governed by the Linux Foundation. The practical takeaway for an interview: if license terms matter to your organization, OpenTofu lets you keep the entire Terraform workflow on a truly open-source tool, and migrating is typically just swapping the `terraform` binary for `tofu`.
 
-#### CloudFormation and CDK
+### CloudFormation and CDK
 
 CloudFormation is AWS's native, declarative IaC service. You describe resources in a YAML/JSON template, and AWS manages them as a **stack** — it handles dependency ordering, and crucially, **automatic rollback**: if any resource in a stack fails to create or update, CloudFormation rolls the entire stack back to its last good state. Because it is a managed AWS service, there is no separate state file to store and lock — AWS tracks stack state for you. The tradeoffs versus Terraform are AWS-only scope and notoriously verbose templates.
 
 The **AWS CDK (Cloud Development Kit)** addresses the verbosity by letting you define infrastructure in TypeScript, Python, Java, or Go; the CDK *synthesizes* (compiles) your code into a CloudFormation template under the hood. So CDK gives you loops, conditionals, and reusable constructs (like Pulumi) while still deploying through CloudFormation's managed stacks and rollback. CDK is to CloudFormation roughly what Pulumi is to Terraform.
 
-#### Immutable Infrastructure
+### Immutable Infrastructure
 
 Immutable infrastructure means you **never modify a running server in place** — no SSH-ing in to patch, no config drift accumulating over months. To change anything, you build a brand-new machine image with the change baked in and replace the old instance entirely. This eliminates the "works on that one server" class of mystery, because every instance of a given version is bit-for-bit identical and disposable.
 
@@ -727,21 +727,21 @@ build {
 
 > **Common pitfall:** "Immutable" only holds if your image build is reproducible and your instances are genuinely stateless. If a server quietly accumulates local state (uploaded files, a local SQLite DB) and you replace it, that data is gone. Persist all state in external services (object storage, managed databases) so any instance can be destroyed and recreated freely.
 
-#### Environment Parity and Secrets Injection
+### Environment Parity and Secrets Injection
 
 **Environment parity** means keeping dev, staging, and production as similar as practical — same OS, same runtime version, same backing services (don't run SQLite in dev and Postgres in prod), same deployment mechanism. Divergence is where "it worked in staging" bugs are born. IaC makes parity achievable: the *same* modules/templates provision every environment, with differences confined to a small set of parameters (instance sizes, replica counts) rather than entirely separate, hand-maintained setups — exactly the pattern in the Terraform example above where `var.environment` toggles `multi_az` and instance classes off one codebase.
 
 **Secrets must never live in IaC state or repos.** This is a frequent and serious mistake: Terraform writes resource attributes — including generated database passwords — into the state file in *plaintext*, so a state file in S3 is as sensitive as the secrets themselves (encrypt it, lock down access, never commit it). The correct pattern is to keep secrets out of code entirely and **inject them at runtime from a dedicated secrets manager** (AWS Secrets Manager, HashiCorp Vault, GCP Secret Manager). IaC provisions the *reference* to the secret (the ARN, the IAM policy granting access); the application fetches the actual value at boot. In Kubernetes, the External Secrets Operator syncs values from the manager into Kubernetes Secrets so manifests reference a name, not a credential.
 
-#### Pulumi
+### Pulumi
 
 Pulumi solves the same problem as Terraform but lets you write infrastructure definitions in real programming languages: Python, TypeScript, Go, C#, and Java. This means you can use loops, conditionals, functions, classes, unit tests, and your existing IDE tooling. Pulumi is particularly powerful when your infrastructure logic is complex or when your team is more comfortable with application languages than HCL.
 
-#### Ansible
+### Ansible
 
 Ansible is a configuration management tool, not an infrastructure provisioning tool. It excels at configuring servers: installing packages, managing configuration files, starting services, running ad-hoc commands across fleets of machines. It is agentless (connects via SSH) and uses YAML playbooks to define idempotent tasks. While Terraform creates the infrastructure (VMs, networks, databases), Ansible configures what runs on that infrastructure.
 
-#### Drift Detection
+### Drift Detection
 
 Infrastructure drift occurs when the actual state of your infrastructure diverges from its declared state in code. This happens when someone makes a manual change via the cloud console, an automated process modifies a resource, or a previous Terraform apply was interrupted.
 

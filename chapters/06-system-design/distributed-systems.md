@@ -2,7 +2,7 @@
 
 # 6.2 Distributed Systems
 
-### Consensus & Coordination
+## Consensus & Coordination
 
 **Raft** is a consensus algorithm designed to be understandable (in contrast to Paxos, which is notoriously difficult to implement correctly). Raft ensures that a cluster of nodes agrees on a sequence of operations (a replicated log), even if some nodes fail. It is used by etcd (which powers Kubernetes), Consul, CockroachDB, and TiKV.
 
@@ -111,7 +111,7 @@ Prevention mechanisms include:
 
 > **Key Takeaway**: Consensus is fundamentally about turning a quorum of fallible machines into a single source of truth. The recurring theme -- in Raft's "majority of votes," in quorum writes, and in split-brain prevention -- is that **a majority can never exist on both sides of a partition**, so at most one side ever makes progress. When you reach for etcd, ZooKeeper, or Consul, you are renting that hard-won guarantee instead of building it yourself; the cardinal sin is putting consensus-critical state behind a system that has no quorum and can silently split-brain.
 
-### Time, Clocks & Ordering
+## Time, Clocks & Ordering
 
 In a single process, ordering events is trivial: read the wall clock, or just observe the order statements execute. In a distributed system, *there is no single clock* and no global "now," and this breaks the most natural-seeming assumption engineers make -- that you can order events on different machines by comparing their timestamps. You cannot, and doing so is a classic source of silent data corruption.
 
@@ -145,7 +145,7 @@ Lamport vs Vector clock for three nodes (A, B, C):
 
 > **Key Takeaway:** There is no global clock, so stop ordering distributed events by wall-clock timestamps. Use a monotonic clock for measuring durations on one machine; use logical clocks for ordering across machines -- Lamport when you just need *a* consistent total order, vector clocks when you must *detect* concurrent (conflicting) updates; and reach for HLC/TrueTime only when you need globally meaningful timestamps with bounded uncertainty.
 
-### Distributed Unique IDs
+## Distributed Unique IDs
 
 Many systems need to mint unique identifiers -- for rows, messages, orders, events -- and at scale the obvious choice (a database auto-increment column) becomes a bottleneck. Choosing an ID scheme is a small decision with outsized impact on write throughput, index health, and how much your system leaks.
 
@@ -177,7 +177,7 @@ Each worker generates IDs locally: take the current millisecond, OR in its assig
 
 > **Key Takeaway:** The ID scheme encodes a throughput-vs-coordination trade-off. Auto-increment is dense and ordered but a single coordination point that leaks volume; UUIDv4 is fully decentralized but kills index locality; UUIDv7/ULID is the modern default (decentralized *and* time-ordered); Snowflake is the compact 64-bit choice when bytes matter, at the price of managing worker ids and clock monotonicity; ticket servers buy dense ordered integers with amortized coordination.
 
-### Distributed Locking & Coordination Primitives
+## Distributed Locking & Coordination Primitives
 
 Sometimes you need to guarantee that *only one* actor does something at a time across many machines -- and a local mutex is useless because the contending processes live on different hosts. Distributed locking provides cross-machine mutual exclusion, but it comes with a correctness caveat that trips up almost everyone, so the most important lesson is often "design so you don't need a strict lock at all."
 
@@ -205,7 +205,7 @@ Because fencing is hard to retrofit, the pragmatic guidance is: **prefer making 
 
 > **Common pitfall:** Treating a Redis (or any timeout-based) lock as a hard mutual-exclusion guarantee. Under a GC pause or network partition the lease can expire while the holder still thinks it owns the lock, so two processes run at once. Either back the lock with fencing tokens the resource validates, or -- better -- make the protected operation idempotent so a double-run cannot corrupt state.
 
-### Service Communication Patterns
+## Service Communication Patterns
 
 **Synchronous Communication** (HTTP REST, gRPC) follows the request-response pattern. The caller sends a request and blocks until it receives a response. This is simple to reason about and ideal for user-facing requests that need an immediate response (e.g., "show me my profile"). The downsides are temporal coupling (if the downstream service is down, the caller fails), latency accumulation (each hop adds latency), and cascading failure risk (one slow dependency can exhaust the caller's thread pool, causing it to fail, which cascades to its callers).
 
@@ -468,7 +468,7 @@ attempt 6: 10.00s
 
 > **Key Takeaway**: Synchronous calls are simple but couple services in time; asynchronous messaging buys decoupling at the cost of eventual-consistency complexity. Whichever you choose, every remote call needs the resilience trio -- a **timeout** (never wait forever), **bounded retries with jittered backoff** (recover from blips without a thundering herd), and a **circuit breaker** (stop hammering a dependency that is already down). Together they convert slow, cascading failures into fast, contained ones, which is the difference between one degraded service and a full site outage.
 
-### Observability (Three Pillars)
+## Observability (Three Pillars)
 
 Observability is the ability to understand the internal state of a system by examining its external outputs. In a distributed system with dozens of services, observability is not optional -- it is the only way to debug production issues. The three pillars are logs, metrics, and traces.
 

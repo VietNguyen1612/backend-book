@@ -2,9 +2,9 @@
 
 # 2.4 Packaging & Tooling
 
-### Dependency Management
+## Dependency Management
 
-#### `pyproject.toml`: The Modern Standard
+### `pyproject.toml`: The Modern Standard
 
 `pyproject.toml` (PEP 621) is the standard for declaring Python project metadata, dependencies, build configuration, and tool settings -- all in one file.
 
@@ -67,7 +67,7 @@ asyncio_mode = "auto"
 addopts = "-v --tb=short"
 ```
 
-#### Poetry vs pip-tools vs uv
+### Poetry vs pip-tools vs uv
 
 ```bash
 # -- Poetry: full dependency management --
@@ -130,7 +130,7 @@ uv run pytest
 # It's becoming the recommended tool for new projects
 ```
 
-#### Virtual Environments
+### Virtual Environments
 
 ```python
 # -- Always use virtual environments! --
@@ -166,9 +166,9 @@ uv run pytest
 
 ---
 
-### Code Quality
+## Code Quality
 
-#### Ruff: The All-in-One Linter and Formatter
+### Ruff: The All-in-One Linter and Formatter
 
 Ruff is a Rust-based tool that replaces flake8, isort, pyupgrade, black (formatting), and dozens of other linting tools. It is 10-100x faster than the tools it replaces.
 
@@ -268,7 +268,7 @@ if my_list:
     pass
 ```
 
-#### Pre-commit: Automated Quality Gates
+### Pre-commit: Automated Quality Gates
 
 ```yaml
 # .pre-commit-config.yaml
@@ -333,7 +333,7 @@ detect-private-key.......................................................Passed
 
 **How to read this output:** Each hook reports `Passed`, `Failed`, or `Skipped`. A single `Failed` hook aborts the whole run with a non-zero exit, which is what blocks the `git commit`. Note that hooks like `ruff --fix` and `trailing-whitespace` *modify your files* when they fail -- you then `git add` the fixes and re-commit. This is the production value of pre-commit: bad code never reaches the shared branch, so reviewers spend time on logic rather than on formatting nits.
 
-#### pytest: Testing Framework
+### pytest: Testing Framework
 
 ```python
 import pytest
@@ -448,9 +448,9 @@ TOTAL                        86      5    94%
 
 ---
 
-### Profiling & Optimization
+## Profiling & Optimization
 
-#### cProfile: Function-Level Profiling
+### cProfile: Function-Level Profiling
 
 Always profile before optimizing. Intuition about performance bottlenecks is often wrong.
 
@@ -535,7 +535,7 @@ Running the `profile_section` context manager prints something like (exact times
 
 > **Common pitfall:** `cProfile` adds per-call overhead (it instruments every function call), so absolute times are inflated and call-heavy code looks disproportionately worse. Use it for *relative* comparison to find hot spots, not for reporting real-world latency -- for that, use a sampling profiler like `py-spy`.
 
-#### line_profiler: Line-by-Line Analysis
+### line_profiler: Line-by-Line Analysis
 
 ```python
 # Install: pip install line_profiler
@@ -570,7 +570,7 @@ def process_data(items):
 # Insight: sorting (line 7) and appending (line 6) are the bottlenecks!
 ```
 
-#### py-spy: Sampling Profiler (No Code Changes)
+### py-spy: Sampling Profiler (No Code Changes)
 
 ```bash
 # Install: pip install py-spy
@@ -595,7 +595,7 @@ py-spy record -o flamegraph.svg --format speedscope -- python myapp.py
 # - Shows time spent in C extensions too
 ```
 
-#### Optimization: A Practical Approach
+### Optimization: A Practical Approach
 
 ```python
 import time
@@ -730,11 +730,11 @@ def compute_fastest(values):
 
 ---
 
-### Standard Library Essentials
+## Standard Library Essentials
 
 Beyond third-party tooling, two stdlib areas separate throwaway scripts from production services: structured **logging** and safe **filesystem/process** interaction.
 
-#### Logging: Never `print` in Production
+### Logging: Never `print` in Production
 
 `print` writes to stdout with no levels, no timestamps, no routing, and no way to silence it per-module. The `logging` module gives you a hierarchy of named loggers, *handlers* (where logs go), *formatters* (how they look), and *levels* (DEBUG/INFO/WARNING/ERROR/CRITICAL).
 
@@ -786,7 +786,7 @@ ValueError: negative amount
 
 The big rules: configure logging exactly once at startup (libraries should *only* `getLogger`, never configure); for production, emit **structured** logs (a JSON formatter or `structlog`) and attach request context (`request_id`, `user_id`) via `contextvars` so it follows the request across `await` points and threads; and **never log secrets or PII** (tokens, passwords, card numbers) — logs are widely readable and long-lived.
 
-#### Filesystem, Processes & OS Interaction
+### Filesystem, Processes & OS Interaction
 
 ```python
 from pathlib import Path

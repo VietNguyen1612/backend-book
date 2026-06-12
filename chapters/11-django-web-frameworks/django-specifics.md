@@ -2,9 +2,9 @@
 
 # 11.1 Django Specifics (Transferable Concepts)
 
-### Request/Response Lifecycle
+## Request/Response Lifecycle
 
-#### The Application Server: WSGI and ASGI
+### The Application Server: WSGI and ASGI
 
 Before a request ever reaches your middleware, it passes through an application server. Django (like Flask) does not speak HTTP to the outside world directly in production; the `manage.py runserver` development server is not built for load. Instead, a dedicated server process accepts the raw socket connection, parses HTTP, and hands Django a normalized request via a standard interface. There are two such interfaces in the Python world:
 
@@ -48,7 +48,7 @@ Once the server hands the request to Django, the full path is: **server (gunicor
 
 A common interview question is "how many concurrent requests can your app handle?" For WSGI the answer is bounded by `workers × threads` -- a worker blocked on a slow database query or external API call cannot serve anyone else. This is why blocking I/O, generous worker counts, and (eventually) async or background tasks all matter for throughput.
 
-#### The Middleware Chain
+### The Middleware Chain
 
 Every HTTP request that reaches a Django application passes through a well-defined pipeline: the request enters the middleware stack from top to bottom, hits URL routing, dispatches to a view, the view produces a response, and then the response travels back up through the middleware stack in reverse order. This is the interceptor pattern (also called a filter chain), and it is not unique to Django. Flask uses `before_request` and `after_request` hooks, FastAPI has its own middleware system built on Starlette, and Express.js uses `app.use()` middleware. Understanding this pipeline deeply is the single most important thing you can do to debug problems in any web framework, because nearly every cross-cutting concern -- authentication, logging, CORS, compression -- lives in this layer.
 
@@ -159,7 +159,7 @@ class RequestTimingMiddleware(BaseHTTPMiddleware):
 
 The conceptual structure is identical: wrap the next handler, run code before and after, optionally short-circuit.
 
-#### URL Routing
+### URL Routing
 
 URL routing is the mapping from an incoming URL path to the Python function (or class) that should handle it. Django uses a list of `urlpatterns` that are tried in order; the first match wins. This is analogous to route decorators in Flask (`@app.route`) and FastAPI (`@app.get`), but Django's approach separates route declarations from view code, which keeps views reusable and URL structure centralized.
 
@@ -196,7 +196,7 @@ Key concepts that transfer to any framework:
 - **Reverse URL resolution** lets you generate URLs from names instead of hard-coding paths. `reverse("books:book-detail", kwargs={"pk": 42})` produces `/api/v1/books/42/`. FastAPI has `request.url_for("read_book", pk=42)`.
 - **Namespacing** prevents name collisions when multiple apps define routes with the same name.
 
-#### Views: Function-Based and Class-Based
+### Views: Function-Based and Class-Based
 
 Django supports two styles of views. Function-based views (FBVs) are plain functions that receive an `HttpRequest` and return an `HttpResponse`. Class-based views (CBVs) use inheritance and mixins to reduce boilerplate for common patterns like listing, detail, create, update, and delete.
 
@@ -314,9 +314,9 @@ FBVs are easier to understand and debug; CBVs reduce repetition when you have ma
 
 ---
 
-### ORM & Database Layer
+## ORM & Database Layer
 
-#### Model Definitions and Patterns
+### Model Definitions and Patterns
 
 The Django ORM follows the Active Record pattern: each model instance knows how to save itself to the database, delete itself, and query its own table. This is in contrast to SQLAlchemy's default Data Mapper pattern, where a separate session/unit-of-work layer manages persistence and the model classes are closer to plain data containers.
 
@@ -427,7 +427,7 @@ class Review(models.Model):
         return f"Review of {self.book.title} by {self.author.username}"
 ```
 
-#### Migrations
+### Migrations
 
 The migration system records every change you make to your models as a versioned Python file. Running `python manage.py makemigrations` inspects the current state of your models and generates a migration that describes the diff from the previous state. Running `python manage.py migrate` applies pending migrations in dependency order.
 
@@ -477,7 +477,7 @@ COMMIT;
 
 This concept applies universally: Alembic for SQLAlchemy, Flyway for Java, Knex migrations for Node.js, and Active Record migrations for Rails. The key principle is that database schema changes are version-controlled, ordered, and reproducible.
 
-#### QuerySet Evaluation and the N+1 Problem
+### QuerySet Evaluation and the N+1 Problem
 
 Django QuerySets are lazy: constructing a queryset does not execute any SQL. The query only hits the database when you iterate over the queryset, call `len()`, slice it, or explicitly evaluate it with `.exists()`, `.count()`, etc. This laziness lets you chain filters and build queries incrementally without performance cost.
 
@@ -564,7 +564,7 @@ Clean Code Prentice Hall
 
 **How to read this output:** The important thing is not the titles themselves but the query count behind them. Three queries ran total -- one for the authors, one for the prefetched books, and one (the inner `select_related("publisher")`) folded into the book query -- regardless of how many authors or books exist. Without the nested `select_related`, every `book.publisher.name` access in the loop would fire its own `SELECT`, recreating the N+1 problem one level deeper. In production this is the difference between a dashboard that renders in 30 ms and one that issues hundreds of queries and times out; verify it by watching the query count in `django-debug-toolbar` rather than trusting the code reads correctly.
 
-#### Q Objects: Complex Lookups
+### Q Objects: Complex Lookups
 
 Django's `Q` objects let you build queries with `OR`, `AND`, and `NOT` logic that cannot be expressed with simple keyword arguments to `.filter()`.
 
@@ -601,7 +601,7 @@ def search_books(request):
     # ... serialize and return
 ```
 
-#### F Expressions: Database-Level Field References
+### F Expressions: Database-Level Field References
 
 `F` expressions let you reference model field values directly in the database, which avoids loading the value into Python and prevents race conditions in concurrent updates.
 
@@ -627,7 +627,7 @@ book.refresh_from_db()
 print(book.page_count)  # now an integer
 ```
 
-#### Annotations and Aggregations
+### Annotations and Aggregations
 
 Annotations add computed columns to each row; aggregations collapse all rows into a single summary value.
 
@@ -698,7 +698,7 @@ books = Book.objects.annotate(
 )
 ```
 
-#### Custom Managers and QuerySets
+### Custom Managers and QuerySets
 
 Custom managers and querysets let you encapsulate reusable query logic so your views stay clean.
 
@@ -740,7 +740,7 @@ class BookManager(models.Manager):
 # Book.objects.available().fiction().with_ratings().order_by("-avg_rating")
 ```
 
-#### Bulk Operations
+### Bulk Operations
 
 Saving objects one at a time in a loop issues one `INSERT` (or `UPDATE`) per row, which is catastrophically slow for large datasets. Django provides bulk methods that collapse the work into a handful of queries.
 
@@ -764,7 +764,7 @@ Book.objects.filter(is_available=False, published_date__year__lt=2000).delete()
 
 > **Common pitfall:** Bulk operations bypass the model's `save()` method, do **not** send `pre_save`/`post_save`/`pre_delete`/`post_delete` signals (with the exception that `queryset.delete()` does send `pre_delete`/`post_delete` signals for every object Django's collector deletes -- including those it cascades via `on_delete=CASCADE` -- though not for rows removed by a database-level `ON DELETE` constraint, while `bulk_create`/`bulk_update`/`queryset.update()` send nothing), and skip `auto_now` timestamp updates for `update()`. If your `Author.save()` slug-generation logic or a `post_save` cache-invalidation receiver is essential, `bulk_create` will silently skip it. Use bulk methods for raw throughput; fall back to per-instance `save()` when you depend on that side-effecting logic, or replicate the logic explicitly.
 
-#### Transactions
+### Transactions
 
 By default Django runs in autocommit mode: every query is committed immediately. `transaction.atomic()` groups a block of queries so they either all commit or all roll back -- the foundation of data integrity for any multi-step write.
 
@@ -798,7 +798,7 @@ def create_order(request):
 
 Nested `atomic()` blocks use savepoints: an inner block can roll back without aborting the outer transaction. Keep transactions **short** and never put slow external calls (HTTP requests, email sends) inside an `atomic()` block -- they hold database locks and connections open for the duration, throttling your whole app under load.
 
-#### Pessimistic Locking with select_for_update()
+### Pessimistic Locking with select_for_update()
 
 When two requests read the same row, modify it, and write it back, the second write can clobber the first (the lost-update problem). `F()` expressions solve the simple counter case (shown earlier); for read-modify-write logic that cannot be expressed as a single SQL update, use `select_for_update()`, which issues `SELECT ... FOR UPDATE` to take a row-level lock until the transaction commits.
 
@@ -836,7 +836,7 @@ COMMIT;
 
 **How to read this output:** The key event is invisible in the row data: Worker B's `SELECT ... FOR UPDATE` does not return until Worker A's `COMMIT` releases the lock. That serialization is exactly what prevents both workers from reading `stock=1` and each selling "the last copy." This is pessimistic locking -- you pay a small latency cost (B waits) to guarantee correctness. Use it for genuine contention on a hot row (inventory, account balances, seat booking); for low-contention updates prefer the cheaper optimistic approach (`F()` or a version column) so readers never block. Add `nowait=True` or `skip_locked=True` if you would rather fail fast or skip locked rows than wait.
 
-#### on_commit() Hooks
+### on_commit() Hooks
 
 A subtle but important bug: code inside `transaction.atomic()` can enqueue a Celery task or send an email referencing a row that the transaction later rolls back -- the worker then picks up a task pointing at data that never existed. `transaction.on_commit()` registers a callback that fires **only after** the surrounding transaction successfully commits (and never at all if it rolls back).
 
@@ -861,7 +861,7 @@ def publish_book(book_id):
 
 This is the canonical pattern for firing any external side effect (task enqueue, webhook, cache priming) from within a transaction. If no transaction is active, `on_commit()` runs the callback immediately, so the pattern is safe to use unconditionally.
 
-#### Limiting Columns: only(), defer(), and values()
+### Limiting Columns: only(), defer(), and values()
 
 By default a queryset loads every column of every row. For wide tables or large result sets, fetching columns you do not use wastes bandwidth and memory.
 
@@ -900,13 +900,13 @@ SELECT "books_book"."id", "books_book"."title", "books_book"."author_id",
 
 ---
 
-### Signals & Events
+## Signals & Events
 
 Django signals implement the observer pattern: when a particular event occurs (a model is saved, a request starts, a user logs in), Django broadcasts a signal, and any registered receiver function runs. This provides decoupling -- the code that sends the signal does not need to know about the code that handles it.
 
 However, signals come with significant downsides. They create hidden control flow that is hard to trace in a debugger. They run synchronously inside the same database transaction (by default), so a slow or failing receiver can break seemingly unrelated operations. The general guidance is: use signals for truly decoupled, cross-cutting reactions (like invalidating a cache when any model changes), but prefer explicit service-layer function calls for important business logic.
 
-#### Built-in Signals
+### Built-in Signals
 
 The most commonly used signals are:
 
@@ -916,7 +916,7 @@ The most commonly used signals are:
 - `request_started` / `request_finished` -- fired at the beginning/end of each HTTP request
 - `user_logged_in` / `user_logged_out` / `user_login_failed` -- from `django.contrib.auth.signals`
 
-#### Signal Registration
+### Signal Registration
 
 The recommended way to register signals is inside the `ready()` method of your app's `AppConfig`. This ensures signals are connected exactly once, after all apps are loaded.
 
@@ -987,7 +987,7 @@ def cleanup_after_book_delete(sender, instance, **kwargs):
     logger.info("Deleted book: %s (pk=%s)", instance.title, instance.pk)
 ```
 
-#### Custom Signals
+### Custom Signals
 
 You can define your own signals for domain-specific events:
 
@@ -1011,7 +1011,7 @@ def send_order_confirmation_email(sender, order, user, **kwargs):
     # send_mail(...)
 ```
 
-#### Comparison with Other Frameworks
+### Comparison with Other Frameworks
 
 The observer/event pattern appears everywhere:
 
@@ -1024,13 +1024,13 @@ The observer/event pattern appears everywhere:
 
 ---
 
-### Admin & Rapid Development
+## Admin & Rapid Development
 
 The Django admin is an auto-generated CRUD interface that reads your model definitions and produces a fully functional web UI for creating, reading, updating, and deleting records. It is one of Django's most distinctive features and is invaluable for internal tooling, data inspection during development, and back-office operations.
 
 The key concept is **scaffolding** or auto-generated interfaces: Rails has `rails scaffold`, Laravel has Nova, and many ORMs provide similar tools. The Django admin goes further than most because it is highly customizable without ejecting from the framework.
 
-#### Basic Admin Registration
+### Basic Admin Registration
 
 ```python
 # books/admin.py
@@ -1042,7 +1042,7 @@ from .models import Author, Publisher, Book, Review
 admin.site.register(Publisher)
 ```
 
-#### Customized Admin Classes
+### Customized Admin Classes
 
 ```python
 # books/admin.py
@@ -1162,11 +1162,11 @@ class ReviewAdmin(admin.ModelAdmin):
 
 ---
 
-### Async & Real-Time Django
+## Async & Real-Time Django
 
 Django was synchronous-only for most of its history, but modern versions support `async def` views, an async ORM interface, and -- via Django Channels -- long-lived connections like WebSockets. Async shines for I/O-bound workloads where a request spends most of its time waiting (calling several external APIs, fanning out to microservices, or holding a WebSocket open). It does **not** make CPU-bound code faster, and it requires an ASGI server (see the WSGI/ASGI section above).
 
-#### Async Views
+### Async Views
 
 An async view is a coroutine. The ASGI server can interleave many such coroutines on one worker, so while one view awaits a slow HTTP call, the worker serves others.
 
@@ -1199,7 +1199,7 @@ async def book_with_external_data(request, pk):
 
 The async ORM exposes async counterparts to the usual methods: `aget()`, `acreate()`, `afirst()`, `acount()`, `aexists()`, and async iteration with `async for book in Book.objects.all():`. Not every operation is async-native yet; lazy querysets still must be awaited or iterated to execute.
 
-#### Bridging Sync and Async: sync_to_async / async_to_sync
+### Bridging Sync and Async: sync_to_async / async_to_sync
 
 You cannot call blocking (synchronous) code directly inside an async view without stalling the entire event loop -- one blocking call freezes every other coroutine sharing that worker. Django gives you two adapters from `asgiref`:
 
@@ -1224,7 +1224,7 @@ def my_sync_caller():
 
 > **Common pitfall:** The classic mistake is querying the sync ORM (or any blocking call) directly inside an `async def` view. Django raises `SynchronousOnlyOperation` in many such cases to protect you, but not always -- a blocking `requests.get()` will run silently and block the event loop, quietly destroying the concurrency you switched to async to gain. Use the `a`-prefixed ORM methods or wrap blocking calls in `sync_to_async`.
 
-#### Django Channels: WebSockets and the Channel Layer
+### Django Channels: WebSockets and the Channel Layer
 
 Plain async views still follow the request/response model -- the connection closes when the view returns. **Django Channels** extends Django to handle persistent, bidirectional connections (WebSockets) for chat, live notifications, dashboards, and collaborative editing. The two core pieces are **consumers** (the WebSocket equivalent of a view) and the **channel layer** (a shared message bus, almost always Redis, that lets separate worker processes broadcast to each other's connected clients).
 
@@ -1298,11 +1298,11 @@ The channel layer is what makes this work across a horizontally scaled deploymen
 
 ---
 
-### Performance
+## Performance
 
 Caching (covered in the framework-agnostic chapter) is usually the highest-leverage performance tool, but several Django-specific techniques address memory, database connections, and profiling.
 
-#### cached_property
+### cached_property
 
 `@cached_property` turns a method into an attribute that is computed once per instance and cached on the instance thereafter. It is ideal for an expensive derived value accessed multiple times during a single request (e.g. several times in a template).
 
@@ -1324,7 +1324,7 @@ class Book(models.Model):
 
 > **Common pitfall:** The cache lives on the in-memory instance and lasts only as long as that instance does -- it is not shared across requests and does not survive `refresh_from_db()`. If the underlying reviews change during the request after the property was first read, `book.average_rating` will return the stale cached number. Use it for within-request memoization, not as a cross-request cache (that is what the cache framework is for).
 
-#### Database Connection Pooling: CONN_MAX_AGE and PgBouncer
+### Database Connection Pooling: CONN_MAX_AGE and PgBouncer
 
 By default Django opens a new database connection for every request and closes it at the end. Establishing a PostgreSQL connection is not free (TCP handshake, authentication, backend process fork), so under load this overhead adds up.
 
@@ -1351,7 +1351,7 @@ DATABASES = {
 
 **How to read this diagram:** Many application workers each believe they hold their own connection, but PgBouncer hands them connections from a small shared pool only for the duration of a transaction, then returns them. This keeps Postgres well under `max_connections` even with hundreds of workers. The caveat: in transaction-pooling mode you must disable Django's server-side cursors and not rely on session-level state, because a connection is not pinned to one client between transactions. With PgBouncer in front, set Django's `CONN_MAX_AGE` to `0` and let the pooler manage connection lifetime.
 
-#### Read Replicas via a Database Router
+### Read Replicas via a Database Router
 
 Read-heavy applications scale reads by sending them to one or more replica databases while writes go to the primary. Django supports this with a **database router** that decides which database each query uses.
 
@@ -1385,7 +1385,7 @@ class PrimaryReplicaRouter:
 
 > **Common pitfall:** Replicas lag behind the primary by milliseconds to seconds (replication lag). A read-your-own-writes pattern -- write a row, then immediately read it back from the replica -- can return stale or missing data. For flows that must see their own write, force the primary with `Model.objects.using("default").get(...)`.
 
-#### Iterating Large Result Sets: iterator() and chunking
+### Iterating Large Result Sets: iterator() and chunking
 
 Evaluating a normal queryset loads **every** matching row into memory at once and caches them. For a query returning millions of rows (a data export, a batch job), this exhausts memory.
 
@@ -1401,7 +1401,7 @@ for book in Book.objects.all().iterator(chunk_size=2000):
 
 `iterator()` tells Django not to cache the result set and to fetch rows in batches (`chunk_size`) using a server-side cursor where the backend supports it. Memory stays flat regardless of row count. The trade-off: because nothing is cached, iterating the same queryset twice runs the query twice, and `prefetch_related` requires a `chunk_size` to work with `iterator()`.
 
-#### Profiling: django-debug-toolbar and Silk
+### Profiling: django-debug-toolbar and Silk
 
 You cannot optimize what you cannot measure. Two tools surface where time and queries go:
 
@@ -1425,18 +1425,18 @@ SQL Panel (django-debug-toolbar)
 
 ---
 
-### Security (Built-in Protections)
+## Security (Built-in Protections)
 
 Django's design philosophy is "secure by default." Out of the box it defends against the most common web vulnerabilities, but several protections depend on configuration you must get right for production.
 
-#### Built-in Protections You Get for Free
+### Built-in Protections You Get for Free
 
 - **SQL injection:** The ORM parameterizes every query -- user input is sent as bound parameters, never concatenated into SQL. `Book.objects.filter(title=user_input)` is always safe. The only way to reintroduce the risk is `raw()` or `extra()` with manual string formatting; use their parameter arguments instead.
 - **XSS (cross-site scripting):** The template engine auto-escapes all variables by default, so a template variable like {% raw %}`{{ user_comment }}`{% endraw %} rendering `<script>` outputs harmless escaped text. You only lose this if you explicitly mark content safe with the `|safe` filter or `mark_safe()` -- so audit every such use.
 - **CSRF (cross-site request forgery):** `CsrfViewMiddleware` requires a secret token on all unsafe (POST/PUT/PATCH/DELETE) requests originating from forms. (DRF token/JWT APIs that are not cookie-authenticated are exempt by design.)
 - **Clickjacking:** `XFrameOptionsMiddleware` sets `X-Frame-Options: DENY`, preventing your pages from being embedded in a malicious `<iframe>`.
 
-#### Production Settings Checklist
+### Production Settings Checklist
 
 ```python
 # myproject/settings.py -- production hardening

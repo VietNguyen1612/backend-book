@@ -2,9 +2,9 @@
 
 # 1.1 Data Structures
 
-### Arrays & Linked Lists
+## Arrays & Linked Lists
 
-#### Arrays (Contiguous Memory Layout)
+### Arrays (Contiguous Memory Layout)
 
 An array stores elements in a contiguous block of memory. Because elements sit side-by-side, you can jump directly to any element by computing its address: `base_address + index * element_size`. This gives arrays **O(1) random access**, which is their defining advantage.
 
@@ -59,7 +59,7 @@ At length 40: size changed from 376 to 472 bytes
 
 **Cache locality** is another critical advantage of arrays. Because elements are stored contiguously, accessing sequential elements loads them into the CPU cache together (a single cache line is typically 64 bytes). This makes iterating over arrays significantly faster in practice than iterating over linked lists, even when the theoretical Big-O is the same.
 
-#### Linked Lists (Node-Based Memory Layout)
+### Linked Lists (Node-Based Memory Layout)
 
 A linked list stores each element in a separate **node** that contains the data and a pointer (reference) to the next node. Nodes can be scattered anywhere in memory.
 
@@ -107,7 +107,7 @@ task_queue.append("task_2")
 next_task = task_queue.popleft()  # dequeue: "task_1"
 ```
 
-#### Circular Buffers (Ring Buffers)
+### Circular Buffers (Ring Buffers)
 
 A circular buffer is a fixed-size array that wraps around. It maintains two pointers — `head` (read position) and `tail` (write position). When either pointer reaches the end of the array, it wraps back to the beginning.
 
@@ -177,9 +177,9 @@ rb.write("event_5")  # Reuses the slot freed by the read
 
 ---
 
-### Hash Tables
+## Hash Tables
 
-#### How Hash Tables Work
+### How Hash Tables Work
 
 A hash table maps keys to values using a **hash function** that converts a key into an array index. A good hash function must be:
 
@@ -210,7 +210,7 @@ Open Addressing (linear probing — find next empty slot):
 
 **Separate chaining** uses a linked list (or another structure) at each bucket. It handles high load gracefully but has worse cache performance due to pointer chasing. **Open addressing** stores everything in the array itself. When a collision occurs, it probes for the next open slot (linear probing, quadratic probing, or double hashing). It has better cache performance but degrades badly as the table fills up.
 
-#### Load Factor and Rehashing
+### Load Factor and Rehashing
 
 The **load factor** is `n/k` where `n` is the number of stored entries and `k` is the number of buckets. When the load factor exceeds a threshold (typically ~0.75 for chaining, ~0.5-0.7 for open addressing), the table **rehashes**: allocates a larger array (usually 2x) and reinserts all entries. This is an O(n) operation, but because it happens infrequently, insertions are **amortized O(1)**.
 
@@ -255,7 +255,7 @@ class SimpleHashTable:
                 self.put(key, value)
 ```
 
-#### Python dict Internals
+### Python dict Internals
 
 Since Python 3.6, `dict` preserves insertion order. Internally, Python uses **open addressing with perturbation** (a form of randomized probing). The implementation uses two arrays:
 
@@ -299,7 +299,7 @@ od.move_to_end("first")  # Move to the end
 # Now iteration order: "second", "first"
 ```
 
-#### Consistent Hashing
+### Consistent Hashing
 
 In distributed systems, when you have N cache servers and use `hash(key) % N` to assign keys, adding or removing a server causes almost all keys to be remapped. **Consistent hashing** solves this by placing both servers and keys on a virtual ring (hash space mapped to 0..2^32-1).
 
@@ -329,7 +329,7 @@ Adding Server D between A and B:
 
 **Real-world use:** Amazon DynamoDB, Apache Cassandra, Memcached (client-side), Nginx upstream consistent hashing, load balancers.
 
-#### Cuckoo Hashing
+### Cuckoo Hashing
 
 Standard open addressing degrades as the table fills: a lookup may probe many slots before finding (or failing to find) a key, so worst-case lookup is O(n). **Cuckoo hashing** trades a more expensive insert for a *guaranteed* worst-case **O(1) lookup**. It uses **two hash functions** and (conceptually) two tables. Every key lives in exactly one of two candidate buckets — `h1(key)` or `h2(key)` — so a lookup checks at most two locations, full stop.
 
@@ -374,7 +374,7 @@ insert "kiwi"   -> 32 kicks without settling -> returns False (rehash needed)
 
 **How to read this output:** Most inserts touch only one or two slots, but the last line is the failure mode that defines cuckoo hashing in practice: a long eviction chain that never finds an empty home. Returning `False` is the signal to rehash the whole table with fresh hash functions. In an interview the key point is the *asymmetry* — you accept occasional expensive inserts (and a capped load factor) to buy a hard ceiling of two reads per lookup, which is why cuckoo hashing shows up where predictable, bounded lookup latency matters (hardware routers, the **cuckoo filter** mentioned later in this chapter, some in-memory caches).
 
-#### Hash Flooding (Algorithmic Complexity Attack)
+### Hash Flooding (Algorithmic Complexity Attack)
 
 A hash table's O(1) guarantee is only an *average* over a good hash distribution. If an adversary can make many keys collide into the same bucket, every operation on that bucket degrades to a linear scan: **O(1) collapses to O(n)** (or O(n²) to insert n colliding keys). This is a **hash flooding** or **algorithmic complexity attack**. Any service that builds a dict/set from *untrusted* input is exposed — classically, web frameworks that parse POST form fields or JSON object keys straight into a dictionary. In 2011 this took down major frameworks (PHP, Python, Ruby, Java, Node) with a single small crafted request that pinned a CPU at 100%.
 
@@ -408,9 +408,9 @@ $ python -c 'print(hash("attacker-controlled-key"))'
 
 ---
 
-### Trees
+## Trees
 
-#### Binary Search Tree (BST)
+### Binary Search Tree (BST)
 
 A Binary Search Tree maintains the invariant that for every node, all values in the left subtree are smaller and all values in the right subtree are larger. This enables **O(log n) average** search, insertion, and deletion by halving the search space at each level.
 
@@ -485,7 +485,7 @@ print(tree.search(20))  # "value_20"
 print(tree.search(99))  # None
 ```
 
-#### Self-Balancing BSTs
+### Self-Balancing BSTs
 
 Self-balancing trees automatically restructure themselves after insertions and deletions to maintain logarithmic height.
 
@@ -508,7 +508,7 @@ Right Rotation, Left-Right Rotation, and Right-Left Rotation
 handle the other imbalance cases.
 ```
 
-#### B-Trees and B+ Trees
+### B-Trees and B+ Trees
 
 B-Trees are designed for **disk-based storage** systems. Unlike binary trees that have at most 2 children, a B-Tree node can have hundreds or thousands of children (high **branching factor**). This minimizes the number of disk reads needed to find a key because each node read from disk eliminates a large fraction of the search space.
 
@@ -553,7 +553,7 @@ class Product(models.Model):
 Product.objects.filter(price__range=(10, 50)).order_by('price')
 ```
 
-#### Heaps
+### Heaps
 
 A heap is a **complete binary tree** stored as an array where the parent-child relationship satisfies the heap property. In a **min-heap**, every parent is smaller than or equal to its children; in a **max-heap**, every parent is larger.
 
@@ -615,7 +615,7 @@ while task_queue:
 
 **Real-world use:** Dijkstra's shortest-path algorithm, task schedulers, median-finding in streams, merge K sorted lists, top-K problems.
 
-#### Trie (Prefix Tree)
+### Trie (Prefix Tree)
 
 A trie stores strings character-by-character along branches of a tree. Lookup time is **O(m)** where m is the length of the key, independent of how many keys are stored.
 
@@ -695,7 +695,7 @@ print(trie.search("pyth"))      # False
 
 **Real-world use:** Autocomplete/typeahead, IP routing tables (longest prefix match), spell checkers, DNS resolution, phone directories. A **compressed trie (radix tree)** merges single-child chains to save memory — for example, it stores "thon" as one node instead of four.
 
-#### Segment Trees and Fenwick Trees
+### Segment Trees and Fenwick Trees
 
 **Segment trees** answer range queries (sum, min, max over a range) in **O(log n)** while also supporting point updates in O(log n). They are built by recursively dividing the array into halves.
 
@@ -751,9 +751,9 @@ print(ft.range_sum(2, 4))  # Updated: 650
 
 ---
 
-### Graphs
+## Graphs
 
-#### Graph Representations
+### Graph Representations
 
 A graph consists of vertices (nodes) and edges (connections). The two primary representations have very different performance characteristics:
 
@@ -848,7 +848,7 @@ print(g.dfs("A"))                    # ['A', 'B', 'C', 'D'] (order may vary)
 print(g.shortest_path_bfs("A", "D")) # ['A', 'B', 'D']
 ```
 
-#### BFS vs DFS
+### BFS vs DFS
 
 **BFS (Breadth-First Search)** uses a queue and explores all neighbors at the current depth before moving deeper. It guarantees the **shortest path in unweighted graphs**. Time and space: O(V + E).
 
@@ -869,7 +869,7 @@ Applications: shortest path in unweighted graphs, social network "degrees of sep
 
 Applications: topological sort, cycle detection, finding connected components, solving mazes, generating permutations/combinations, dependency resolution (e.g., Django migration dependencies).
 
-#### Dijkstra's Algorithm
+### Dijkstra's Algorithm
 
 Dijkstra finds the **shortest path from a source to all other vertices** in a graph with non-negative edge weights. It uses a priority queue (min-heap) to always process the vertex with the smallest known distance next.
 
@@ -926,7 +926,7 @@ for city, dist in sorted(distances.items(), key=lambda x: x[1]):
 
 **A\* Search** extends Dijkstra with a **heuristic function** that estimates the remaining distance to the goal. It expands the node with the smallest `f(n) = g(n) + h(n)` where g(n) is the cost so far and h(n) is the heuristic estimate. With an admissible heuristic (never overestimates), A* finds the optimal path while exploring fewer nodes than Dijkstra. Used in game pathfinding, GPS route planning, and robotics.
 
-#### Topological Sort
+### Topological Sort
 
 A topological sort produces a **linear ordering** of vertices in a Directed Acyclic Graph (DAG) such that for every edge (u, v), u comes before v. It only exists for DAGs — the presence of a cycle makes topological ordering impossible.
 
@@ -980,7 +980,7 @@ print("Migration order:", order)
 
 **Real-world applications:** Build systems (Make, Bazel), task scheduling, Django migration ordering, package manager dependency resolution, course prerequisite planning, spreadsheet cell evaluation order.
 
-#### Minimum Spanning Tree
+### Minimum Spanning Tree
 
 A minimum spanning tree (MST) connects all vertices in a weighted undirected graph with the minimum total edge weight and no cycles.
 
@@ -990,13 +990,13 @@ A minimum spanning tree (MST) connects all vertices in a weighted undirected gra
 
 **Real-world use:** Network cable layout design, clustering (remove the K-1 most expensive edges to get K clusters), circuit board wiring, approximation algorithms for NP-hard problems.
 
-#### Strongly Connected Components
+### Strongly Connected Components
 
 In a directed graph, a **strongly connected component (SCC)** is a maximal set of vertices where every vertex is reachable from every other vertex. **Tarjan's algorithm** and **Kosaraju's algorithm** both find all SCCs in O(V + E).
 
 **Real-world use:** Compiler optimization (identifying groups of mutually recursive functions), social network analysis (finding tightly-knit communities), detecting circular dependencies.
 
-#### DAGs in Practice
+### DAGs in Practice
 
 Directed Acyclic Graphs appear everywhere in software systems:
 
@@ -1010,9 +1010,9 @@ Directed Acyclic Graphs appear everywhere in software systems:
 
 ---
 
-### Advanced Data Structures
+## Advanced Data Structures
 
-#### Skip List
+### Skip List
 
 A skip list is a **probabilistic alternative to balanced BSTs**. It works by maintaining multiple levels of linked lists, where each higher level skips over more elements. On average, it achieves **O(log n)** for search, insert, and delete.
 
@@ -1034,7 +1034,7 @@ Each element is "promoted" to a higher level with some probability (typically 0.
 
 **Real-world use:** Redis sorted sets (ZSET) use skip lists internally, LevelDB and RocksDB use skip lists for their memtable. Skip lists are simpler to implement correctly than red-black trees and are naturally suited for concurrent access (lock-free variants exist).
 
-#### Bloom Filter
+### Bloom Filter
 
 A Bloom filter is a space-efficient **probabilistic data structure** for testing set membership. It can tell you "definitely not in the set" or "probably in the set." **False positives are possible, but false negatives are impossible.**
 
@@ -1126,7 +1126,7 @@ print(is_username_available("zephyr"))   # True  (definitely not in set)
 - **Spell checkers:** Quick check if a word is in the dictionary before expensive lookup.
 - **Network security:** Checking URLs against a malware blocklist.
 
-#### HyperLogLog
+### HyperLogLog
 
 HyperLogLog (HLL) estimates the **cardinality (count of distinct elements)** of a set using only ~12KB of memory, regardless of set size. It achieves less than 2% standard error.
 
@@ -1160,7 +1160,7 @@ The core insight: if you hash elements and count the maximum number of leading z
 
 **Real-world use:** Counting unique visitors, unique search queries, unique IP addresses, distinct values in analytics dashboards. Used in Redis (`PFADD`/`PFCOUNT`), Google BigQuery, Apache Flink.
 
-#### LRU Cache
+### LRU Cache
 
 An **LRU (Least Recently Used) cache** evicts the entry that was accessed least recently when the cache is full. It is implemented with a **hash map + doubly-linked list**, giving O(1) for both `get` and `put`.
 
@@ -1245,7 +1245,7 @@ def get_user_profile(user_id):
 
 > **Common pitfall:** `@lru_cache` holds a strong reference to every cached argument and return value for the life of the process. Decorating an instance method caches `self`, which keeps every instance alive and silently leaks memory; using `maxsize=None` on a function with unbounded inputs grows without limit. Set an explicit `maxsize`, and prefer caching module-level functions over methods.
 
-#### Disjoint Set / Union-Find
+### Disjoint Set / Union-Find
 
 Union-Find tracks a collection of non-overlapping sets and supports two operations: `find` (which set does an element belong to?) and `union` (merge two sets). With **path compression** and **union by rank**, both operations run in nearly **O(1) amortized** time (technically O(alpha(n)), where alpha is the inverse Ackermann function, effectively constant).
 
@@ -1310,7 +1310,7 @@ print(f"MST edges: {mst}, Total cost: {cost}")
 
 **Real-world use:** Network connectivity checks, Kruskal's MST, detecting cycles in undirected graphs, image segmentation, social network friend group detection.
 
-#### Other Advanced Structures
+### Other Advanced Structures
 
 **Rope:** A balanced binary tree of strings. Each leaf holds a substring, and each internal node stores the total length of its left subtree. This enables O(log n) insert, delete, and concatenate operations on large strings — vastly superior to O(n) for array-backed strings. Used in text editors (VS Code, Xi editor).
 

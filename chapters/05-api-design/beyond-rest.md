@@ -2,7 +2,7 @@
 
 # 5.2 Beyond REST
 
-### GraphQL
+## GraphQL
 
 **Schema-First Design**
 
@@ -376,7 +376,7 @@ REST is better when: (a) your API is simple CRUD with flat resources, (b) HTTP c
 
 > **Key Takeaway:** GraphQL trades simplicity for flexibility. It shines in complex, multi-client environments but introduces challenges around caching, authorization complexity, and the N+1 problem. DataLoader is not optional -- it is a requirement for any production GraphQL API.
 
-### gRPC
+## gRPC
 
 **Protocol Buffers (protobuf)**
 
@@ -649,7 +649,7 @@ gRPC is ideal for inter-service communication (especially in polyglot environmen
 
 > **Key Takeaway:** gRPC provides substantially better performance than REST for internal service-to-service communication. Protocol Buffers enforce strong contracts and generate client code in any language. Use gRPC internally and expose REST (or GraphQL) externally.
 
-### WebSocket & Server-Sent Events
+## WebSocket & Server-Sent Events
 
 **WebSocket**
 
@@ -888,7 +888,7 @@ Additional scaling considerations: impose connection limits per server, implemen
 
 > **Key Takeaway:** Use SSE for one-way server-to-client streaming -- it is simpler, works with standard HTTP infrastructure, and reconnects automatically. Reserve WebSocket for truly bidirectional use cases. For multi-server deployments, you will need an external pub/sub system like Redis to bridge connections across instances.
 
-### Message Queues & Async APIs
+## Message Queues & Async APIs
 
 **RabbitMQ**
 

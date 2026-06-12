@@ -2,7 +2,7 @@
 
 # 10.1 Technical Leadership
 
-### Architecture Decision Records (ADR)
+## Architecture Decision Records (ADR)
 
 An Architecture Decision Record is a short document that captures a single significant architectural decision along with its full context. The most important aspect of an ADR is that it records **why** a decision was made, not merely what was decided. Teams that only document the "what" find themselves relitigating the same debates months later because nobody remembers the constraints, trade-offs, and reasoning that shaped the original choice.
 
@@ -12,7 +12,7 @@ ADRs prevent re-litigation of old decisions. When a new engineer joins the team 
 
 ADRs should be written for decisions that are architecturally significant: choices that affect the structure of the system, are difficult to reverse, or have long-term implications. You do not need an ADR for choosing a logging library, but you absolutely need one for choosing your primary database, your inter-service communication pattern, or your authentication strategy.
 
-#### Complete ADR Template Example
+### Complete ADR Template Example
 
 Below is a filled-in ADR for a realistic scenario: choosing a message broker for an event-driven microservices platform.
 
@@ -134,7 +134,7 @@ separate database), which defeats the purpose.
 
 ---
 
-### RFC / Design-Doc Process
+## RFC / Design-Doc Process
 
 An ADR records a decision *after* it has been reasoned through. A design doc (often called an RFC -- "Request for Comments" -- borrowing the term from the internet standards process) is the artifact that gets you *to* that decision. The core discipline is simple and counterintuitive to engineers who like to code: **write the design before you build anything non-trivial, and circulate it for feedback before you write production code.** The whole point is to surface objections, missing requirements, and better alternatives while they are still cheap to fix -- a paragraph rewritten in a doc costs minutes; the same flaw discovered after three weeks of implementation costs a sprint.
 
@@ -157,11 +157,11 @@ The most common failure mode is writing the doc *after* the code is already writ
 
 ---
 
-### Technical Debt Management
+## Technical Debt Management
 
 Technical debt is the implied cost of future rework caused by choosing an expedient solution now instead of a better approach that would take longer. Like financial debt, technical debt is not inherently bad -- sometimes borrowing is the right business decision -- but unmanaged debt compounds and eventually cripples a team's ability to deliver.
 
-#### The Tech Debt Quadrant
+### The Tech Debt Quadrant
 
 Martin Fowler's Technical Debt Quadrant classifies debt along two axes: **reckless vs. prudent** and **deliberate vs. inadvertent**. Understanding which quadrant a piece of debt falls into helps you decide how to address it.
 
@@ -200,7 +200,7 @@ Martin Fowler's Technical Debt Quadrant classifies debt along two axes: **reckle
             +------------------------------+------------------------------+
 ```
 
-#### Quantifying Impact
+### Quantifying Impact
 
 Technical debt must be communicated in business terms, not engineering jargon. Telling leadership "our code is messy" achieves nothing. Instead, quantify the impact using metrics that business stakeholders care about:
 
@@ -211,7 +211,7 @@ Technical debt must be communicated in business terms, not engineering jargon. T
 
 Present a concrete case: "Our payment service has accumulated significant debt. In the last quarter, it caused 14 production incidents (42 engineer-hours of incident response), slowed feature delivery by an estimated 35%, and took our newest hire 8 weeks to become productive in. Investing 4 weeks of a 3-person team to refactor the core payment pipeline would reduce incident rate by an estimated 60% and improve feature velocity by 25%, paying for itself within 2 quarters."
 
-#### Strategies for Managing Debt
+### Strategies for Managing Debt
 
 **The Boy Scout Rule** -- "Leave the code better than you found it." When an engineer touches a file to implement a feature, they make one small improvement: rename an unclear variable, extract a method, add a missing test, update a stale comment. No single change is large enough to be risky, but the cumulative effect over weeks and months is substantial. This works best for Prudent/Inadvertent debt.
 
@@ -223,7 +223,7 @@ Present a concrete case: "Our payment service has accumulated significant debt. 
 
 > **Common pitfall:** The 20% debt tax and the dedicated debt sprint both quietly collapse under deadline pressure -- the first feature emergency "borrows" the debt capacity, and it never comes back. If debt work isn't a tracked, sized item on the *same* board as feature work (with the same definition of done), it is invisible to planning and will always lose the prioritization fight. Protect the allocation by making it explicit and reporting on it, not by relying on goodwill.
 
-#### When to Rewrite vs. Refactor
+### When to Rewrite vs. Refactor
 
 Rewriting a system from scratch is almost always more expensive and risky than teams anticipate. Joel Spolsky famously called it "the single worst strategic mistake that any software company can make." Rewriting is appropriate **only** when all three conditions are met:
 
@@ -237,11 +237,11 @@ In all other cases, prefer incremental refactoring using techniques like the Str
 
 ---
 
-### Code Review Excellence
+## Code Review Excellence
 
 Code review is one of the highest-leverage activities in software engineering. Studies consistently show that code review catches 60-90% of defects before they reach production, which is a higher defect detection rate than most testing strategies. Beyond defect detection, code reviews spread knowledge across the team, enforce consistency, mentor junior engineers, and create a shared sense of ownership.
 
-#### What to Review
+### What to Review
 
 **Correctness** -- Does the code actually do what it claims to do? Walk through the logic mentally or on paper. Check edge cases: what happens with empty inputs, null values, maximum-size collections, concurrent access? Verify that error handling is complete -- not just the happy path.
 
@@ -257,7 +257,7 @@ Code review is one of the highest-leverage activities in software engineering. S
 
 Importantly, **style and formatting should be automated**, not argued about in reviews. Use linters (ESLint, Pylint, Checkstyle), formatters (Prettier, Black, google-java-format), and pre-commit hooks. Every minute spent debating tabs versus spaces in a code review is a minute not spent catching real bugs.
 
-#### Giving Constructive Feedback
+### Giving Constructive Feedback
 
 The way feedback is delivered matters as much as the feedback itself. Code review is a social process, and poorly delivered feedback can damage trust, discourage contribution, and create adversarial relationships.
 
@@ -271,13 +271,13 @@ The way feedback is delivered matters as much as the feedback itself. Code revie
 
 **Distinguish severity levels.** Not all feedback is equally important. Use prefixes like "nit:" for minor style suggestions, "suggestion:" for non-blocking improvements, and "blocker:" for issues that must be addressed before merging. This helps authors prioritize their response.
 
-#### Review Size
+### Review Size
 
 Research from SmartBear's study of Cisco's code review practices shows that review effectiveness drops dramatically after about 400 lines of meaningful changes (excluding generated code, test fixtures, and configuration). Beyond that threshold, reviewers begin to skim and miss defects.
 
 Break large changes into stacked PRs (also called PR chains or dependent PRs). Each PR in the stack should be a logically coherent unit: one PR introduces the database migration, the next adds the repository layer, the next adds the service logic, and the last adds the API endpoint. Each PR is small enough to review thoroughly, and the stack tells a clear narrative of the overall change.
 
-#### Code Review Checklist Example
+### Code Review Checklist Example
 
 The following checklist can be adapted and used by reviewers on your team. Not every item applies to every PR -- use judgment.
 

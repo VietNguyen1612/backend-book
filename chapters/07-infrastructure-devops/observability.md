@@ -2,9 +2,9 @@
 
 # 7.3 Observability
 
-### Logging
+## Logging
 
-#### Structured Logging
+### Structured Logging
 
 Traditional log messages are unstructured strings: `"User 42 logged in from 10.0.0.1"`. They are easy for humans to read but painful for machines to parse. Structured logging outputs each log entry as a JSON object with explicit, typed fields. This makes logs machine-parseable, searchable, filterable, and aggregatable.
 
@@ -204,7 +204,7 @@ The resulting log output in production looks like this (one JSON object per line
 
 Every log line carries the full context. You can search for all logs from request `a1b2c3d4`, or all orders by user `42`, or all requests slower than 100ms, without relying on regex or manual parsing.
 
-#### Log Levels
+### Log Levels
 
 Log levels control the verbosity of your logging output. Choosing the right level for each log statement is important for keeping production logs useful without drowning in noise.
 
@@ -220,7 +220,7 @@ Log levels control the verbosity of your logging output. Choosing the right leve
 
 Never log sensitive data: passwords, access tokens, credit card numbers, personally identifiable information (PII). Implement redaction processors in your logging pipeline that strip or mask sensitive fields before they reach your log aggregator.
 
-#### Correlation IDs
+### Correlation IDs
 
 In a microservice architecture, a single user request often flows through multiple services. Without a correlation mechanism, it is impossible to trace which logs belong to the same user interaction across services.
 
@@ -230,7 +230,7 @@ A **trace ID** (from distributed tracing systems like OpenTelemetry, Jaeger, or 
 
 Propagation is straightforward: when service A calls service B, it includes the trace/request ID in an HTTP header (commonly `X-Request-ID` or W3C `traceparent`). Service B reads it and binds it to its logging context.
 
-#### Log Aggregation
+### Log Aggregation
 
 In a distributed system with dozens of services running across many containers, you cannot SSH into individual machines to read logs. A log aggregation system collects logs from all sources, stores them centrally, indexes them, and provides a search and visualization interface.
 
@@ -242,7 +242,7 @@ In a distributed system with dozens of services running across many containers, 
 
 **Cloud-native:** AWS CloudWatch Logs, Google Cloud Logging, Azure Monitor Logs. Lowest operational overhead if you are already on that cloud.
 
-#### Sampling
+### Sampling
 
 For high-traffic services (thousands of requests per second), logging every single request in full detail creates enormous volume and cost. Sampling strategies reduce volume while preserving visibility into problems.
 
@@ -256,9 +256,9 @@ A common practical approach: always log errors and slow requests (> P99 latency)
 
 ---
 
-### Metrics & Monitoring
+## Metrics & Monitoring
 
-#### Prometheus
+### Prometheus
 
 Prometheus is the de facto standard for metrics collection in cloud-native environments. It uses a **pull-based** model: Prometheus scrapes HTTP endpoints (usually `/metrics`) on your services at configured intervals. Each service exposes metrics in Prometheus's text-based exposition format.
 
@@ -425,7 +425,7 @@ groups:
 
 {% endraw %}
 
-#### Grafana and PromQL
+### Grafana and PromQL
 
 Grafana is the standard visualization tool for Prometheus metrics. You build dashboards composed of panels, each panel displaying one or more PromQL queries as graphs, gauges, tables, or heatmaps.
 
@@ -524,7 +524,7 @@ job_queue_depth{queue="emails"}
 websocket_active_connections
 ```
 
-#### RED Method
+### RED Method
 
 The RED method provides a simple framework for monitoring request-driven services (APIs, web servers, microservices). For every service, track three metrics:
 
@@ -534,7 +534,7 @@ The RED method provides a simple framework for monitoring request-driven service
 
 **Duration:** How long requests take to process, as a distribution. Always look at percentiles (P50, P95, P99), not just averages. An average of 200ms can hide the fact that 1% of users wait 10 seconds. Duration degradation often precedes errors -- it is an early warning signal.
 
-#### USE Method
+### USE Method
 
 The USE method is for monitoring infrastructure resources (CPU, memory, disk, network, database connections, thread pools). For every resource, track:
 
@@ -544,7 +544,7 @@ The USE method is for monitoring infrastructure resources (CPU, memory, disk, ne
 
 **Errors:** Resource-level error events. Disk read errors, network packet drops, OOM kills, connection timeouts.
 
-#### Four Golden Signals (Google SRE)
+### Four Golden Signals (Google SRE)
 
 Google's SRE book defines four signals that every service should monitor:
 
@@ -556,7 +556,7 @@ Google's SRE book defines four signals that every service should monitor:
 
 **Saturation:** How "full" your service is. This is typically the most constrained resource (CPU, memory, I/O, database connections). Saturation is predictive: it tells you when you are approaching capacity limits, before errors start occurring.
 
-#### Alerting
+### Alerting
 
 Effective alerting is critical, but excessive or poorly designed alerting is counterproductive -- it leads to alert fatigue where on-call engineers start ignoring alerts.
 
@@ -570,7 +570,7 @@ Effective alerting is critical, but excessive or poorly designed alerting is cou
 
 **Include context in alerts.** Alert messages should contain enough information for the responder to start investigating immediately: which service, which environment, the current metric value versus the threshold, a link to the relevant Grafana dashboard, and a link to the runbook.
 
-#### Error Tracking and APM
+### Error Tracking and APM
 
 Metrics tell you *that* error rate rose; **error tracking** tells you *which* exception, *where*, and *how often*. Tools like Sentry (and GlitchTip, Rollbar, Bugsnag) capture every unhandled exception with its full stack trace, the request context, and the user/release that hit it, then **group** identical errors into a single issue so 10,000 occurrences of the same `KeyError` become one ticket with a count and a sparkline — not 10,000 log lines you have to grep. The killer features are **deduplication/grouping** (by stack-trace fingerprint), **release health** (this error started in `v1.4.2`, so the deploy is the suspect), and **regression detection** (an issue you marked resolved reappeared). You wire it in with a small SDK that hooks your framework's exception handler:
 
@@ -593,7 +593,7 @@ sentry_sdk.init(
 
 The mental model: **metrics** for cheap always-on aggregates and alerting, **error tracking** for grouped exceptions and release health, **APM/tracing** for per-request latency breakdowns when you need to find *where* the time or the failure went. They are complementary, joined by `trace_id`/`request_id`.
 
-#### On-Call and Runbooks
+### On-Call and Runbooks
 
 Observability only pays off if a human can act on it at 3 a.m. That requires operational structure, not just dashboards.
 
@@ -618,7 +618,7 @@ annotations:
 
 This connects to the **blameless postmortem** culture: after a significant incident, the team writes up the timeline, root cause, and action items without assigning individual blame — the focus is on fixing the *system* (better alerts, a missing runbook step, a fragile dependency) so the same incident cannot recur.
 
-#### Capacity Planning and Cost (FinOps)
+### Capacity Planning and Cost (FinOps)
 
 Saturation (from the USE method and the golden signals) is not just a reliability signal — it is a **capacity** signal. Watching utilization and saturation over time tells you when you are heading toward a limit *before* you hit it: a connection pool trending from 60% to 90% over a month, a disk filling 2% a week, CPU headroom shrinking as traffic grows. Capacity planning is using these trends to provision ahead of demand rather than scrambling during an incident.
 

@@ -2,9 +2,9 @@
 
 # 1.2 Algorithms & Complexity
 
-### Big-O Analysis
+## Big-O Analysis
 
-#### Understanding Complexity Classes
+### Understanding Complexity Classes
 
 Big-O notation describes how an algorithm's resource usage (time or space) scales with input size. It captures the **growth rate** and ignores constant factors, because at large enough scale, the growth rate dominates.
 
@@ -75,7 +75,7 @@ def all_subsets(items):
 
 > **Common pitfall:** The `O(1)` average on `dict.get()` and the `O(n log n)` on `sorted()` describe *growth rate*, not wall-clock time. A constant-factor-heavy O(n) pass over a NumPy array can beat a "better" O(log n) pure-Python loop for the n values you actually have. In interviews state the Big-O; in production profile the real input sizes before optimizing.
 
-#### Amortized Analysis
+### Amortized Analysis
 
 Amortized analysis looks at the **average cost per operation over a sequence**, not the worst case of a single operation. The classic example is Python's `list.append()`:
 
@@ -85,7 +85,7 @@ Amortized analysis looks at the **average cost per operation over a sequence**, 
 
 This same principle applies to hash table resizing, Union-Find with path compression, and splay tree operations.
 
-#### Best / Average / Worst Case
+### Best / Average / Worst Case
 
 Different inputs can cause the same algorithm to perform very differently:
 
@@ -96,7 +96,7 @@ Different inputs can cause the same algorithm to perform very differently:
 | Binary search | O(1) | O(log n) | O(log n) | Best: target is middle element |
 | Insertion sort | O(n) | O(n^2) | O(n^2) | Best: already sorted |
 
-#### Space-Time Tradeoffs
+### Space-Time Tradeoffs
 
 Almost every optimization decision involves trading one resource for another:
 
@@ -105,7 +105,7 @@ Almost every optimization decision involves trading one resource for another:
 - **Streaming algorithms** (trade accuracy for space): HyperLogLog, Count-Min Sketch, reservoir sampling — process data in one pass with bounded memory at the cost of approximate answers.
 - **Compression** (trade CPU time for space/bandwidth): gzip responses, compressed database pages — CPU decompresses on read.
 
-#### Master Theorem
+### Master Theorem
 
 For divide-and-conquer recurrences of the form **T(n) = aT(n/b) + O(n^d)**:
 
@@ -124,11 +124,11 @@ Examples:
 
 ---
 
-### Algorithmic Techniques (Problem-Solving Patterns)
+## Algorithmic Techniques (Problem-Solving Patterns)
 
 Most interview problems — and a surprising amount of real backend code — are instances of a handful of recurring patterns. Recognizing the pattern is the whole battle; the implementation usually follows mechanically.
 
-#### Two Pointers
+### Two Pointers
 
 Walk a sequence with two indices instead of nesting two loops. The classic uses: find a pair summing to a target in a **sorted** array, remove duplicates in place, partition, or check a palindrome. Moving the pointers based on the current comparison collapses an O(n²) brute force into a single **O(n)** pass.
 
@@ -151,7 +151,7 @@ print(two_sum_sorted([1, 3, 4, 6, 8, 11], 10))  # (2, 3)  -> 4 + 6
 
 The key insight: because the array is sorted, each comparison lets you *discard* a whole side, so each element is visited at most once.
 
-#### Sliding Window
+### Sliding Window
 
 A sliding window maintains a contiguous range `[left, right)` over a sequence and answers a question about "the best/longest/shortest subarray satisfying a constraint." There are two flavors:
 
@@ -181,7 +181,7 @@ print(longest_unique_substring("bbbbb"))      # 1  ("b")
 
 **How to read this output:** Each character is added once (by `right`) and removed at most once (by advancing `left`), so the whole scan is O(n) even though it *feels* like it re-examines characters. This is the exact structure behind **rate-limiting sliding windows** and **time-windowed aggregations** in backend systems: you keep a running window over a stream and update it incrementally instead of recomputing from scratch on every event.
 
-#### Binary Search on the Answer
+### Binary Search on the Answer
 
 Binary search is not only for searching a sorted array. When a problem asks "what is the minimum/maximum X that works?" and the predicate `works(X)` is **monotonic** (if `X` works, every larger X works — or vice versa), you can binary-search over the *answer space* and call `works()` as the comparison. This turns "try every possible value" into O(log(range) · cost-of-check).
 
@@ -211,7 +211,7 @@ print(min_capacity_to_ship([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], days=5))  # 15
 
 This pattern shows up directly in **capacity planning** ("smallest instance size that meets the SLA"), **allocation** ("minimize the maximum load on any worker"), and rate/quota tuning.
 
-#### Backtracking
+### Backtracking
 
 Backtracking builds a solution incrementally and **abandons (prunes)** any partial candidate the moment it cannot possibly succeed. It is depth-first search over the space of choices. Permutations, combinations, subsets, N-queens, Sudoku, and constraint-satisfaction problems are all backtracking.
 
@@ -235,7 +235,7 @@ print(permutations([1, 2, 3]))
 
 The `current.pop()` is the heart of the technique: after exploring a branch, you undo the choice so the parent frame can try the next one. Effective backtracking lives or dies on **pruning** — the earlier you can reject a doomed partial solution, the smaller the search tree.
 
-#### Greedy
+### Greedy
 
 A greedy algorithm makes the **locally optimal choice** at each step and never reconsiders. It is correct only when the problem has the **greedy-choice property** (a global optimum can be reached by local choices) plus optimal substructure. Interval scheduling (always pick the earliest-finishing compatible interval), Huffman coding, and Dijkstra are greedy and provably correct.
 
@@ -255,11 +255,11 @@ print(max_non_overlapping([(1, 3), (2, 5), (4, 7), (6, 8)]))  # 2  -> picks (1,3
 
 > **Common pitfall:** Greedy *feels* right far more often than it *is* right. Sorting by start time (instead of end time) above gives a wrong answer; many "obvious" greedy strategies fail on adversarial inputs. Before trusting a greedy solution, either prove the greedy-choice property or test it against a brute-force/DP solution on random inputs — a silently-wrong greedy is a classic production bug.
 
-#### Divide and Conquer
+### Divide and Conquer
 
 Split the problem into independent subproblems, solve them recursively, and combine the results. Merge sort, quickselect, FFT, and Karatsuba multiplication are all divide-and-conquer; their running times come straight from the Master Theorem above. The pattern parallelizes naturally because the subproblems are independent (map-reduce is divide-and-conquer at cluster scale).
 
-#### Bit Manipulation
+### Bit Manipulation
 
 Treating integers as bitsets enables compact flags and constant-time tricks that are common in low-level/high-performance code:
 
@@ -292,9 +292,9 @@ print(single_number([4, 1, 2, 1, 2]))  # 4
 
 ---
 
-### Sorting
+## Sorting
 
-#### Comparison-Based Sorts
+### Comparison-Based Sorts
 
 All comparison-based sorting algorithms have a theoretical lower bound of **Omega(n log n)** — you cannot do better if your only operation is comparing two elements. The three main comparison sorts each have different strengths:
 
@@ -368,7 +368,7 @@ def merge_sort(arr):
 
 > **Common pitfall:** This recursive `quicksort` recurses to a depth of O(log n) on average, but a naive (non-random) pivot on already-sorted input recurses n deep and hits Python's default recursion limit (1000) — a `RecursionError` in production on the very input people forget to test. Random pivots fix the average case; an explicit stack or `sys.setrecursionlimit` is needed only if you must guarantee it.
 
-#### Non-Comparison Sorts
+### Non-Comparison Sorts
 
 When keys are integers (or can be mapped to integers) within a known range, non-comparison sorts can beat the O(n log n) barrier:
 
@@ -419,7 +419,7 @@ print(radix_sort([170, 45, 75, 90, 802, 24, 2, 66]))
 
 **How to read this output:** The numbers come out fully sorted even though each pass only looks at one digit. That only works because the per-digit counting sort is *stable* — after sorting on the ones digit, the tens-digit pass preserves the ones-digit order for ties, and so on. Break stability (e.g. iterate `arr` forward instead of `reversed`) and the result is silently wrong, which is exactly the kind of bug that passes small tests and corrupts a production sort of fixed-width keys like timestamps or zero-padded IDs.
 
-#### Stability in Sorting
+### Stability in Sorting
 
 A sort is **stable** if it preserves the relative order of elements with equal keys. This matters when sorting by multiple criteria:
 
@@ -443,7 +443,7 @@ employees.sort(key=lambda e: e[0])        # Sort by department (stable!)
 employees.sort(key=lambda e: (e[0], e[1]))
 ```
 
-#### Python's Timsort
+### Python's Timsort
 
 Python uses **Timsort**, a hybrid of merge sort and insertion sort. It identifies naturally occurring "runs" (already sorted subsequences), extends short runs using insertion sort, then merges runs using a modified merge sort. Timsort is **stable**, **adaptive** (faster on partially sorted data), and guarantees **O(n log n) worst case**.
 
@@ -464,7 +464,7 @@ sorted(words, key=str.lower)       # Case-insensitive sort
 # Product.objects.order_by('category', 'price')  # Multi-key
 ```
 
-#### External Sorting
+### External Sorting
 
 When data is too large to fit in RAM, **external sorting** uses a merge sort variant:
 
@@ -477,11 +477,11 @@ This is the technique used by database query processors for `ORDER BY` on large 
 
 ---
 
-### Selection & Order Statistics
+## Selection & Order Statistics
 
 Often you do not need a fully sorted array — you need *one* element by rank (the median, the 95th percentile) or the *top few*. Fully sorting is O(n log n); these problems can be solved faster.
 
-#### Quickselect
+### Quickselect
 
 Quickselect finds the **k-th smallest element in O(n) average time**. It uses quicksort's partition step, but instead of recursing into both halves, it recurses only into the side that contains rank `k`. Each step discards (on average) half the array, giving the linear average cost — though, like quicksort, a bad pivot gives O(n²) worst case (a random pivot avoids it in practice).
 
@@ -526,7 +526,7 @@ print(quickselect(data, 8))  # 9  (largest)
 
 **How to read this output:** Each call returns the element that *would* sit at index `k` if the array were sorted, without ever fully sorting it. The win is real when you need a percentile or median once: O(n) average versus O(n log n) for a full sort. The catch — and a good interview point — is the worst case: on adversarial input a fixed pivot degrades to O(n²), which is why the randomized pivot above (or the median-of-medians variant for a *guaranteed* O(n)) matters in any code path an attacker can feed.
 
-#### Heap-Based Top-K
+### Heap-Based Top-K
 
 When you want the **k largest (or smallest) of n** items and `k ≪ n` — or the data is a *stream* you cannot fully hold — maintain a size-`k` heap. Each item costs O(log k) to consider, giving **O(n log k)** total, which beats sorting (O(n log n)) when k is small and uses only O(k) memory.
 
@@ -564,9 +564,9 @@ print(top_k_stream(stream, 3))         # [89, 78, 67]
 
 ---
 
-### Dynamic Programming
+## Dynamic Programming
 
-#### Core Concepts
+### Core Concepts
 
 Dynamic programming (DP) applies when a problem has two properties:
 
@@ -619,7 +619,7 @@ def fib_optimized(n):
 
 > **Common pitfall:** `@lru_cache` keys on the *arguments*, so it only works when every argument is hashable. Decorate a function that takes a `list` or `dict` (a common DP setup like `solve(grid, i, j)`) and you get `TypeError: unhashable type: 'list'`. Convert mutable state to a `tuple` first, or carry it via indices/closure instead of arguments. Also note the cache is process-global and never evicts with `maxsize=None` — a memory leak if keyed on unbounded user input.
 
-#### Classic DP Patterns
+### Classic DP Patterns
 
 **0/1 Knapsack** — given items with weights and values, maximize value within a weight capacity:
 
@@ -721,7 +721,7 @@ def coin_change(coins, amount):
 print(coin_change([1, 5, 10, 25], 63))  # 6 (25+25+10+1+1+1)
 ```
 
-#### State Machine DP
+### State Machine DP
 
 Some problems are best modeled as transitions between states:
 
@@ -755,7 +755,7 @@ prices = [1, 2, 3, 0, 2]
 print(max_profit_with_cooldown(prices))  # 3 (buy@1, sell@3, cooldown, buy@0, sell@2)
 ```
 
-#### Bitmask DP
+### Bitmask DP
 
 For problems involving subsets of a small set (n <= 20), represent each subset as a bitmask:
 
@@ -811,9 +811,9 @@ print(tsp(dist))  # 80 (0->1->3->2->0)
 
 ---
 
-### Graph Algorithms (Extended)
+## Graph Algorithms (Extended)
 
-#### Floyd-Warshall
+### Floyd-Warshall
 
 Floyd-Warshall computes the **shortest paths between all pairs of vertices** in O(V^3). It works by iteratively considering whether going through an intermediate vertex k gives a shorter path between any pair (i, j).
 
@@ -851,13 +851,13 @@ def floyd_warshall(n, edges):
 
 Best suited for **small, dense graphs** (V < ~500) where you need all pairs of shortest paths, such as computing distances between all pairs of data centers.
 
-#### Network Flow
+### Network Flow
 
 **Ford-Fulkerson / Edmonds-Karp** solves the maximum flow problem: given a network with source, sink, and edge capacities, find the maximum flow from source to sink.
 
 Applications: maximum bipartite matching (assigning workers to tasks), project selection (choosing projects with dependencies), image segmentation, network bandwidth optimization.
 
-#### Eulerian Paths
+### Eulerian Paths
 
 An **Eulerian path** visits every edge exactly once. It exists if and only if the graph has exactly 0 or 2 vertices with odd degree. An **Eulerian circuit** visits every edge and returns to the starting vertex; it requires all vertices to have even degree.
 
@@ -867,9 +867,9 @@ Applications: DNA sequence assembly (de Bruijn graphs), circuit board routing, g
 
 ---
 
-### String Algorithms
+## String Algorithms
 
-#### KMP (Knuth-Morris-Pratt)
+### KMP (Knuth-Morris-Pratt)
 
 KMP finds all occurrences of a pattern in a text in **O(n + m)** time. The key insight is the **failure function** (also called partial match table), which tells you how far to skip when a mismatch occurs, avoiding redundant comparisons.
 
@@ -922,19 +922,19 @@ print(kmp_search(text, "ABAB"))       # [0, 10, 15]
 
 **How to read this output:** The returned lists are the 0-based start indices of every match. The second search is the interesting one: `"ABAB"` matches at index 15, then *again* at... no — indices 0, 10, 15 are non-overlapping here, but note KMP deliberately resets `j = failure[j - 1]` after a hit rather than to 0, so it *can* report overlapping matches (searching `"AA"` in `"AAAA"` returns `[0, 1, 2]`). That single-pass, no-backtracking behavior is the whole point: KMP never re-examines a text character, giving the guaranteed O(n + m) that naive `text.find` in a loop cannot promise on adversarial inputs like `"AAAA...AAB"`.
 
-#### Rabin-Karp
+### Rabin-Karp
 
 Rabin-Karp uses a **rolling hash** to find pattern matches. It computes a hash for the pattern and then slides a window across the text, updating the hash in O(1) for each position. When hashes match, it verifies with a character-by-character comparison to avoid false positives.
 
 It excels at **multi-pattern matching**: hash all patterns and look for any match in a single pass through the text. Used in plagiarism detection tools and content fingerprinting.
 
-#### Aho-Corasick
+### Aho-Corasick
 
 Aho-Corasick builds an automaton from multiple patterns that searches for all of them simultaneously in a single pass through the text in **O(n + m + z)** time, where z is the number of matches. It is essentially a trie with failure links (like KMP's failure function, but for a set of patterns).
 
 **Real-world use:** Intrusion detection systems (matching known attack signatures), content filtering, antivirus pattern scanning, log analysis.
 
-#### Suffix Array / Suffix Tree
+### Suffix Array / Suffix Tree
 
 A **suffix array** is a sorted array of all suffixes of a string. It can be constructed in O(n) time and enables O(m log n) substring search (where m is the query length). A **suffix tree** provides O(m) substring search but uses more memory.
 
@@ -944,11 +944,11 @@ A **suffix array** is a sorted array of all suffixes of a string. It can be cons
 
 ---
 
-### Randomized & Streaming Algorithms
+## Randomized & Streaming Algorithms
 
 Streaming algorithms process data in a **single pass** with **memory far smaller than the data**, accepting randomness or approximation in exchange. They are essential when the input is too large to store or arrives continuously (logs, metrics, clickstreams). (The probabilistic *data structures* — Bloom filter, HyperLogLog, Count-Min Sketch — live in the Data Structures section; here we focus on the algorithmic techniques.)
 
-#### Reservoir Sampling
+### Reservoir Sampling
 
 Reservoir sampling selects **k uniformly random items from a stream of unknown length** in one pass, using only O(k) memory — so every element has an equal probability of being chosen even though you never know the total count in advance. Keep the first k items; for each later item `i` (0-indexed), keep it with probability `k/(i+1)`, evicting a random current member if so.
 
@@ -978,7 +978,7 @@ print(sample)   # e.g. [428193, 12, 750021] — different every run, each item e
 
 **How to read this output:** You get a uniform random sample without ever knowing the stream length up front and without buffering it — exactly what you need for **log sampling** (keep 1% of requests for tracing), **A/B test bucketing**, and **telemetry** where storing every event is impossible. The non-obvious part for an interview: the `k/(i+1)` probability is precisely what keeps the distribution uniform as the stream grows; a fixed "keep with probability p" would over-represent early items.
 
-#### Misra-Gries / Heavy Hitters
+### Misra-Gries / Heavy Hitters
 
 The **heavy hitters** problem asks: which elements occur more than `n/k` times in a stream? You cannot keep an exact count per distinct element (that is unbounded memory), so the **Misra-Gries** algorithm keeps only `k-1` counters. Increment a counter for a tracked item; if a new item appears and all counters are taken, decrement *all* counters and drop any that hit zero. After one pass, the surviving counters are a superset of the true heavy hitters (a second pass can verify exact counts).
 
@@ -1005,7 +1005,7 @@ print(misra_gries(traffic, k=2))   # {'A': ...} -> "A" is the dominant heavy hit
 
 **Real-world use:** network "top talkers" (which IPs send the most packets), trending-content detection, and finding the hot keys overloading a cache or shard — all with bounded memory regardless of how many distinct items flow through.
 
-#### Monte Carlo vs Las Vegas
+### Monte Carlo vs Las Vegas
 
 Randomized algorithms come in two flavors, and the distinction is a common interview question:
 

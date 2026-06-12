@@ -4,11 +4,11 @@
 
 Architectural styles are high-level strategies for organizing a system. The choice of architectural style has far-reaching consequences for development workflow, deployment, scaling, and team organization.
 
-### Monolith
+## Monolith
 
 A monolith is a single deployment unit where all components run in the same process. Despite its reputation, a monolith is the correct starting point for most projects. The key is to build a **modular monolith**: a single deployment unit that is internally organized into modules with clear boundaries.
 
-#### Modular Monolith Structure
+### Modular Monolith Structure
 
 ```
 my_project/
@@ -73,7 +73,7 @@ inventory_service = InventoryService()
 order_service = OrderService(inventory=inventory_service)
 ```
 
-#### Benefits of the Monolith
+### Benefits of the Monolith
 
 - **Simple deployment**: one artifact, one process, one server (or a few behind a load balancer)
 - **Easier debugging**: a single stack trace tells the whole story, no distributed tracing needed
@@ -81,7 +81,7 @@ order_service = OrderService(inventory=inventory_service)
 - **ACID transactions**: a single database means real transactions across domains (e.g., create order AND deduct inventory in one transaction)
 - **Simpler development workflow**: one repository, one CI pipeline, one set of dependencies
 
-#### When to Move Away
+### When to Move Away
 
 Move away from a monolith when:
 
@@ -91,7 +91,7 @@ Move away from a monolith when:
 - **Deployment frequency** conflicts -- one team needs to deploy hourly, another is on a weekly cycle
 - **Module boundaries** are well-understood and stable (if they are not, you will draw the wrong service boundaries)
 
-#### Layered (N-Tier) Architecture
+### Layered (N-Tier) Architecture
 
 The layered (or n-tier) architecture is the most common way to organize a monolith internally: stack the code into horizontal layers where each layer may only call the one directly beneath it. The canonical stack is **presentation -> business logic -> data access -> database**.
 
@@ -120,11 +120,11 @@ It is simple, universally understood, and maps directly onto a default Django pr
 
 ---
 
-### Microservices
+## Microservices
 
 Microservices architecture decomposes a system into small, independently deployable services, each owning its own data and organized around a business capability. It is a powerful approach for large organizations but comes with significant operational complexity.
 
-#### Characteristics
+### Characteristics
 
 - **Independently deployable**: each service can be deployed without coordinating with other teams
 - **Own their data**: each service has its own database; no shared database across services
@@ -132,7 +132,7 @@ Microservices architecture decomposes a system into small, independently deploya
 - **Decentralized governance**: each team picks its own technology stack, deployment strategy, and data store
 - **Design for failure**: networks are unreliable; every external call can fail; circuit breakers, retries, and timeouts are mandatory
 
-#### Data Ownership
+### Data Ownership
 
 Each microservice owns its database. This is a non-negotiable rule. Sharing a database between services creates hidden coupling -- a schema change in one service breaks another.
 
@@ -156,7 +156,7 @@ Each microservice owns its database. This is a non-negotiable rule. Sharing a da
 
 Data duplication across services is **expected and intentional**. The Order Service may store a denormalized copy of the customer name. Consistency between services is **eventual**, not immediate.
 
-#### Communication Patterns
+### Communication Patterns
 
 - **Synchronous** (HTTP/gRPC): for queries where the caller needs an immediate response. Use for reads and simple lookups. API gateway sits in front for external access.
 - **Asynchronous** (events/messages): for commands and notifications where the caller does not need an immediate result. Use for writes that trigger downstream processing.
@@ -210,7 +210,7 @@ def handle_order_event(event: dict) -> None:
             reserve_stock(item["product_id"], item["quantity"])
 ```
 
-#### Challenges
+### Challenges
 
 Microservices introduce a class of problems that do not exist in monoliths:
 
@@ -221,7 +221,7 @@ Microservices introduce a class of problems that do not exist in monoliths:
 - **Testing**: unit tests are easy, but integration tests across services require contract testing (Pact)
 - **Service discovery**: services need to find each other (Consul, Kubernetes DNS)
 
-#### Saga Pattern
+### Saga Pattern
 
 When a business operation spans multiple services, you cannot use a single database transaction. The Saga pattern replaces one distributed transaction with a sequence of local transactions, each with a compensating action (undo) in case of failure.
 
@@ -316,7 +316,7 @@ class PlaceOrderSaga:
                     self.order_svc.cancel(state.order_id)
 ```
 
-#### Strangler Fig Pattern
+### Strangler Fig Pattern
 
 When migrating from a monolith to microservices, never do a big-bang rewrite. The Strangler Fig pattern incrementally replaces monolith functionality with new services:
 
@@ -352,7 +352,7 @@ Phase 4: Monolith is empty and can be decommissioned
 
 Route requests at the proxy/API gateway level. Both the old and new systems run simultaneously. Gradually move functionality, one bounded context at a time. This reduces risk because you can always fall back to the monolith for any given route.
 
-#### Conway's Law
+### Conway's Law
 
 > "Any organization that designs a system will produce a design whose structure is a copy of the organization's communication structure." -- Melvin Conway, 1968
 
@@ -360,7 +360,7 @@ Conway's Law observes that software architecture inevitably mirrors the communic
 
 The practical corollary is the **Inverse Conway Maneuver**: instead of fighting the law, *deliberately structure your teams* to produce the architecture you want. If you want three independently-deployable services owned by three autonomous teams, organize three small, long-lived teams each owning one bounded context end-to-end (the "two-pizza team" / stream-aligned team idea). Align team boundaries with service boundaries with bounded-context boundaries, and the architecture, the org chart, and the domain model all reinforce each other. Misalign them and you will spend your time on integration meetings.
 
-#### When NOT to Use Microservices
+### When NOT to Use Microservices
 
 Microservices are an answer to *organizational* scaling problems, and adopting them without that problem is one of the most expensive mistakes in backend engineering. Treat the following as a checklist of reasons to stay with a (modular) monolith:
 
@@ -372,7 +372,7 @@ Microservices are an answer to *organizational* scaling problems, and adopting t
 
 If several of these apply, the right move is a modular monolith with clean internal boundaries -- which keeps the option to extract services later, once the boundaries are proven and the team has grown.
 
-#### Service Mesh
+### Service Mesh
 
 As the number of services grows, every service ends up re-implementing the same cross-cutting network concerns: mutual TLS, retries, timeouts, circuit breaking, load balancing, and telemetry. A **service mesh** extracts these into a **sidecar proxy** (typically Envoy) deployed alongside each service instance, so the application code makes a plain localhost call and the proxy handles the reliability and security mechanics. The proxies form the *data plane*; a central *control plane* (Istio, Linkerd) configures them with policy.
 
@@ -396,7 +396,7 @@ As the number of services grows, every service ends up re-implementing the same 
 
 The mesh is the network-level enforcement of bulkheads, circuit breakers, and retries from the reliability patterns -- but applied uniformly without touching application code, and consistently across services written in different languages. The cost is real operational complexity (the mesh itself must be run and debugged) plus a small per-hop latency from the extra proxy, so it earns its place only once you have enough services that consistent, language-agnostic networking policy is worth the overhead.
 
-#### Distributed Tracing
+### Distributed Tracing
 
 In a monolith, a single stack trace explains a request. Once a request fans out across five services, you need **distributed tracing** to see the whole path. A unique **trace ID** is generated at the edge and propagated through every downstream call (via headers like W3C `traceparent`); each service records **spans** -- timed segments with parent/child relationships -- tagged with that trace ID. A tracing backend (Jaeger, Zipkin, or an OpenTelemetry-compatible vendor) stitches the spans into a single timeline showing exactly where the latency went and which hop failed.
 
@@ -416,11 +416,11 @@ OpenTelemetry (OTel) is now the vendor-neutral standard for generating and expor
 
 ---
 
-### Event-Driven Architecture
+## Event-Driven Architecture
 
 Event-Driven Architecture (EDA) is an architectural style where the flow of the program is determined by events -- significant changes in state. Components produce and consume events, leading to loosely coupled systems that can react to changes in real time.
 
-#### Event Sourcing
+### Event Sourcing
 
 Instead of storing only the current state of an entity, Event Sourcing stores the complete sequence of state-changing events. The current state is derived by replaying all events from the beginning (or from a snapshot).
 
@@ -550,7 +550,7 @@ for e in events:
 
 Benefits of Event Sourcing: complete audit trail, ability to reconstruct state at any point in time ("time travel"), natural fit with CQRS (build read models by projecting events). Costs: increased storage, complexity of rebuilding state, event schema evolution.
 
-#### Event Types
+### Event Types
 
 - **Domain events**: record something that happened within a bounded context (e.g., `OrderPlaced`, `PaymentReceived`). Named in past tense.
 - **Integration events**: cross-service communication events. These are published on the message bus for other services to consume.
@@ -561,7 +561,7 @@ Event schema evolution is critical for long-lived systems:
 - **Removing or renaming fields** is a breaking change -- use versioning (`OrderPlacedV2`)
 - **Schema registry** (Confluent Schema Registry) enforces compatibility rules
 
-#### Event Bus Options
+### Event Bus Options
 
 ```
 +------------------+-------------------+--------------------+------------------+
@@ -579,7 +579,7 @@ Event schema evolution is critical for long-lived systems:
 
 Dead letter queues (DLQs) are essential: when a consumer fails to process a message after several retries, the message is moved to a DLQ for manual inspection and replay.
 
-#### Idempotency
+### Idempotency
 
 In an event-driven system, events may be delivered **more than once** (at-least-once delivery). Consumers must handle duplicates gracefully.
 
@@ -619,7 +619,7 @@ handler.handle(event)  # Skipping duplicate event evt-001
 
 Design every consumer to be idempotent: use idempotency keys, check if the operation has already been performed, and make operations naturally idempotent where possible (e.g., `SET balance = 100` is idempotent; `SET balance = balance + 50` is not).
 
-#### Three Flavors of "Event"
+### Three Flavors of "Event"
 
 "Event-driven" hides three genuinely different patterns, and confusing them causes real design problems. Knowing which one you are using tells you how much data to put in the event and how coupled producer and consumer become.
 
@@ -629,7 +629,7 @@ Design every consumer to be idempotent: use idempotency keys, check if the opera
 
 The common mistake is reaching for event sourcing when all you needed was event notification or state transfer. Most "event-driven microservices" use event-carried state transfer for cross-service integration -- it is the sweet spot that lets a service maintain a local replica of data it does not own.
 
-#### Delivery Semantics
+### Delivery Semantics
 
 A broker can promise one of three delivery guarantees, and the choice dictates how defensive your consumers must be:
 
@@ -639,11 +639,11 @@ A broker can promise one of three delivery guarantees, and the choice dictates h
 
 The takeaway: assume at-least-once, and make every consumer idempotent. Do not design for a free exactly-once guarantee the network cannot give you.
 
-#### Eventual Consistency
+### Eventual Consistency
 
 In a distributed event-driven system, when one service changes data and publishes an event, other services update *some time later* -- there is a window during which different services hold different views of the world. This is **eventual consistency**: given no new updates, all replicas converge to the same value eventually, but not instantly. It is acceptable and even desirable for much of a system -- a search index, an analytics dashboard, a recommendation cache, or a notification can all lag by seconds without harm. It is *not* acceptable where a stale read causes incorrect business outcomes: selling the last unit of inventory twice, or showing a paid invoice as unpaid. For those flows you either keep them inside a single consistency boundary (one aggregate, one transaction) or use a compensation-based workflow (saga/TCC) that explicitly handles the in-between states. The design skill is deciding, per use case, where eventual consistency is fine and where you must pay for stronger guarantees.
 
-#### The Outbox Pattern
+### The Outbox Pattern
 
 The hardest reliability problem in event-driven systems is the **dual-write problem**: a handler must both write to its database *and* publish an event, but those are two separate systems with no shared transaction. If the DB commit succeeds and the broker publish then fails (or the process crashes between them), the state changed but no event was emitted -- downstream services never find out, and the data drifts. Publishing first has the opposite failure. The **Outbox pattern** solves this by making the event part of the *same database transaction* as the state change:
 
@@ -666,7 +666,7 @@ def place_order(order_data: dict, conn) -> str:
 
 Because the order row and the outbox row commit atomically, you can never have one without the other. A separate **relay** (a polling worker, or a Change-Data-Capture tool like Debezium tailing the transaction log) reads unpublished outbox rows and pushes them to the broker, marking each published only after the broker acks. The relay publishes at-least-once (it may re-send a row whose ack was lost), which is exactly why consumers must be idempotent. The Outbox is the standard, correct fix whenever you need "change data AND emit an event" reliably.
 
-#### Inbox / Deduplication Pattern
+### Inbox / Deduplication Pattern
 
 The Outbox guarantees an event is published; the **Inbox pattern** is its consumer-side mirror that guarantees an event is *processed* once despite at-least-once redelivery. The consumer records the IDs of messages it has already handled in an inbox/dedup table, and writes that record in the *same transaction* as the side effects of processing. On redelivery, it sees the ID is already present and skips the work.
 
@@ -682,13 +682,13 @@ def handle_event(event: dict, conn) -> None:
 
 Recording the processed ID atomically with the work is what makes it bulletproof: if the process crashes after the side effects but before committing, the whole transaction rolls back and redelivery reprocesses cleanly; once committed, the ID blocks any duplicate. This is the durable, database-backed version of the in-memory idempotency check shown earlier.
 
-#### Dead Letter Queues (in depth)
+### Dead Letter Queues (in depth)
 
 A consumer cannot retry forever -- a message that fails because of a poison payload (malformed data, a schema it cannot parse, a referenced record that no longer exists) will fail on every redelivery and, without a backstop, blocks the queue (head-of-line blocking) or loops infinitely consuming resources. A **Dead Letter Queue** is where such messages go after exhausting their retry budget: the broker (or consumer) moves the message to a separate DLQ instead of redelivering it endlessly.
 
 The DLQ is not a dumping ground to ignore -- it is an operational signal. A healthy system treats DLQ depth as an alerting metric, because messages landing there mean something is genuinely broken: a deploy that changed a schema, a bug in a consumer, or upstream data corruption. The DLQ workflow is: alert on non-zero depth, inspect the failed messages to find the root cause, fix it, then *replay* the messages back onto the main queue (which is safe precisely because consumers are idempotent). Always capture the failure reason and original metadata when dead-lettering, or you will be debugging blind.
 
-#### Ordering and Partitioning
+### Ordering and Partitioning
 
 A common false assumption is that a broker delivers messages in the order they were sent. In general it does not -- ordering is only guaranteed **within a single partition or queue**, never globally across a topic that is parallelized for throughput. Kafka, for instance, guarantees order only within one partition, and it routes a message to a partition by hashing a **partition key**. The design lever is choosing that key so that messages which *must* be ordered relative to each other share a partition: keying order events by `order_id` (or per-customer events by `customer_id`) guarantees that all events for one order land on one partition and are therefore processed in order, while different orders spread across partitions for parallelism.
 
@@ -698,11 +698,11 @@ The tension is **ordering vs. throughput vs. hot partitions**. Fewer partitions 
 
 ---
 
-### Domain-Driven Design (DDD)
+## Domain-Driven Design (DDD)
 
 Domain-Driven Design is an approach to software development that focuses on modeling the software after the real-world domain it serves. It was introduced by Eric Evans and is most valuable for **complex domains** where the business rules are the competitive advantage.
 
-#### Bounded Context
+### Bounded Context
 
 A Bounded Context is an explicit boundary within which a particular domain model applies. The same real-world concept can have completely different meanings in different bounded contexts. For example, "Customer" in a Billing context has payment methods and invoices, while "Customer" in a Shipping context has addresses and delivery preferences.
 
@@ -821,7 +821,7 @@ Notice that each context has its own `Customer` representation (embedded in the 
 
 ---
 
-#### Aggregate
+### Aggregate
 
 An Aggregate is a cluster of domain objects treated as a single unit for data changes. The Aggregate Root is the only entry point -- external objects cannot hold references to internal entities. Consistency is guaranteed within the aggregate boundary. Across aggregates, consistency is eventual.
 
@@ -948,7 +948,7 @@ Key rules for aggregates:
 
 ---
 
-#### Value Objects
+### Value Objects
 
 Value Objects are defined by their attributes, not by a unique identity. Two `Money(100, "USD")` objects are equal regardless of where they were created. Value Objects should be immutable.
 
@@ -1011,7 +1011,7 @@ Value Objects are a powerful modeling tool. Use them instead of primitive types 
 
 ---
 
-#### Domain Events
+### Domain Events
 
 Domain Events record that something meaningful happened in the domain. They are named in the **past tense** (`OrderPlaced`, not `PlaceOrder`) because they describe facts that have already occurred. Domain events are used for communication across aggregates and across bounded contexts.
 
@@ -1098,7 +1098,7 @@ Running this prints:
 
 ---
 
-#### Anti-Corruption Layer
+### Anti-Corruption Layer
 
 The Anti-Corruption Layer (ACL) translates between your domain model and external systems. It prevents external models (third-party APIs, legacy systems, partner services) from leaking into your clean domain model. This is the Adapter pattern applied at the bounded context boundary.
 
@@ -1172,7 +1172,7 @@ The ACL is especially important during migrations: as you move from a legacy sys
 
 ---
 
-#### Strategic DDD: Context Mapping
+### Strategic DDD: Context Mapping
 
 Context Mapping describes the relationships between bounded contexts. These relationships determine how teams interact and how data flows between contexts.
 
@@ -1258,11 +1258,11 @@ class OrderPlacedHandler:
 
 ---
 
-### Integration & Deployment Patterns
+## Integration & Deployment Patterns
 
 Once a system is composed of multiple services, a recurring set of structural patterns governs how clients reach those services and how the services find and talk to each other. These patterns keep cross-cutting concerns out of the individual services and out of the clients.
 
-#### API Gateway
+### API Gateway
 
 An API Gateway is a single entry point that sits in front of a fleet of services and handles the concerns that would otherwise be re-implemented by every client and every service: request routing, authentication and authorization, rate limiting, TLS termination, request/response transformation, and sometimes response aggregation. Clients talk to one stable endpoint; the gateway fans out to the right backend services.
 
@@ -1281,7 +1281,7 @@ An API Gateway is a single entry point that sits in front of a fleet of services
 
 The gateway centralizes cross-cutting policy so individual services stay focused on business logic and never reimplement auth or rate limiting. The danger is the **god gateway**: as it is tempting to add "just a little" routing logic, the gateway accretes business rules and becomes a deployment bottleneck that every team must coordinate through. Keep it thin -- routing and cross-cutting concerns only, never domain logic.
 
-#### Backend-for-Frontend (BFF)
+### Backend-for-Frontend (BFF)
 
 A single general-purpose API rarely serves every client well: a mobile app wants small, battery-friendly payloads and few round trips, while a web SPA wants richer data, and a partner integration wants something else again. A **Backend-for-Frontend** is a dedicated gateway/aggregation layer *per client type*, each shaping the underlying services' data to exactly what that client needs.
 
@@ -1295,7 +1295,7 @@ A single general-purpose API rarely serves every client well: a mobile app wants
 
 Each BFF owns the aggregation and trimming for its consumer -- the Mobile BFF might stitch three service calls into one compact response, while the Web BFF returns the full objects. This avoids the "one-size-fits-none" API that bloats mobile payloads to satisfy the web (or vice versa), and lets each frontend team evolve its own BFF without coordinating a shared API. The cost is more components to run; the pattern earns its place when client needs genuinely diverge.
 
-#### Sidecar and Ambassador
+### Sidecar and Ambassador
 
 A **sidecar** is a helper process deployed in the same unit (the same Kubernetes pod) as the main application, sharing its lifecycle and network namespace, to provide a capability the app should not implement itself -- log shipping, configuration sync, secrets rotation, or the service-mesh data-plane proxy. The app stays focused on business logic; the sidecar handles the platform concern alongside it.
 
@@ -1312,11 +1312,11 @@ An **Ambassador** is a specialized sidecar that proxies the app's *outbound* con
 +-----------------------------------+
 ```
 
-#### Anti-Corruption Layer at the Edge
+### Anti-Corruption Layer at the Edge
 
 The Anti-Corruption Layer (introduced in DDD for protecting a domain model) appears again as an *integration* pattern at the system edge: a translation layer that normalizes disparate external systems -- a flaky partner API, a legacy mainframe, a third-party with ugly data formats -- into a single consistent internal contract. Each external system gets an adapter that maps its quirks (different field names, encodings, error conventions) onto your clean internal model, so the rest of the system depends only on the normalized contract and never on the foreign system's shape. This is the same idea as the `LegacyProductAdapter` shown in the DDD section, applied at the boundary of the whole system rather than a single bounded context.
 
-#### Service Discovery
+### Service Discovery
 
 In a dynamic environment where service instances come and go (autoscaling, deploys, failures), callers cannot rely on hardcoded addresses -- they need a way to find healthy instances at call time. Two models:
 
@@ -1325,7 +1325,7 @@ In a dynamic environment where service instances come and go (autoscaling, deplo
 
 DNS-based server-side discovery (as in Kubernetes Services) is the simplest and most common today -- the client just calls `http://payment-service` and the platform handles the rest. Dedicated registries like Consul add richer health checking, metadata, and cross-datacenter awareness when you need it.
 
-#### Aggregator / Scatter-Gather
+### Aggregator / Scatter-Gather
 
 The Aggregator (scatter-gather) pattern fans a single request out to several services in parallel, then combines their responses into one result -- a product page that needs pricing, inventory, reviews, and recommendations from four services, returned as one payload. The key engineering concerns are *parallelism* (issue the calls concurrently, not sequentially, so total latency is the slowest call rather than the sum), *timeouts* (cap how long you wait for stragglers), and *partial-result handling* (decide whether a missing recommendations response degrades gracefully or fails the whole request). An API Gateway or BFF is often where scatter-gather lives.
 
@@ -1339,11 +1339,11 @@ The Aggregator (scatter-gather) pattern fans a single request out to several ser
 
 ---
 
-### Distributed Transactions & Consistency
+## Distributed Transactions & Consistency
 
 When a single business operation must change data owned by multiple services, you cannot wrap it in one database transaction. This section covers the spectrum of options for keeping distributed data consistent. (The Saga pattern, the workhorse here, is covered in detail in the Microservices section above; this section places it alongside its alternatives.)
 
-#### Why Not Two-Phase Commit (2PC) Everywhere
+### Why Not Two-Phase Commit (2PC) Everywhere
 
 Two-Phase Commit is the classic protocol for atomic commits across multiple resources. A **coordinator** runs two phases: a *prepare* phase where it asks every participant "can you commit?" and each votes yes (and locks the relevant data) or no, followed by a *commit* phase where, if all voted yes, the coordinator tells everyone to commit. It does give true atomicity across services -- so why is it avoided?
 
@@ -1353,11 +1353,11 @@ Two-Phase Commit is the classic protocol for atomic commits across multiple reso
 
 2PC is fine *within* a single database or a tightly-coupled environment (it underpins distributed databases internally), but across independently-deployed services it trades away exactly the availability and decoupling that motivated the split. The industry answer is to give up cross-service atomicity and embrace eventual consistency via sagas.
 
-#### Saga (Recap in Context)
+### Saga (Recap in Context)
 
 A saga replaces one distributed ACID transaction with a sequence of *local* transactions, each with a **compensating action** that semantically undoes it if a later step fails -- refund the charge, release the reserved stock, cancel the order. It comes in two coordination styles, **orchestration** (a central coordinator drives the steps -- easier to reason about and trace, single point of logic) and **choreography** (each service reacts to the previous step's event -- more decoupled, harder to follow end to end). The trade-off versus 2PC is explicit: sagas give up atomic isolation (other actors *can* observe the intermediate states) in exchange for availability and decoupling, and the developer must design compensations and tolerate the in-between states. Full code for an orchestration saga appears in the Microservices section.
 
-#### TCC (Try-Confirm-Cancel)
+### TCC (Try-Confirm-Cancel)
 
 TCC is a more structured alternative to the saga for operations that fit a *reservation* model. Each participant exposes three operations:
 
@@ -1377,7 +1377,7 @@ Try:     flight.hold()    hotel.hold()    car.hold()
 
 The difference from a plain saga is that TCC resources are *reserved* during Try rather than fully committed, so confirmation is cheap and cancellation just releases a hold rather than reversing a completed action. This fits inventory, seat booking, and fund holds well -- anywhere you can express "tentatively reserve, then either commit or release." The cost is that every participant must implement the three-phase contract and the reservations need timeouts so a crashed orchestrator does not leave resources held forever.
 
-#### The Workhorse Primitives
+### The Workhorse Primitives
 
 In practice, reliable eventually-consistent workflows are built from three primitives that recur throughout this chapter: **idempotency** (so retries and redeliveries are safe), the **outbox pattern** (so a state change and its event commit atomically), and **retries with backoff** (so transient failures self-heal). A saga or TCC defines the *business* choreography; idempotency + outbox + retries are the *mechanical* guarantees that make each step reliable. Get the mechanics right and the higher-level pattern becomes tractable; skip them and even a correct saga corrupts data under the first duplicate message or partial failure.
 
@@ -1385,19 +1385,19 @@ In practice, reliable eventually-consistent workflows are built from three primi
 
 ---
 
-### Serverless & FaaS
+## Serverless & FaaS
 
 Function-as-a-Service (FaaS) -- AWS Lambda, Google Cloud Functions, Azure Functions -- runs your code as short-lived, stateless functions triggered by events (an HTTP request, a queue message, a schedule, a database change), with the platform handling all provisioning and scaling, including scaling **to zero** when idle. You pay per invocation and per millisecond of execution rather than for always-on servers.
 
-#### Cold Starts
+### Cold Starts
 
 When a function has been idle (or needs to scale up), the platform must spin up a fresh execution environment -- download the code, start the runtime, run initialization -- before it can serve the request. This **cold start** adds latency to that first invocation, ranging from ~100ms to several seconds depending on runtime and package size (a slim Python function may cold-start in a couple hundred milliseconds; a large JVM function can take seconds). Subsequent requests hitting the warm environment skip this cost. Mitigations include **provisioned concurrency** (keep a pool of environments pre-warmed), minimizing deployment package size and dependencies, and choosing a faster-starting runtime. Cold starts are the headline reason FaaS struggles with latency-sensitive, user-facing paths that see bursty or infrequent traffic.
 
-#### Stateless Design
+### Stateless Design
 
 A FaaS function must be **stateless**: any environment can vanish between invocations, the local filesystem is ephemeral, and you have no control over which (if any) warm instance handles the next request. All durable state lives in external backing services -- DynamoDB/a database, S3 for files, Redis for caching/sessions. Handlers should be idempotent, since the platform may retry a failed invocation. This is the Twelve-Factor "stateless processes" rule taken to its extreme, and it is liberating when honored and a constant source of bugs when violated (e.g., caching in a module-level dict that only sometimes persists across the unpredictable warm-instance reuse).
 
-#### Limitations
+### Limitations
 
 FaaS is not a universal replacement for servers; its constraints are real and shape what fits:
 
@@ -1408,7 +1408,7 @@ FaaS is not a universal replacement for servers; its constraints are real and sh
 - **Vendor lock-in** -- triggers, IAM, and the surrounding ecosystem are provider-specific, making migration costly.
 - **Debugging and observability complexity** -- no long-running process to attach to; you rely on the platform's logs and distributed tracing.
 
-#### When It Fits (and When It Does Not)
+### When It Fits (and When It Does Not)
 
 FaaS shines for **event processing** (react to a queue/storage/database event), **scheduled tasks** (cron), **webhooks**, **light or spiky APIs**, and **glue code** between managed services -- workloads that are bursty, short, stateless, and benefit from scale-to-zero economics. It is a poor fit for **sustained high-traffic** services (always-on containers are cheaper once utilization is high), **long-running or complex workflows**, **latency-critical** user paths (cold starts), and anything needing persistent connections. The honest framing: FaaS trades operational simplicity and per-use pricing for execution constraints and less control. Use it where those constraints are irrelevant; reach for containers/servers where they bite.
 

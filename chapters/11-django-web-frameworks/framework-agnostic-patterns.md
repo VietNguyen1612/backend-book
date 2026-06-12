@@ -2,7 +2,7 @@
 
 # 11.2 Web Framework-Agnostic Patterns
 
-### Middleware / Interceptors
+## Middleware / Interceptors
 
 Middleware is the mechanism by which cross-cutting concerns are handled in web applications. A cross-cutting concern is something that affects many parts of the application but does not belong in any single view or controller: logging, authentication, CORS headers, compression, rate limiting, request ID injection, and exception handling are all classic examples.
 
@@ -94,13 +94,13 @@ MIDDLEWARE = [
 
 ---
 
-### Request Validation
+## Request Validation
 
 Input validation is one of the most important responsibilities of the boundary layer of your application. Invalid data should never penetrate into your business logic or database layer. The principle is simple: validate early, fail fast, and return structured error responses.
 
 Different frameworks provide different tools for this, but the concept is always the same: define a schema, validate incoming data against it, and return clear errors if validation fails.
 
-#### Django REST Framework Serializers
+### Django REST Framework Serializers
 
 Django REST Framework (DRF) serializers are the primary validation and serialization tool in the Django ecosystem for API development. They serve a dual purpose: validating incoming data (deserialization) and formatting outgoing data (serialization).
 
@@ -312,11 +312,11 @@ The underlying principle is identical: define a schema, validate at the boundary
 
 ---
 
-### API Layer: ViewSets, Permissions, Throttling, Pagination & Schema
+## API Layer: ViewSets, Permissions, Throttling, Pagination & Schema
 
 The generic views shown above (`ListCreateAPIView`, `RetrieveUpdateDestroyAPIView`) are the workhorse of DRF, but a few more building blocks complete the API layer. These map directly onto concepts in every API framework: route grouping, authorization, rate limiting, paging, and machine-readable schemas.
 
-#### ViewSets and Routers
+### ViewSets and Routers
 
 A `ViewSet` collapses the list/create/retrieve/update/destroy endpoints for one resource into a single class, and a **router** auto-generates the URL patterns for it. This eliminates the repetitive `path(...)` declarations for standard CRUD.
 
@@ -366,7 +366,7 @@ urlpatterns = router.urls
 
 Use a `ViewSet` when a resource follows the standard CRUD shape; drop to `APIView` or generic views when an endpoint is irregular (custom verbs, non-CRUD logic) and you want explicit control. `APIView` is the lowest-level DRF class -- you implement `get()`, `post()`, etc. yourself, gaining full control at the cost of writing the boilerplate the generics/viewsets provide.
 
-#### Object-Level Permissions (Preventing IDOR)
+### Object-Level Permissions (Preventing IDOR)
 
 View-level permissions (`IsAuthenticated`) answer "may this user use this endpoint at all?" They do **not** answer "may this user touch *this specific object*?" Skipping the second check is the **IDOR** (Insecure Direct Object Reference) vulnerability: an authenticated user changes `/reviews/41/` to `/reviews/42/` and edits someone else's review. Object-level permissions close this gap.
 
@@ -413,7 +413,7 @@ Content-Type: application/json
 
 **How to read this output:** The `403` (not `404` or `200`) is DRF reporting that authentication succeeded but authorization failed at the object level -- exactly the wall that stops IDOR. The subtle point: `has_object_permission` only runs for views that call `self.get_object()` (detail and write actions on generics/viewsets), so it does **not** filter list endpoints. For lists you must additionally scope `get_queryset()` to the requesting user, or one user's objects will appear in another's list even though they cannot edit them. Some teams deliberately return `404` instead of `403` to avoid revealing that the object exists at all.
 
-#### Throttling
+### Throttling
 
 Throttling limits how many requests a client may make in a time window, protecting against abuse, brute-force attempts, and runaway scripts.
 
@@ -456,7 +456,7 @@ Content-Type: application/json
 
 **How to read this output:** The `429` status and `Retry-After` header are the standard contract a well-behaved client uses to back off rather than hammering the server. DRF's default throttles track counts in the cache (Redis in production), so throttling state is shared across all your workers -- a per-process counter would let a client multiply its quota by your worker count. Apply a tight scoped throttle (like `5/min`) to login and password-reset endpoints specifically, since the global `user`/`anon` rates are far too generous to stop credential brute-forcing.
 
-#### Cursor Pagination for Large, Changing Datasets
+### Cursor Pagination for Large, Changing Datasets
 
 The `PageNumberPagination` shown earlier (`?page=2`) is simple but has two problems at scale: large `OFFSET` values get progressively slower in the database, and if rows are inserted or deleted between page requests, items shift and the user sees duplicates or skips. **Cursor pagination** solves both -- it pages by an opaque pointer into an ordered field rather than by offset.
 
@@ -483,7 +483,7 @@ A cursor-paginated response returns opaque `next`/`previous` URLs instead of pag
 
 **How to read this output:** The `cursor` value is an opaque, base64-encoded pointer to a position in the ordering (here, a `created_at` timestamp), not a page index -- which is why the client must follow the `next` URL rather than constructing `?page=N` itself. Because the query becomes `WHERE created_at < <last_seen>` instead of `LIMIT 25 OFFSET 5000`, it stays fast at any depth (it uses the index instead of scanning and discarding skipped rows) and is immune to rows shifting between requests. The trade-offs: you cannot jump to an arbitrary page or show a total count, and the ordering field must be effectively unique and indexed. Use cursor pagination for large, append-heavy feeds (activity streams, logs, infinite scroll); page-number pagination is fine for small, stable result sets where users want to jump around.
 
-#### OpenAPI Schema Generation with drf-spectacular
+### OpenAPI Schema Generation with drf-spectacular
 
 An OpenAPI schema is a machine-readable description of your API -- every endpoint, parameter, request/response shape, and auth scheme. From it you get interactive docs (Swagger UI / ReDoc) and auto-generated client SDKs, giving you the contract-first benefits described in the API design chapter without hand-writing the contract. **drf-spectacular** generates the schema by introspecting your serializers and views.
 
@@ -517,13 +517,13 @@ You can refine what the introspection cannot infer with the `@extend_schema` dec
 
 ---
 
-### Background Task Processing
+## Background Task Processing
 
 Many web applications need to perform work that is too slow or too unreliable to do inside an HTTP request/response cycle: sending emails, generating reports, processing images, calling third-party APIs, or running data pipelines. Background task processing offloads this work to separate worker processes that consume tasks from a message broker (like Redis or RabbitMQ).
 
 Celery is the de facto standard for task queues in the Python ecosystem, but the concepts are universal. AWS SQS with Lambda, Sidekiq in Ruby, Bull in Node.js, and Google Cloud Tasks all follow the same pattern: a producer enqueues a task (a serialized function call), a broker stores and delivers it, and a worker picks it up and executes it.
 
-#### Celery Integration with Django
+### Celery Integration with Django
 
 **Project setup:**
 
@@ -746,7 +746,7 @@ CELERY_BEAT_SCHEDULE = {
 }
 ```
 
-#### Queue Routing to Dedicated Workers
+### Queue Routing to Dedicated Workers
 
 By default every task lands on a single `celery` queue and competes for the same workers. That is fine until a flood of slow tasks (report generation, video transcoding) starves fast, latency-sensitive tasks (sending a login email) behind them in the queue. The fix is to route task types to **separate queues** consumed by **dedicated worker pools**, so slow work cannot block fast work.
 
@@ -772,7 +772,7 @@ celery -A myproject worker -Q reports,indexing --concurrency=2 -n heavy@%h
 
 **How to read this output:** You now run two distinct worker fleets reading from different queues. A burst of slow `reports` tasks fills only the `heavy` workers' queue; the `fast` workers keep draining `notifications` with no added latency. This is the operational lever behind "route long/heavy tasks to dedicated queues/workers" -- it lets you scale and tune each workload independently (more concurrency for I/O-bound notifications, fewer workers for memory-hungry reports) and gives you per-queue monitoring so a backlog is attributable to a specific workload.
 
-#### Enqueuing Tasks Safely from a Transaction: on_commit()
+### Enqueuing Tasks Safely from a Transaction: on_commit()
 
 The most common Celery-with-Django bug is enqueuing a task inside a database transaction that has not committed yet. The worker -- running in a different process -- can pick up the task and query for the row **before** the web process commits (or after it rolls back), so the task sees missing or stale data. Always enqueue from `transaction.on_commit()`, which fires the callback only after the surrounding transaction durably commits.
 
@@ -802,7 +802,7 @@ class ReviewCreateView(generics.CreateAPIView):
 
 This pairs directly with the `on_commit()` ORM hook described in the Django specifics chapter: it is the single most important habit for correctness when combining transactions and a task queue.
 
-#### Task Design Principles
+### Task Design Principles
 
 These principles apply regardless of which task queue you use:
 
@@ -816,13 +816,13 @@ These principles apply regardless of which task queue you use:
 
 ---
 
-### Caching Layer
+## Caching Layer
 
 Caching is the most effective way to improve the performance of a web application. The fundamental trade-off is simple: you exchange memory (or a fast storage layer) for computation time and database load. But the details -- what to cache, how long to cache it, and when to invalidate -- are where the complexity lives.
 
 Django provides a unified cache framework with pluggable backends. The same API works whether you are using Redis, Memcached, a local file, or even a database table as your cache store. In production, Redis is the most common choice because it is fast, supports TTL natively, and can also serve as a Celery broker.
 
-#### Cache Configuration
+### Cache Configuration
 
 ```python
 # myproject/settings.py
@@ -839,7 +839,7 @@ CACHES = {
 }
 ```
 
-#### Per-View Caching
+### Per-View Caching
 
 The simplest caching strategy is to cache the entire response of a view. This is ideal for pages or API endpoints that are the same for all users and change infrequently.
 
@@ -871,7 +871,7 @@ Per-view caching works by keying on the full URL (including query parameters). A
 
 > **Common pitfall:** `cache_page` keys on the URL, not on the user. Applying it to a view that renders per-user content (a cart, a dashboard, anything behind login) will serve one user's cached response to everyone who hits the same URL -- a serious data-leak bug. Only cache responses that are genuinely identical for all callers, or vary the cache key with `Vary: Cookie`/`Authorization` headers.
 
-#### Low-Level Cache API
+### Low-Level Cache API
 
 For fine-grained control, use the low-level cache API directly. This lets you cache specific computations, database queries, or external API responses.
 
@@ -963,7 +963,7 @@ The payoff of `get_book_detail` is the gap between the first call (cache miss, h
 
 **How to read this output:** The exact milliseconds vary by hardware and network, but the ratio is the point -- the cached path is typically one to two orders of magnitude faster because it replaces a multi-table aggregate query with a single key lookup. This is why caching is the highest-leverage fix for a read-heavy endpoint under load: it removes work from the database, which is almost always the scarcest resource in a backend system.
 
-#### Cache Invalidation
+### Cache Invalidation
 
 Cache invalidation is famously one of the two hard problems in computer science. The main strategies are:
 
@@ -983,7 +983,7 @@ def update_book_price(book_id, new_price):
     cache.delete("genre_statistics")
 ```
 
-#### Cache Stampede Prevention
+### Cache Stampede Prevention
 
 A cache stampede (also called thundering herd) happens when a popular cache key expires and many concurrent requests all try to recompute it simultaneously, overwhelming the database. The `get_or_set` method helps because it is atomic, but for expensive computations you may need a lock:
 
@@ -1019,11 +1019,11 @@ def get_expensive_data():
 
 ---
 
-### Template / Rendering Layer
+## Template / Rendering Layer
 
 Server-side rendering (SSR) uses a template engine to produce HTML on the server before sending it to the client. Django uses its own template language by default, but also supports Jinja2. The architectural pattern is MVT (Model-View-Template), which is Django's variant of MVC (Model-View-Controller): the Model defines data, the View handles logic and selects a template, and the Template handles presentation.
 
-#### Server-Side Rendering
+### Server-Side Rendering
 
 ```python
 # Template inheritance: base.html defines the skeleton, child templates fill in blocks.
@@ -1089,7 +1089,7 @@ Server-side rendering (SSR) uses a template engine to produce HTML on the server
 
 Context processors inject variables that are available in every template (the logged-in user, site settings, etc.), which is Django's equivalent of global template variables in other frameworks.
 
-#### API-Only Backends
+### API-Only Backends
 
 Most modern backends serve JSON over REST or GraphQL and leave rendering to a frontend framework (React, Vue, Next.js). In this architecture, the backend's rendering layer is just JSON serialization and content negotiation.
 

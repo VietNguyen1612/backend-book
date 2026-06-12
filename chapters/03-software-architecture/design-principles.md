@@ -2,9 +2,9 @@
 
 # 3.1 Design Principles
 
-### SOLID Principles
+## SOLID Principles
 
-#### S -- Single Responsibility Principle (SRP)
+### S -- Single Responsibility Principle (SRP)
 
 A class or module should have **one and only one reason to change**. This does not mean "does one thing" in a narrow sense. Rather, it means that exactly one actor or stakeholder should be the source of requirements changes for that module. When a module serves two different stakeholders, a change requested by one stakeholder risks breaking functionality for the other.
 
@@ -65,7 +65,7 @@ Now each class has exactly one reason to change. In a Django project, this maps 
 
 ---
 
-#### O -- Open/Closed Principle (OCP)
+### O -- Open/Closed Principle (OCP)
 
 Software entities should be **open for extension** but **closed for modification**. When new behavior is needed, you should be able to add it by writing new code rather than modifying existing, tested code. This minimizes the risk of introducing regressions. The classic mechanism is the Strategy pattern: define an interface, then plug in new implementations.
 
@@ -138,7 +138,7 @@ In a Django project, this often appears when handling different payment provider
 
 ---
 
-#### L -- Liskov Substitution Principle (LSP)
+### L -- Liskov Substitution Principle (LSP)
 
 Subtypes must be **substitutable for their base types** without altering the correctness of the program. If a function works with a base class, it should work with any subclass without surprises. Violations arise when a subclass changes behavior in ways the caller does not expect -- throwing unexpected exceptions, ignoring inputs, or breaking contracts.
 
@@ -230,7 +230,7 @@ Now `Square` is not a subtype of `Rectangle`. Both implement `Shape`, and neithe
 
 ---
 
-#### I -- Interface Segregation Principle (ISP)
+### I -- Interface Segregation Principle (ISP)
 
 Clients should not be forced to depend on interfaces they do not use. A single large interface forces implementors to provide stub methods for operations they do not support. Many small, focused interfaces are preferable to one monolithic one.
 
@@ -333,7 +333,7 @@ In a Django project, ISP shows up when you define serializers. Rather than one g
 
 ---
 
-#### D -- Dependency Inversion Principle (DIP)
+### D -- Dependency Inversion Principle (DIP)
 
 High-level modules should not depend on low-level modules. Both should depend on **abstractions**. Abstractions should not depend on details; details should depend on abstractions. This decouples your business logic from infrastructure concerns, making it testable and swappable.
 
@@ -429,9 +429,9 @@ In a Django project, DIP is applied by injecting service dependencies. Instead o
 
 ---
 
-### Other Key Principles
+## Other Key Principles
 
-#### DRY (Don't Repeat Yourself)
+### DRY (Don't Repeat Yourself)
 
 Every piece of knowledge should have a single, unambiguous, authoritative representation in the system. When business logic is duplicated across multiple locations, a change in requirements means hunting down every copy -- and missing one means bugs. However, **premature abstraction is worse than duplication**. As Sandi Metz famously said: "Duplication is far cheaper than the wrong abstraction." The wrong abstraction creates a tangled dependency that is harder to unwind than having two copies of similar code.
 
@@ -473,7 +473,7 @@ In a Django project, DRY manifests as model managers for reusable queries, share
 
 ---
 
-#### KISS (Keep It Simple, Stupid)
+### KISS (Keep It Simple, Stupid)
 
 Choose the simplest solution that solves the problem. Complexity is the enemy of reliability, readability, and maintainability. As Brian Kernighan wrote: "Everyone knows that debugging is twice as hard as writing a program in the first place. So if you're as clever as you can be when you write it, how will you ever debug it?"
 
@@ -514,7 +514,7 @@ AppConfig(debug=True, database_url='sqlite:///db.sqlite3', secret_key='change-me
 
 ---
 
-#### YAGNI (You Ain't Gonna Need It)
+### YAGNI (You Ain't Gonna Need It)
 
 Do not build features, abstractions, or infrastructure until they are actually needed. Premature generalization wastes development time, adds complexity that must be maintained, and often guesses wrong about future requirements. Build for today's requirements and refactor when tomorrow's requirements actually arrive.
 
@@ -532,7 +532,7 @@ def send_order_confirmation(email: str, order_id: int) -> None:
 
 ---
 
-#### Composition Over Inheritance
+### Composition Over Inheritance
 
 Prefer composing objects (has-a relationships) over deep class hierarchies (is-a relationships). Inheritance creates tight coupling between parent and child: changes to the base class ripple through all subclasses (the "fragile base class" problem). Composition allows mixing and matching behaviors at runtime without rigid hierarchies.
 
@@ -602,7 +602,7 @@ In a Django project, prefer mixins and composition over deep model inheritance. 
 
 ---
 
-#### Law of Demeter (Principle of Least Knowledge)
+### Law of Demeter (Principle of Least Knowledge)
 
 An object should only talk to its **immediate friends** -- objects it directly owns or receives as parameters. A chain like `order.customer.address.city.zip_code` is a code smell: it couples the caller to the internal structure of four different objects. If any link in that chain changes, the caller breaks.
 
@@ -646,7 +646,7 @@ def get_shipping_label(order: Order) -> str:
 
 ---
 
-#### Separation of Concerns
+### Separation of Concerns
 
 Divide a system into distinct sections, each addressing a separate concern. The classic layered approach separates **presentation** (what the user sees), **business logic** (the rules of the domain), and **data access** (how data is stored and retrieved). Cross-cutting concerns like logging, authentication, and caching are handled by middleware, decorators, or aspect-oriented techniques rather than being sprinkled throughout the business logic.
 
@@ -696,7 +696,7 @@ def create_order(request):
 
 ---
 
-#### Convention Over Configuration
+### Convention Over Configuration
 
 Adopt reasonable defaults and only require explicit configuration when deviating from those defaults. This reduces boilerplate and cognitive load. Django is a prime example: placing models in `models.py`, views in `views.py`, templates in a `templates/` directory, and URL patterns in `urls.py` -- all by convention. Rails popularized this with its naming conventions that automatically wire models to database tables.
 
@@ -706,7 +706,7 @@ The benefit is that a new team member can navigate a project without reading ext
 
 ---
 
-#### Tell, Don't Ask
+### Tell, Don't Ask
 
 The Tell-Don't-Ask principle says you should **tell objects what to do** rather than **asking them for their data and making decisions on their behalf**. When you pull state out of an object, branch on it, and then mutate the object from the outside, you have scattered that object's behavior across its callers -- the logic that should live *with* the data now lives everywhere the data is used. This is the procedural mindset wearing an object-oriented costume, and it is the root cause of the anemic domain model anti-pattern.
 
@@ -754,7 +754,7 @@ print(acct.balance)
 
 ---
 
-#### The Twelve-Factor App
+### The Twelve-Factor App
 
 The Twelve-Factor App is a checklist (from the Heroku team) for building cloud-native, horizontally-scalable, deployable services. It predates Kubernetes but maps almost perfectly onto containers and orchestrators. The twelve factors:
 
@@ -791,7 +791,7 @@ debug=false db_host=prod-db.internal:5432/db
 
 ---
 
-#### Coupling and Cohesion (Deep Cuts)
+### Coupling and Cohesion (Deep Cuts)
 
 The earlier sections introduced tight vs. loose coupling and high vs. low cohesion. Two more rigorous vocabularies let you *measure* and *talk precisely* about coupling, which matters when you have to justify a refactor or draw a service boundary.
 
@@ -831,7 +831,7 @@ make_point(z=3, x=1, y=2)   # order-independent; the names carry the contract
 
 ---
 
-#### Common Anti-Patterns
+### Common Anti-Patterns
 
 Knowing the named anti-patterns gives you a shared vocabulary for code review and design discussions -- "this is turning into a god object" lands faster than a paragraph of explanation.
 
@@ -847,11 +847,11 @@ Knowing the named anti-patterns gives you a shared vocabulary for code review an
 
 ---
 
-### Clean Architecture / Hexagonal Architecture
+## Clean Architecture / Hexagonal Architecture
 
 Clean Architecture (Robert C. Martin) and Hexagonal Architecture (Alistair Cockburn) share the same core insight: **dependencies should point inward**, toward the domain. The core business logic should have zero knowledge of frameworks, databases, or external services. Those are details that belong in outer layers.
 
-#### The Dependency Rule
+### The Dependency Rule
 
 The fundamental rule: **source code dependencies must point inward**. Inner layers define interfaces (ports); outer layers implement them (adapters). The domain never imports from the web framework. The web framework imports from the domain.
 
@@ -883,7 +883,7 @@ The fundamental rule: **source code dependencies must point inward**. Inner laye
          Dependencies point INWARD -->  -->  -->
 ```
 
-#### Layers Explained (Inside-Out)
+### Layers Explained (Inside-Out)
 
 1. **Entities / Domain Layer** -- Pure business objects and rules. No framework imports. An `Order` entity knows how to calculate its total and validate business rules. Repository interfaces (ports) are defined here but not implemented.
 
@@ -893,7 +893,7 @@ The fundamental rule: **source code dependencies must point inward**. Inner laye
 
 4. **Frameworks & Drivers** -- The outermost layer. Django itself, the PostgreSQL driver, the Redis client, HTTP libraries. These are details that can be swapped.
 
-#### Hexagonal Architecture (Ports and Adapters)
+### Hexagonal Architecture (Ports and Adapters)
 
 Hexagonal architecture uses the metaphor of a hexagon with ports on its edges. Ports are interfaces that define what the application needs (e.g., "I need to save an order") or what it provides (e.g., "I can process an order"). Adapters are concrete implementations that connect those ports to the outside world.
 
@@ -935,7 +935,7 @@ Hexagonal architecture uses the metaphor of a hexagon with ports on its edges. P
     - Message consumer                            - Message queue
 ```
 
-#### Practical Example in Python
+### Practical Example in Python
 
 ```python
 # ---- Domain Layer (innermost, no framework imports) ----
@@ -1043,7 +1043,7 @@ def place_order_view(request):
     return JsonResponse({"order_id": order.id, "total": order.total})
 ```
 
-#### When to Use This Architecture
+### When to Use This Architecture
 
 The cost of clean/hexagonal architecture is more files, more indirection, and more boilerplate. This investment pays off for **complex domains** where business rules are the competitive advantage, where you need to swap infrastructure components, or where thorough unit testing of business logic is critical.
 

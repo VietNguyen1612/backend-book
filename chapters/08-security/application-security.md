@@ -2,11 +2,11 @@
 
 # 8.1 Application Security
 
-### OWASP Top 10 Essentials
+## OWASP Top 10 Essentials
 
 The Open Web Application Security Project (OWASP) maintains a regularly updated list of the most critical security risks to web applications. Every backend developer must understand these attack vectors and know how to defend against them. Below, each item is explained in depth with vulnerable and secure code examples.
 
-#### Injection (SQL, NoSQL, Command, LDAP)
+### Injection (SQL, NoSQL, Command, LDAP)
 
 Injection attacks occur when untrusted data is sent to an interpreter as part of a command or query. The attacker's hostile data tricks the interpreter into executing unintended commands or accessing data without proper authorization. SQL injection remains one of the most common and devastating attack vectors in web applications.
 
@@ -144,7 +144,7 @@ Additional prevention measures for injection attacks:
 
 ---
 
-#### Broken Authentication
+### Broken Authentication
 
 Broken authentication encompasses a wide range of vulnerabilities: weak password storage, credential stuffing (using leaked username/password pairs from other breaches), session fixation, and insufficient brute-force protection. When authentication is compromised, attackers gain access to user accounts and potentially the entire system.
 
@@ -279,7 +279,7 @@ Additional best practices for authentication:
 
 ---
 
-#### XSS (Cross-Site Scripting)
+### XSS (Cross-Site Scripting)
 
 Cross-Site Scripting attacks occur when an application includes untrusted data in a web page without proper validation or escaping. XSS allows attackers to execute scripts in the victim's browser, potentially stealing session cookies, defacing websites, or redirecting users to malicious sites.
 
@@ -409,7 +409,7 @@ CSRF_COOKIE_HTTPONLY = True     # Also protect the CSRF cookie
 
 ---
 
-#### CSRF (Cross-Site Request Forgery)
+### CSRF (Cross-Site Request Forgery)
 
 CSRF attacks trick an authenticated user's browser into sending a forged request to a vulnerable web application. Because the browser automatically attaches cookies (including session cookies) to every request to the target domain, the server cannot distinguish the forged request from a legitimate one.
 
@@ -503,7 +503,7 @@ Additional CSRF defenses:
 
 ---
 
-#### Broken Access Control
+### Broken Access Control
 
 Broken access control occurs when users can act outside their intended permissions. This includes accessing other users' data by modifying a URL parameter (Insecure Direct Object Reference, or IDOR), escalating privileges from a regular user to an admin, or bypassing access controls by modifying the request.
 
@@ -598,7 +598,7 @@ Best practices for access control:
 
 ---
 
-#### Security Misconfiguration
+### Security Misconfiguration
 
 Security misconfiguration is one of the most common issues in production systems. It includes leaving default credentials in place, exposing debug information, running unnecessary services, using permissive CORS policies, and failing to set security headers. These are often the easiest vulnerabilities for attackers to exploit and the easiest to prevent.
 
@@ -656,7 +656,7 @@ SECURE_HSTS_PRELOAD = True
 
 ---
 
-#### Insecure Deserialization
+### Insecure Deserialization
 
 Insecure deserialization occurs when an application deserializes data from an untrusted source without validation. Attackers can manipulate serialized objects to execute arbitrary code, perform injection attacks, or escalate privileges. This is particularly dangerous in languages and libraries that support object serialization with full code execution capabilities.
 
@@ -747,7 +747,7 @@ Additional prevention measures:
 
 ---
 
-#### SSRF (Server-Side Request Forgery)
+### SSRF (Server-Side Request Forgery)
 
 Server-Side Request Forgery tricks your server into making HTTP requests to destinations the attacker chooses. Because the request originates from inside your network, it can reach resources that are unreachable from the public internet: internal admin panels, databases, other microservices, and -- most dangerously -- the cloud provider's instance metadata endpoint at `http://169.254.169.254/`, which on a misconfigured instance hands out temporary IAM credentials. SSRF was the root cause of the 2019 Capital One breach.
 
@@ -828,7 +828,7 @@ Additional SSRF defenses:
 
 ---
 
-#### LDAP Injection
+### LDAP Injection
 
 When an application builds an LDAP search filter by concatenating user input, an attacker can inject filter metacharacters (`*`, `(`, `)`, `\`, `&`, `|`) to alter the query -- bypassing authentication or dumping directory entries, the LDAP analogue of SQL injection.
 
@@ -855,9 +855,9 @@ The defense is identical in spirit to parameterized SQL: never let user input ch
 
 ---
 
-### Input Validation & Security Headers
+## Input Validation & Security Headers
 
-#### Whitelist Validation
+### Whitelist Validation
 
 Whitelist validation (also called allowlist validation) is the practice of defining exactly what input is acceptable and rejecting everything else. This is fundamentally more secure than blacklist validation, which tries to enumerate all dangerous inputs -- an approach that inevitably misses edge cases and novel attack vectors.
 
@@ -902,7 +902,7 @@ def validate_search_query(query: str) -> str:
     return query.strip()
 ```
 
-#### Parameterized Queries
+### Parameterized Queries
 
 Parameterized queries are the primary defense against SQL injection. They separate the query structure from the data, ensuring that user input is always treated as a literal value and never as part of the SQL command.
 
@@ -953,7 +953,7 @@ products = Product.objects.raw(
 )
 ```
 
-#### Security Headers
+### Security Headers
 
 Security headers instruct the browser on how to behave when handling your site's content. They are a critical layer of defense that can mitigate XSS, clickjacking, MIME-type attacks, and other browser-based vulnerabilities.
 
@@ -1069,7 +1069,7 @@ server {
 }
 ```
 
-#### CORS (Cross-Origin Resource Sharing)
+### CORS (Cross-Origin Resource Sharing)
 
 CORS controls which external domains can make requests to your API. A misconfigured CORS policy can expose your API to cross-origin attacks, while an overly restrictive policy will break legitimate frontend applications.
 
@@ -1167,7 +1167,7 @@ location /api/ {
 
 Understanding preflight requests: When a browser makes a "non-simple" request (e.g., with custom headers, PUT/DELETE methods, or JSON content type), it first sends an OPTIONS request to check whether the actual request is allowed. Your server must respond to this OPTIONS request with the appropriate CORS headers. If the preflight fails, the browser blocks the actual request.
 
-#### File Upload Security
+### File Upload Security
 
 File uploads are a significant attack surface. Malicious files can contain executable code, exploit image-processing vulnerabilities, or consume excessive storage.
 
@@ -1231,7 +1231,7 @@ The reason step 2 reads the bytes instead of trusting the filename is best seen 
 
 > **Common pitfall:** validating content type is necessary but not sufficient. Always also store uploads outside the webroot with a randomized filename (as steps 3-5 do) and serve them from a separate domain — even a genuine image can carry an embedded script that browsers may execute if the file is served from your application's origin.
 
-#### Rate Limiting
+### Rate Limiting
 
 Rate limiting is essential for protecting authentication endpoints, password reset flows, and API endpoints from brute-force attacks and abuse.
 
@@ -1284,11 +1284,11 @@ def login_view(request):
 
 ---
 
-### Cryptography Fundamentals
+## Cryptography Fundamentals
 
 You should almost never implement a cryptographic primitive yourself -- the job of a backend developer is to *choose the right primitive for the goal and use a vetted library correctly*. The failures that cause breaches are rarely broken math; they are misuse: hashing passwords with MD5, reusing a nonce, comparing secrets with `==`, or seeding tokens from a non-cryptographic RNG. This section covers the mental model behind those choices. (Password hashing with bcrypt/Argon2 is covered above under Broken Authentication, and field-level encryption with Fernet under Infrastructure Security; the goal here is the underlying concepts that tie them together.)
 
-#### Hashing vs Encryption vs Encoding
+### Hashing vs Encryption vs Encoding
 
 These three are constantly confused in interviews and code reviews, and the confusion causes real bugs.
 
@@ -1308,7 +1308,7 @@ b'password123'
 
 **How to read this output:** the base64 string *looks* scrambled but `b64decode` recovers the original instantly with no key -- that is encoding, and it provides zero confidentiality. The SHA-256 digest cannot be reversed, but it is also unsalted and fast, which is exactly why this same call is a disaster for passwords (an attacker precomputes or brute-forces it). The interview point: if someone says "we hash the credit card number so it's safe," ask whether they mean hash (then you can't charge the card) or encrypt (then key management is the real problem) -- the words are not interchangeable.
 
-#### Symmetric vs Asymmetric Encryption
+### Symmetric vs Asymmetric Encryption
 
 - **Symmetric** (one shared key for both encrypt and decrypt): fast, suited to bulk data. The modern default is **AES-GCM** (or **ChaCha20-Poly1305** on hardware without AES acceleration). The challenge is distributing the shared key securely.
 - **Asymmetric / public-key** (a key *pair*: public + private): slow, suited to small payloads. Used for key exchange, digital signatures, and identity. **RSA** and the elliptic-curve algorithms (**ECDSA**, **Ed25519**, ECDH) are the common families.
@@ -1330,13 +1330,13 @@ plaintext = aesgcm.decrypt(nonce, ciphertext, b"account:1234")
 # If the ciphertext OR the associated data is altered, decrypt() raises InvalidTag.
 ```
 
-#### AEAD, Nonces, and IVs
+### AEAD, Nonces, and IVs
 
 AES-GCM and ChaCha20-Poly1305 are **AEAD** (Authenticated Encryption with Associated Data) modes: they encrypt *and* authenticate in one step, so tampering is detected on decryption. Always prefer AEAD over older unauthenticated modes (like AES-CBC without a separate MAC), which are vulnerable to padding-oracle and bit-flipping attacks.
 
 The critical rule is **never reuse a nonce/IV with the same key**. For AES-GCM, reusing a nonce with the same key is catastrophic: it leaks the XOR of the two plaintexts and lets an attacker forge messages. Generate a fresh random nonce (`os.urandom(12)`) per message, or use a deterministic counter that is guaranteed never to repeat. The nonce is not secret -- store/transmit it alongside the ciphertext -- it just must be unique.
 
-#### HMAC and Constant-Time Comparison
+### HMAC and Constant-Time Comparison
 
 An **HMAC** is a keyed hash: `HMAC(key, message)`. Only someone with the secret key can compute or verify it, which makes it the standard tool for message authentication -- most commonly verifying that an inbound webhook genuinely came from the provider (Stripe, GitHub, etc.) and was not forged or replayed.
 
@@ -1363,13 +1363,13 @@ False
 
 **How to read this output:** `compare_digest` returns the same boolean a naive `==` would -- the difference is invisible in the output but decisive in security. A normal `==` short-circuits at the first differing byte, so an attacker who can time your responses can recover the correct signature one byte at a time. `compare_digest` always examines the full length in constant time, closing that side channel. In an interview, "I verify the HMAC with `hmac.compare_digest`" signals you understand timing attacks; "I check `sig == expected`" is the wrong answer even though it's functionally correct.
 
-#### Digital Signatures
+### Digital Signatures
 
 A **digital signature** uses asymmetric crypto in reverse: the holder of the *private* key signs, and anyone with the *public* key can verify. This proves both authenticity (it came from the private-key holder) and integrity (it wasn't modified). Unlike HMAC -- where verifier and signer share the same secret -- signatures let you publish the public key freely, so many parties can verify without being able to forge.
 
 This is exactly the difference between JWT `HS256` (HMAC: same secret signs and verifies -- fine within one service) and `RS256`/`ES256` (RSA/ECDSA signatures: an auth service holds the private key, every other service verifies with the published public key and can never mint tokens). Package signing, code signing, and TLS certificate chains all rely on the same private-sign / public-verify model.
 
-#### Cryptographically Secure Randomness (CSPRNG)
+### Cryptographically Secure Randomness (CSPRNG)
 
 Anything security-sensitive -- session tokens, password-reset tokens, API keys, salts, nonces -- must come from a **cryptographically secure** RNG. Python's `random` module is a Mersenne Twister: fast, statistically uniform, and *completely predictable* once an attacker observes enough output. Use the `secrets` module instead.
 
@@ -1391,7 +1391,7 @@ api_key = "sk_live_" + secrets.token_hex(24)
 
 **How to read this output:** the `secrets` token is unpredictable even to someone who has seen millions of prior tokens. The `random` example shows the failure mode -- seed it the same way and you get the identical "random" number every time, which means an attacker who learns or guesses the seed can predict every token you'll ever issue. The rule is mechanical: if a value protects something, use `secrets` (or `os.urandom`); `random` is only for simulations, sampling, and tests.
 
-#### Key Management
+### Key Management
 
 The hardest part of applied cryptography is not encrypting -- it's protecting the keys. Principles:
 

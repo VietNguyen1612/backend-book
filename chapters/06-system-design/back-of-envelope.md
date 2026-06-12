@@ -4,7 +4,7 @@
 
 Back-of-envelope calculations (also called Fermi estimates) help you quickly determine the scale of a system and make informed architecture decisions. In a system design interview, they demonstrate that you think about scale before diving into design.
 
-### Reference Numbers to Memorize
+## Reference Numbers to Memorize
 
 ```
 LATENCY NUMBERS:
@@ -46,7 +46,7 @@ The two latency numbers worth internalizing above all others: an SSD read (~150 
 
 > **Common pitfall:** Mixing up the unit prefixes is the single most common way these estimates go wrong. 1 us = 1,000 ns, 1 ms = 1,000 us = 1,000,000 ns, and 1 GB/s = 1,000 MB/s. A misplaced factor of 1,000 turns "fits on one box" into "needs a cluster," so write the units next to every number and check that the powers of ten line up before you trust the verdict.
 
-### Walkthrough Example 1: URL Shortener Scale Estimation
+## Walkthrough Example 1: URL Shortener Scale Estimation
 
 **Problem**: Design a URL shortener that handles 100 million new URLs per month and a 100:1 read-to-write ratio. Estimate the storage, bandwidth, and caching requirements.
 
@@ -104,7 +104,7 @@ Notice the shape of the answer: writes are trivial (40/sec, 10 KB/s), storage is
 
 > **Key Takeaway:** Let the read-to-write ratio decide the architecture. A 100:1 ratio means the cache and read replicas are the design, not an afterthought -- size them first, then confirm the write path and storage are the easy parts.
 
-### Walkthrough Example 2: Chat System Scale Estimation
+## Walkthrough Example 2: Chat System Scale Estimation
 
 **Problem**: Design a chat system for 10 million daily active users (DAU). Each user sends an average of 40 messages per day. Estimate the storage, connection, and message throughput requirements.
 
@@ -161,7 +161,7 @@ The decisive number here is storage: 220 TB over five years is what rules out a 
 
 > **Key Takeaway:** For a stateful, high-volume system, storage growth over the retention window and peak concurrent connections are the two numbers that pick your database and your server count. Compute both before anything else.
 
-### Walkthrough Example 3: Notification System Scale Estimation
+## Walkthrough Example 3: Notification System Scale Estimation
 
 **Problem**: A notification system for an e-commerce platform with 50 million registered users. On average, each user receives 3 notifications per day. Estimate throughput and worker capacity.
 

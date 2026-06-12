@@ -2,7 +2,11 @@
 
 # 6.5 Caching & CDN Deep-Dive
 
-Section 6.1 introduced the caching *patterns* (cache-aside, write-through, write-behind) and where a cache sits in an architecture. This section goes a level deeper into the mechanics you actually tune in production: the cache hierarchy and its latency tiers, HTTP caching semantics, how CDNs really work, the hard problem of invalidation, and the two failure modes that take caches down -- **stampedes** and **hot keys**.
+Section 6.1 introduced the caching *patterns* (cache-aside, write-through, write-behind) and where a cache sits in an architecture. This section goes a level deeper, into the mechanics you actually tune in production. The stakes are concrete: a cache that quietly slips from a 99% to a 90% hit ratio can overwhelm an origin that was sized only for the misses, a single expiring hot key can send thousands of simultaneous recomputations at the database, and a mis-set HTTP header can either serve one user's private response from a shared cache or quietly defeat the cache altogether.
+
+These are the questions you should be able to answer afterwards, the ones that surface when a cache misbehaves under load. Why does a small drop in hit ratio multiply average latency? Which `Cache-Control` directives belong on which responses, and when is purging a CDN the wrong tool? How do you invalidate cached data without lying to users? And what, exactly, stops a thundering herd when a popular key expires at the worst possible moment?
+
+We proceed from the outside in. *The Cache Hierarchy* lays out the tiers between the browser and the database and the latency math that makes hit ratio dominate. *HTTP Caching Semantics* covers the headers that govern the browser and CDN tiers, and *How CDNs Actually Work* opens up the edge itself -- PoPs, origin shields, and cache keys. *Cache Invalidation* then confronts the famously hard problem of keeping cached data honest, and the final two sections, *Cache Stampede* and *Hot Keys*, dissect the two failure modes that take caches down -- synchronized expiry in time and concentrated load in space.
 
 ## The Cache Hierarchy
 
@@ -79,6 +83,8 @@ def product_json(request, pk):
 
 ## How CDNs Actually Work
 
+The headers in the previous section tell shared caches what they *may* do; this section looks at the infrastructure that actually does it, because the CDN's behavior -- where it terminates connections, how it keys its cache, how it handles misses -- determines whether those headers deliver their promised hit ratio.
+
 A CDN is a globally distributed reverse-proxy cache. The mechanics worth understanding:
 
 - **PoPs (points of presence)** terminate the user's TLS close to them and serve cache hits from the nearest edge. The win is both fewer origin trips *and* a shorter RTT for the bytes that do flow.
@@ -88,6 +94,8 @@ A CDN is a globally distributed reverse-proxy cache. The mechanics worth underst
 - **Signed URLs / tokens** gate private content at the edge (time-limited, optionally IP-bound) without a round-trip to your origin for authorization.
 
 ## Cache Invalidation
+
+Every tier we have layered so far -- browser, edge, in-process, distributed -- holds a copy that can drift from the source of truth. Deciding when a copy is no longer valid, and propagating that decision through the whole hierarchy, is the part of caching that resists easy answers; it has earned its own aphorism.
 
 > "There are only two hard things in Computer Science: cache invalidation and naming things." -- Phil Karlton
 
@@ -100,6 +108,8 @@ The strategies, from simplest to strongest:
 - **Negative caching** -- cache *misses* (404s) for a short TTL so an attacker requesting random non-existent IDs cannot turn every request into a database query (cache penetration). Pair with a Bloom filter for high-cardinality keyspaces.
 
 ## Cache Stampede (Thundering Herd)
+
+Invalidation, however it is done, creates a moment when the cache is empty and the origin stands exposed. The first of our two failure modes lives in exactly that moment.
 
 When a popular key expires, every concurrent request misses at once and hits the origin simultaneously -- the recomputation that was supposed to be amortized across thousands of reads now happens thousands of times in a burst, often toppling the database.
 
@@ -168,6 +178,8 @@ Note that Django's `cache.get_or_set()` is convenient but **not** stampede-safe 
 
 ## Hot Keys
 
+The stampede defenses above protect the origin from a burst at expiry, but load can also pile up inside the cache tier itself, persistently, even when nothing expires at all.
+
 A *hot key* is a single key so popular that the one cache node owning it (by consistent hashing) saturates -- a stampede is a hot key in time; a hot key is concentration in space. Mitigations:
 
 - **Local (in-process) tier** -- put a tiny, short-TTL LRU in front of the distributed cache. A 1-second local TTL on a key read 50,000x/s collapses 50,000 Redis reads into ~1, at the cost of up to 1s of extra staleness.
@@ -187,4 +199,16 @@ def read_hot(key):
 
 > **Key Takeaway:** Caching is a hierarchy, not a single layer -- answer as close to the user as you can, with shorter TTLs toward the source of truth. Let HTTP headers (`s-maxage`, `stale-while-revalidate`, `ETag`) do the work at the browser and CDN tiers, and fingerprint static assets so deploys never need a purge. The two ways caches fail under load are stampedes (synchronize-on-expiry) and hot keys (concentrate-on-one-node); defend the first with single-flight or probabilistic early recomputation, and the second with a local tier or key splitting. And remember the math: the difference between a 99% and a 90% hit ratio is the difference between a fast service and an overloaded origin.
 
+## Summary
+
+This section descended from caching patterns into caching mechanics. A request should be answered as far from the source of truth as possible -- browser, CDN edge, origin shield, in-process LRU, distributed cache, and only then the database -- with TTLs shortening at each step toward the truth. The latency math is unforgiving: because a miss costs 10-100x a hit, the gap between a 99% and a 90% hit ratio is the gap between a fast service and an overloaded origin, which is why the last few points of hit ratio justify real engineering effort.
+
+At the browser and CDN tiers, HTTP headers do the work: `s-maxage` for shared caches, `stale-while-revalidate` to hide origin latency, `stale-if-error` to ride out outages, and validators like `ETag` for cheap 304s. Fingerprint static assets so a deploy changes the URL and never needs a purge; reserve purging for HTML and API responses you cannot version, and keep tracking parameters out of the cache key. For invalidation, prefer the weakest mechanism that meets your staleness budget: TTL expiry first, then delete-on-write, then event-driven fan-out or versioned keys when many consumers cache the same data.
+
+Finally, the two failure modes under load. A stampede is synchronized expiry in time; defend with single-flight locking or probabilistic early recomputation, not `get_or_set`. A hot key is concentrated load in space; defend with a short-TTL local tier, key splitting, or client-side caching.
+
+This also closes Chapter 6. We have estimated load on the back of an envelope, chosen architectures and data stores, and layered caches in front of them; the design exists on paper. The next problem is running it. Chapter 7 turns to infrastructure and operations, beginning with 7.1 Containerization -- how the services we have been designing are packaged, isolated, and shipped.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [7.1 Containerization](../07-infrastructure-devops/containerization.md)

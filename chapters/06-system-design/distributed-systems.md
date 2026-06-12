@@ -2,7 +2,15 @@
 
 # 6.2 Distributed Systems
 
+The previous section treated scaling as an architectural exercise: add machines, split the load, replicate the data. This section is about what those extra machines cost you. The moment your system spans more than one host, a new class of failure appears that no amount of careful coding on a single node can prevent: networks partition, clocks drift and step backward, messages arrive late, twice, or not at all, and a process can freeze mid-operation for forty seconds and resume convinced that no time has passed. These are not exotic edge cases. They are the root causes behind real production incidents -- a cluster that split-brains and accepts conflicting writes on both sides of a partition, a "distributed lock" held by two processes at once after a GC pause, duplicate IDs minted when NTP steps a clock back, a single slow payment provider that exhausts every caller's thread pool and turns one degraded dependency into a full site outage.
+
+By the end of this section you should be able to answer the questions these failures raise: how does a cluster of unreliable machines agree on anything, and why does a quorum prevent split-brain? Why can you never order events on different machines by comparing their timestamps, and what do you use instead? How do you mint unique identifiers at scale without a central counter? When can you actually trust a distributed lock, and when should you design so you do not need one? And how do you keep one failing service from cascading into an outage -- and debug the result across dozens of services?
+
+We build up in layers. We start with **Consensus & Coordination**, the foundation everything else rests on, then confront **Time, Clocks & Ordering** -- why there is no global "now" and how logical clocks substitute for it. With those fundamentals in place we turn to two practical problems they inform: **Distributed Unique IDs** and **Distributed Locking & Coordination Primitives**. We then widen the lens to **Service Communication Patterns** -- synchronous versus asynchronous calls and the resilience patterns (timeouts, retries, circuit breakers) every remote call needs -- and close with **Observability**, the logs, metrics, and traces that make a distributed system debuggable at all.
+
 ## Consensus & Coordination
+
+We begin with the deepest problem in the field, because nearly everything that follows -- leader election, distributed locks, coordination services, even reliable ID assignment -- ultimately rests on it: getting a set of machines that can crash or lose contact with each other to agree on a single value. Rather than treat consensus abstractly, we walk through Raft, the algorithm most production systems actually use.
 
 **Raft** is a consensus algorithm designed to be understandable (in contrast to Paxos, which is notoriously difficult to implement correctly). Raft ensures that a cluster of nodes agrees on a sequence of operations (a replicated log), even if some nodes fail. It is used by etcd (which powers Kubernetes), Consul, CockroachDB, and TiKV.
 
@@ -206,6 +214,8 @@ Because fencing is hard to retrofit, the pragmatic guidance is: **prefer making 
 > **Common pitfall:** Treating a Redis (or any timeout-based) lock as a hard mutual-exclusion guarantee. Under a GC pause or network partition the lease can expire while the holder still thinks it owns the lock, so two processes run at once. Either back the lock with fencing tokens the resource validates, or -- better -- make the protected operation idempotent so a double-run cannot corrupt state.
 
 ## Service Communication Patterns
+
+The primitives so far -- consensus, clocks, IDs, locks -- govern how nodes agree on shared state. But most of the distributed behavior in a typical backend is more mundane and more frequent: services calling other services. This section covers the two fundamental communication styles, how services find each other, and the resilience patterns that keep one failing dependency from dragging its callers down with it.
 
 **Synchronous Communication** (HTTP REST, gRPC) follows the request-response pattern. The caller sends a request and blocks until it receives a response. This is simple to reason about and ideal for user-facing requests that need an immediate response (e.g., "show me my profile"). The downsides are temporal coupling (if the downstream service is down, the caller fails), latency accumulation (each hop adds latency), and cascading failure risk (one slow dependency can exhaust the caller's thread pool, causing it to fail, which cascades to its callers).
 
@@ -496,4 +506,14 @@ Prometheus + Grafana is the standard open-source metrics stack. Two frameworks g
 
 > **Key Takeaway**: Observability is not about installing tools -- it is about building a culture where every service emits structured logs with correlation IDs, exposes standard metrics (RED/USE), and participates in distributed tracing. Without all three pillars working together, debugging a production incident across 50 microservices is like finding a needle in a haystack while blindfolded.
 
+## Summary
+
+Distributed systems trade the comforting fictions of a single machine -- one clock, one memory, one failure domain -- for capacity and fault tolerance, and this section covered the tools that make the trade survivable. Consensus algorithms like Raft turn a quorum of fallible nodes into a single source of truth; the invariant worth memorizing is that a majority cannot exist on both sides of a partition, which is what makes split-brain preventable and why etcd, ZooKeeper, and Consul exist. There is no global clock, so events on different machines must never be ordered by wall-clock timestamps: use a monotonic clock for durations on one machine, Lamport timestamps when any causally consistent total order will do, vector clocks when you must *detect* concurrent conflicting writes, and HLC or TrueTime when timestamps must be both humanly meaningful and causally ordered.
+
+Those fundamentals drive the practical decisions. For unique IDs, the scheme encodes a throughput-versus-coordination trade-off: UUIDv7/ULID is the modern default, Snowflake the compact 64-bit choice, ticket servers the route to dense ordered integers. Distributed locks reduce contention but are not correctness guarantees -- a lease can expire during a GC pause -- so either enforce fencing tokens at the resource or, better, make the operation idempotent. Between services, synchronous calls are simple but temporally coupled, asynchronous messaging decouples at the cost of eventual-consistency complexity, and either way every remote call needs the resilience trio: a timeout, bounded retries with jittered backoff, and a circuit breaker. Finally, observability -- structured logs with correlation IDs, RED/USE metrics, and distributed traces -- is what makes any of this debuggable in production.
+
+With these building blocks in hand, the next section, 6.3 Real-World System Design Examples, assembles them into complete designs for systems you will recognize.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [6.3 Real-World System Design Examples](real-world-examples.md)

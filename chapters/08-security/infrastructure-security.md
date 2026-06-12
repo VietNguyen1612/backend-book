@@ -2,6 +2,12 @@
 
 # 8.2 Infrastructure Security
 
+The defenses we built in 8.1 -- parameterized queries, output encoding, hardened authentication -- all share a quiet assumption: that the platform underneath the application is itself trustworthy. In practice, that assumption fails in mundane ways. An AWS key committed to a public repository is typically exploited within minutes of the push; a database password shared across every service means one compromised box compromises them all; a vulnerable transitive dependency ships to production because nobody was watching the advisory feed. None of these are flaws in your application code, yet any of them can end in the same full-system breach that the application-layer defenses were meant to prevent.
+
+This section is about closing that gap. By the end of it you should be able to answer questions like: where should a production credential actually live, and how does the application get it without a static key being the bootstrap secret? What does "rotate the credential, don't just delete the commit" mean, and why is deletion alone useless? Which compliance regimes -- GDPR, CCPA, PCI-DSS, SOC 2 -- impose which concrete engineering obligations, and how do you reduce their scope rather than merely satisfy them? And what does zero-trust mean when it is implemented in code and network policy rather than recited as a slogan?
+
+We proceed in two movements. First, **Secrets Management**: dedicated secret stores (Vault, AWS and GCP secret managers), workload identity as a replacement for static keys, the disciplined use of environment variables and `.env` files, automated secret detection in CI, and encryption at rest and in transit. Then, **Compliance & Best Practices**: the major regulatory and audit frameworks and their technical implementations, dependency scanning, static and dynamic security testing, and finally zero-trust architecture, which ties the chapter's threads together into a single operating principle.
+
 ## Secrets Management
 
 Secrets -- API keys, database credentials, encryption keys, certificates -- are the crown jewels of your infrastructure. A single leaked secret can lead to a full system compromise. Proper secrets management means storing secrets securely, rotating them regularly, auditing access, and ensuring they never appear in source code or logs.
@@ -532,6 +538,8 @@ server {
 
 ## Compliance & Best Practices
 
+Secrets management and encryption protect data from attackers; compliance frameworks exist because you must also be able to *demonstrate* that protection -- to regulators, auditors, and customers -- and because some obligations (deleting a user's data on request, reporting a breach within 72 hours) are legal requirements rather than engineering preferences. This section translates the major regimes into concrete code and architecture, then covers the ongoing practices -- dependency scanning, security testing, zero-trust -- that keep a compliant system actually secure over time.
+
 ### GDPR (General Data Protection Regulation)
 
 GDPR is the European Union's data protection regulation that applies to any organization processing data of EU residents, regardless of where the organization is based. Non-compliance can result in fines up to 4% of annual global revenue or 20 million euros, whichever is greater.
@@ -962,4 +970,16 @@ spec:
 
 > **Key Takeaway:** Security is not a feature you add at the end -- it is a discipline applied at every layer, from code to infrastructure. Use defense in depth: parameterized queries, output encoding, security headers, secrets management, encrypted communications, dependency scanning, automated security testing, and zero-trust architecture. The cost of building security in from the start is always lower than the cost of a breach.
 
+## Summary
+
+Infrastructure security comes down to two disciplines: keeping credentials out of places attackers can reach, and being able to prove -- to yourself and to auditors -- that your systems behave the way you claim.
+
+On secrets, the decision rules are consistent across every tool we examined. Secrets never belong in source code, and a `.env` file is acceptable only for local development; production secrets live in a dedicated store -- Vault, AWS Secrets Manager, or GCP Secret Manager -- where access is audited and values can be rotated. Better still, prefer identities over secrets: workload identity (IRSA, GCP Workload Identity, managed identities) and Vault's dynamic credentials replace long-lived static keys with short-lived, automatically rotated ones, shrinking the exploitation window of any leak to minutes. When a secret does leak into git, deletion is not remediation -- the value lives on in history, so rotate first and rewrite history second. Detection tools (detect-secrets, TruffleHog, gitleaks) belong in pre-commit hooks and CI so the leak never happens.
+
+On compliance, the recurring theme is scope reduction and evidence. GDPR and CCPA demand erasure, export, consent records, and retention enforcement built into the data model; PCI-DSS is best satisfied by tokenizing so card data never enters your network; SOC 2 and ISO 27001 require that you operate the controls you claim and keep the proof. Dependency scanning, SAST/DAST in CI, and an SBOM keep the supply chain honest, and zero-trust -- verified identity on every request, least privilege, default-deny networking -- replaces the indefensible idea of a trusted internal network.
+
+This closes our treatment of security: Chapter 8 has moved from the application-layer attacks and defenses of 8.1 down to the infrastructure that everything else stands on. But defenses you cannot verify are defenses you do not have, and the same is true of every other property of your system. Chapter 9 takes up that problem directly, beginning with 9.1 Testing Pyramid.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [9.1 Testing Pyramid](../09-testing-strategy/testing-pyramid.md)

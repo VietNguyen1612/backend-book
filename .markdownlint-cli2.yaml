@@ -26,9 +26,8 @@ config:
   # bare ``` fences (no language) throughout the book.
   MD040: false # fenced-code-language
 
-  # Sections deliberately use an H1 title followed by H3/H4 bodies (skipping H2),
-  # a consistent hierarchy across all 34 section files.
-  MD001: false # heading-increment
+  # Section files now use proper book hierarchy (H1 title, H2 sections,
+  # H3/H4 subsections), so the default heading-increment rule applies.
 
   # Consecutive callout blockquotes (e.g. a "Key Takeaway" right after a
   # "Common pitfall") are intentionally separated by a blank line.

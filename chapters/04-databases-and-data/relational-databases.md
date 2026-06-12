@@ -2,6 +2,12 @@
 
 # 4.1 Relational Databases (PostgreSQL Focus)
 
+The previous chapter dealt with the shape of systems — how to draw boundaries between services and layers. This chapter descends into the layer those boundaries ultimately protect: the data. For most backend systems, the relational database is the single stateful component everything else depends on, and it is where the most expensive production incidents originate. A query that was fast at ten thousand rows grinds to a halt at ten million; a deploy stalls because an `ALTER TABLE` took a lock nobody anticipated; two concurrent requests both read a balance of 100 and both write 50; a table that should be 2 GB occupies 40 GB because VACUUM fell behind. None of these are exotic — they are the ordinary failure modes of teams that treat the database as a black box behind an ORM.
+
+This section opens that box, using PostgreSQL as the concrete engine. By the end you should be able to answer questions like: why is this query slow, and what does its execution plan actually say? Which index type fits this access pattern, and what does each additional index cost on writes? What anomalies can occur at Read Committed that Serializable would prevent, and when is the stricter level worth its retry cost? When should a row be locked pessimistically with `SELECT FOR UPDATE` rather than guarded by an optimistic version column? And which problems — time-series retention, analytics, JSON documents, full-text search — can PostgreSQL itself solve before you reach for another system?
+
+We build from the ground up. *Storage Internals & Durability* establishes the physical foundation — pages, the buffer pool, the write-ahead log, MVCC version storage, and B-tree versus LSM engines. *Query Optimization* shows how to read execution plans and fix the slow queries that foundation explains. *Indexing Strategies* surveys the index types PostgreSQL offers and the decision rules for choosing among them. *Transactions & Concurrency* turns from performance to correctness: ACID, isolation levels, locking, and MVCC's operational consequences. Finally, *Advanced Features* covers the capabilities — partitioning, window functions, JSONB, full-text search, replication, connection pooling — that often make PostgreSQL the only database you need.
+
 ## Storage Internals & Durability
 
 Before tuning queries, it helps to understand how PostgreSQL physically stores and protects data. Almost every performance and durability trade-off in a relational database traces back to these mechanics.
@@ -97,6 +103,8 @@ A **Log-Structured Merge-tree (LSM)** -- used by Cassandra, RocksDB, ScyllaDB, a
 ---
 
 ## Query Optimization
+
+The storage internals we just covered explain *where* query time goes — pages fetched from disk, heap lookups behind index scans, caches hit or missed. This section turns that understanding into practice: how to see what the planner actually decided to do with your query, and how to fix it when the answer is unflattering.
 
 ### EXPLAIN ANALYZE: Reading Execution Plans
 
@@ -323,6 +331,8 @@ SELECT * FROM products WHERE name ILIKE '%Widget%';  -- Case-insensitive too
 
 ## Indexing Strategies
 
+`EXPLAIN ANALYZE` tells you *that* a query needs an index; it does not tell you *which kind*. PostgreSQL offers several index types with very different shapes, and the right choice depends on the data and the access pattern — a point we will keep returning to. We start with the default that covers most cases, then work through the specialized types and the techniques for keeping indexes small and targeted.
+
 ### B-tree (Default Index)
 
 B-tree is the default and most versatile index type in PostgreSQL. It supports equality (`=`) and range queries (`<`, `>`, `<=`, `>=`, `BETWEEN`), as well as `IS NULL`, `ORDER BY`, and pattern matching with anchored `LIKE 'prefix%'`.
@@ -542,6 +552,8 @@ class User(models.Model):
 ---
 
 ## Transactions & Concurrency
+
+So far we have been concerned with making individual queries fast. But a production database is never running one query at a time — it is interleaving hundreds, and the harder question is whether they remain *correct* while doing so. This section covers the guarantees the database makes about concurrent work, the anomalies each isolation level does and does not prevent, and the locking strategies you reach for when the defaults are not enough.
 
 ### ACID Properties
 
@@ -841,6 +853,8 @@ def update_price(product_id, new_price, max_retries=3):
 ---
 
 ## Advanced Features
+
+Storage, queries, indexes, and transactions are the fundamentals every relational engine shares. What follows is the set of capabilities that frequently makes PostgreSQL sufficient where teams might otherwise bolt on a second system — a document store, a search engine, an analytics warehouse. Knowing what the database can already do is often the cheapest architectural decision available.
 
 ### Partitioning
 
@@ -1316,4 +1330,16 @@ PgBouncer supports three pooling modes:
 
 > **Key Takeaway:** PostgreSQL's advanced features -- partitioning, window functions, CTEs, JSONB, full-text search, and logical replication -- can eliminate the need for many external tools. Master these features before reaching for additional infrastructure. Use connection pooling (PgBouncer) in production to manage connection overhead.
 
+## Summary
+
+A relational database's observable behavior — its speed, its durability, its failure modes — is determined by mechanics you can learn and inspect. At the storage layer, everything moves in 8 KB pages through the buffer pool; durability rests on the write-ahead rule that the WAL record reaches disk before the dirty page does; and MVCC's choice to keep old row versions in the heap is why PostgreSQL administration revolves around VACUUM and bloat, while InnoDB's undo log and clustered index produce a different set of trade-offs. B-trees balance reads and writes; LSM engines trade read cost for write throughput.
+
+On top of that foundation, query work is empirical: `EXPLAIN ANALYZE` shows what the planner actually did, and the largest wins come from the right index and from eliminating N+1 patterns, not from clever SQL. Indexing is a matter of matching structure to access pattern — B-tree for the common case, GIN for composite values like JSONB and full-text, BRIN for huge naturally-ordered tables, partial and expression indexes to stay small — always remembering that every index taxes writes.
+
+Correctness under concurrency has its own decision rules. Read Committed serves most applications; Repeatable Read and Serializable buy stronger guarantees at the price of retry handling. Lock pessimistically with `SELECT FOR UPDATE` when conflicts are common and integrity is critical; version optimistically when conflicts are rare. And before adding infrastructure, check whether partitioning, window functions, JSONB, full-text search, logical replication, or PgBouncer already solve the problem inside PostgreSQL.
+
+Sometimes, though, the relational model genuinely is the wrong fit — and knowing when is the subject of 4.2 NoSQL & Specialized Databases.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [4.2 NoSQL & Specialized Databases](nosql-and-specialized.md)

@@ -2,7 +2,15 @@
 
 # 5.3 Authentication & Authorization
 
+The previous section examined how to shape an API's surface -- GraphQL, gRPC, and the other alternatives to plain REST. But every one of those styles shares the same prerequisite: before a request does anything, the server must answer two distinct questions. *Who is making this call?* (authentication) and *what are they allowed to do?* (authorization). Conflating the two, or getting either one slightly wrong, is behind a remarkable share of real-world incidents: tokens that accept `alg: none` and can be forged by anyone, refresh tokens that survive theft because nobody rotates them, a multi-tenant query that leaks another customer's rows because one endpoint forgot the tenant filter, an internal admin route protected only by obscurity. These are not exotic attacks -- they are ordinary engineering mistakes in systems that handle identity and access, and they recur because the underlying protocols are easy to use without being understood.
+
+By the end of this section you should be able to answer the questions that come up both in production and in system-design interviews: which OAuth 2.0 flow fits which kind of client, and why the Implicit flow is dead; what actually lives inside a JWT and why stateless verification cuts both ways; when short-lived access tokens plus rotating refresh tokens beat server-side sessions, and when they do not; where API keys are appropriate; and, on the authorization side, when plain roles stop being enough and you should reach for attribute-based policies, an external policy engine, or enforcement pushed all the way down into the database.
+
+The section is organized around those two questions. *Authentication* covers the mechanics of establishing identity: the OAuth 2.0 flows (including the device flow for browserless clients), JWT structure and signing, refresh token rotation, API keys, session cookies, and SSO via SAML and OIDC. *Authorization* then covers deciding what an authenticated identity may do: RBAC, ABAC, policy engines such as OPA, PostgreSQL row-level security, and the principle of least privilege that should govern all of it.
+
 ## Authentication
+
+Establishing identity sounds like a solved problem -- check a password, set a cookie -- but the moment third parties, mobile apps, microservices, and headless devices enter the picture, "who is this?" fans out into a family of protocols, each tuned to a particular kind of client and threat model. We start with OAuth 2.0, the delegation framework underneath nearly all of them, and work through the token formats and storage strategies it produces.
 
 **OAuth 2.0 Flows**
 
@@ -610,6 +618,8 @@ The ID token contains claims like `sub` (user identifier), `email`, `name`, `ema
 
 ## Authorization
 
+Everything so far answers only the first question -- the server now knows the caller is `user_123` with certain roles in their token. Authorization is the second, harder question: given that identity, which actions and which data are permitted? The models below are ordered roughly by expressiveness, from simple role checks to context-aware policies to enforcement inside the database itself, and the engineering skill is choosing the simplest one that fits.
+
 **RBAC (Role-Based Access Control)**
 
 RBAC assigns users to roles, and roles to permissions. It is simple, widely understood, and sufficient for most applications. The user does not have direct permissions -- they inherit them through their role assignments.
@@ -928,4 +938,19 @@ In practice, this means:
 
 > **Key Takeaway:** Start with RBAC -- it covers 80% of use cases with simple, auditable role assignments. Graduate to ABAC or a policy engine like OPA when you need fine-grained, context-aware decisions. Row-level security in PostgreSQL is a powerful safety net for multi-tenant data isolation. Always default to deny and grant the minimum access required.
 
+## Summary
+
+Authentication and authorization are separate problems, and this section treated them in turn. On the authentication side, OAuth 2.0 gives us a flow for each kind of client: Authorization Code for server-side apps, Authorization Code + PKCE for browsers and mobile (the Implicit flow is deprecated), Client Credentials for machine-to-machine, and the Device Code flow for TVs and CLIs that cannot present a browser. The tokens these flows produce are usually JWTs -- signed, self-contained, and verifiable by any service holding the public key, which is precisely their strength (no shared session store) and their weakness (revocation needs extra machinery). The working compromise is short-lived access tokens paired with rotating refresh tokens, where reuse of a rotated token signals compromise and revokes everything. API keys remain appropriate for simple server-to-server integrations -- hashed at rest, prefixed, rate-limited -- while session cookies still win when easy revocation matters more than statelessness, and OIDC has become the standard way to extend all of this into single sign-on.
+
+On the authorization side, the decision rules are about expressiveness:
+
+- Start with RBAC -- roles mapping to permissions cover most applications and stay auditable.
+- Move to ABAC when role explosion sets in and decisions depend on attributes and context.
+- Externalize to a policy engine like OPA once policies need testing, versioning, and sharing across services -- and always test the deny path.
+- Use PostgreSQL row-level security as a multi-tenant safety net, turning tenant isolation into a database invariant rather than a per-query habit.
+
+Underneath it all sits least privilege: default deny, grant the minimum, audit regularly. One authentication factor we deliberately deferred is the password's replacement itself, which is where 5.4 WebAuthn & Passkeys picks up.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [5.4 WebAuthn & Passkeys](webauthn-and-passkeys.md)

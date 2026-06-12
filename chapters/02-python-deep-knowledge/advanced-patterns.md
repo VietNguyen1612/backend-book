@@ -2,7 +2,15 @@
 
 # 2.3 Advanced Patterns
 
+Much of what separates a Python codebase that ages well from one that accumulates incidents is not framework choice — it is fluency with a handful of language features and standard-library tools. The failure modes are concrete: a retry decorator that loses the wrapped function's identity and ruins every stack trace; a batch job that loads ten million rows into a list and gets OOM-killed when a generator would have streamed them in constant memory; a `datetime.utcnow()` that is silently five hours off in production; a ledger that doesn't balance because money was summed in floats; a service that unpickles a queue message and hands an attacker remote code execution. Each of these is a pattern covered in this section, and each has a well-understood prevention.
+
+After reading it, you should be able to answer questions like: when does a decorator need `functools.wraps`, and when does it need to be a class? When is a generator the right tool, and when do you actually need the whole list? What do `mypy` and Pydantic each catch, and where does each belong? Should this record be a `dataclass`, a `NamedTuple`, a `TypedDict`, or a dict? Why is `Decimal` non-negotiable for money, and why must datetimes be timezone-aware? And for a given workload, do you reach for threads, processes, or the asyncio machinery from section 2.2?
+
+We proceed roughly from code structure to data correctness to execution. We start with decorators and context managers — wrapping behavior and guaranteeing cleanup — then generators and iterators for lazy, memory-bounded data flow. Type hints and static analysis make function contracts checkable, and dataclasses and enums give that typed data a proper shape. The next four sections are the correctness gauntlet every backend eventually runs: dates and time zones, numeric precision and money, strings and encodings, and serialization formats. Pattern matching then gives us a clean way to dispatch over the variant data those sections produce, and we close with concurrency patterns — threads, processes, and `concurrent.futures` — the synchronous complement to the async model of section 2.2.
+
 ## Decorators & Context Managers
+
+These two features address the same underlying problem from different angles: code that must run around other code. Decorators attach cross-cutting behavior — logging, retries, caching, rate limiting — to functions without touching their bodies, while context managers guarantee that setup is always paired with teardown, even when the block in between raises. Together they are the idioms you will meet on the first page of nearly every serious Python codebase, so we start here.
 
 ### Function Decorators: Wrapping Behavior
 
@@ -279,6 +287,8 @@ Result: 499999500000, Time: 0.0182s
 
 ## Generators & Iterators
 
+Decorators and context managers shape how code wraps other code; generators shape how data flows through it. The generator-based context manager we just wrote (`@contextlib.contextmanager`) already hinted at the mechanism — a function that pauses at `yield` and resumes later. Here we use that same machinery for its primary purpose: producing values lazily, one at a time, so that the size of your data no longer dictates the size of your memory footprint.
+
 ### Generator Functions: Lazy Evaluation
 
 Generators produce values on demand using `yield`. They are memory-efficient because they compute one value at a time instead of building an entire collection.
@@ -511,6 +521,8 @@ for batch in itertools.batched(range(10), 3):
 ---
 
 ## Type Hints & Static Analysis
+
+Everything so far has been dynamic — wrappers, lazy pipelines, protocols discovered at runtime. The cost of that flexibility is that a wrong type travels silently until it explodes somewhere far from its source. Type hints let us write the contract down where it can be checked: by `mypy` before the code ever runs, and — where data crosses a trust boundary — by Pydantic at runtime.
 
 ### Core Type Annotations
 
@@ -982,6 +994,8 @@ For measuring *durations* (timeouts, latency), use `time.monotonic()` instead of
 
 ## Numbers, Precision & Money
 
+Time is not the only domain where the obvious representation is subtly wrong. Arithmetic has the same property: the default number type works perfectly until the day a financial total is off by a cent and an auditor wants to know why. The discipline here mirrors the UTC rule — pick the representation that is exact for your domain, and confine the lossy one to where it belongs.
+
 ### Floats Lie; Use Decimal for Money
 
 `float` is IEEE-754 double-precision binary floating point. Many decimal fractions have no exact binary representation, so arithmetic accumulates tiny errors.
@@ -1028,6 +1042,8 @@ print(2 ** 200)
 ---
 
 ## Strings, Bytes & Encoding
+
+Numbers have one precision trap; text has several, and they hide in the gap between what a string *is* and how it is *stored*. Like the float/Decimal distinction we just drew, the key is to be explicit about representation at every boundary.
 
 `str` is a sequence of Unicode *code points*; `bytes` is a sequence of raw *octets*. They are different types and mixing them raises `TypeError`. The mantra: **encode `str` to `bytes`, decode `bytes` to text — always with an explicit `utf-8`.**
 
@@ -1168,6 +1184,8 @@ def classify(c: Color):
 ---
 
 ## Concurrency Patterns
+
+Section 2.2 covered `asyncio`, where one thread juggles many I/O waits cooperatively. This section covers the other half of Python's concurrency story: preemptive threads for I/O-bound work that isn't written as coroutines, and processes for CPU-bound work that must escape the GIL. The high-level `concurrent.futures` API gives both the same interface, so we start there and descend to the primitives only where the abstraction needs help.
 
 ### `concurrent.futures`: High-Level Concurrency
 
@@ -1398,4 +1416,19 @@ class BoundedBuffer:
 
 > **Key Takeaway:** Use `concurrent.futures` for simple parallelism (it abstracts away the thread/process complexity). Use `multiprocessing` with `Pool` for CPU-bound batch processing. Use `threading.Lock` (not `RLock` unless you need reentrancy) and thread-local storage to manage shared state safely.
 
+## Summary
+
+This section assembled the working vocabulary of production Python. Decorators attach cross-cutting behavior to functions — always through `functools.wraps`, with a class when the wrapper needs state — and context managers guarantee cleanup on every exit path, which is why transactions, timers, and resource pools are built on them. Generators extend the same suspend-and-resume machinery into data flow: when you iterate once and never need `len()`, a lazy pipeline processes unbounded input in constant memory.
+
+The middle of the section was about giving data an honest shape. Type hints plus `mypy` catch contract violations before runtime, while Pydantic enforces them at untrusted boundaries; inside trusted code, `@dataclass` (frozen and slotted for value objects), `NamedTuple`, and enums replace anonymous dicts and magic strings. Then came the correctness rules that prevent the most common classes of incident:
+
+- Store and compute time in UTC with aware datetimes; convert to local zones only for display, and measure durations with the monotonic clock.
+- Represent money as `Decimal` or integer minor units with an explicit currency — never floats.
+- Encode and decode text explicitly as UTF-8, normalize Unicode before comparing, and remember that bytes are not characters.
+- Serialize with JSON or a schema-driven format; never unpickle untrusted input.
+
+Structural pattern matching gave us a readable way to dispatch over variant data — remembering that a bare name in a `case` captures rather than compares. Finally, `concurrent.futures` unified threads (I/O-bound) and processes (CPU-bound) behind one interface, complementing the async model of section 2.2. With the language patterns in hand, the next question is how to package, version, and ship the code that uses them — the subject of 2.4 Packaging & Tooling.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [2.4 Packaging & Tooling](packaging-and-tooling.md)

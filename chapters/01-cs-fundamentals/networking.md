@@ -2,6 +2,12 @@
 
 # 1.4 Networking
 
+Every backend system is a distributed system, even if it is just one Django process talking to one Postgres instance — the moment a request crosses a socket, you inherit the network's failure modes. Latency that appears from nowhere, connections that hang only for large payloads, a service that runs out of ports while CPU sits idle, an API that works from the office but not from production: these are not application bugs, and no amount of reading your own code will explain them. They live in the handshakes, buffers, caches, and intermediaries between your code and its callers. The previous section on operating systems ended at the socket interface; this one follows the bytes after they leave it.
+
+After working through this section you should be able to answer questions like: why does a new HTTPS connection cost two or three round trips, and what do connection pooling and TLS 1.3 each shave off? When a request stalls, how do you tell whether the time went to DNS, the TCP connect, the TLS handshake, or the application itself? Why must you never trust `X-Forwarded-For` from an arbitrary client, why do you lower a DNS TTL days before a migration, and why does blocking ICMP at the firewall cause large requests to hang while small ones succeed?
+
+We build up in layers, the same way the network does. We start with the layered model and the lower layers — IP addressing, CIDR, NAT, routing — that everything else rides on. Then we go deep on TCP/IP: the handshake, congestion control, and the socket-level tuning knobs that matter in production. From there we climb to the HTTP protocol and its evolution from 1.1 through HTTP/3, then to the proxies, gateways, and load balancers that sit in front of every real deployment. Two supporting pillars follow — DNS, which turns names into addresses, and TLS/SSL, which secures the channel — before we close with network debugging: the tools that let you locate a fault at the right layer when something inevitably breaks.
+
 ## The Layered Model & Lower Layers
 
 Before the TCP and HTTP details, it helps to see where each protocol sits. Networking is built in **layers**, each one adding its own header around the data from the layer above (**encapsulation**) and stripping it on the way back up.
@@ -69,6 +75,8 @@ The internet is a mesh of **autonomous systems** (ASes — ISPs, clouds, large n
 ---
 
 ## TCP/IP Deep Dive
+
+The lower layers deliver individual packets on a best-effort basis; TCP is the transport layer's answer to building a reliable, ordered byte stream on top of that unreliability. Because nearly every protocol you operate — HTTP, your database wire protocol, gRPC — rides on TCP, its connection lifecycle and tuning knobs set the latency and throughput floor for everything above. We start with how a connection is born, then look at how TCP paces itself, and finally at the socket options worth changing in production.
 
 ### The Three-Way Handshake
 
@@ -231,6 +239,8 @@ net.ipv4.tcp_rmem = 4096	131072	6291456
 ---
 
 ## HTTP Protocol
+
+With a reliable TCP stream in place, we can move up to the protocol your services actually speak. HTTP's evolution is largely a story of working around the transport beneath it — first reusing connections, then multiplexing over one, and finally replacing TCP altogether — and each version changes how you should think about connection management and performance. The caching headers at the end of this section are where a backend engineer gets the most leverage from the protocol.
 
 ### HTTP/1.1
 
@@ -408,6 +418,8 @@ Client 1.2.3.4 -> Proxy A -> Proxy B (reverse proxy) -> app server
 
 ## DNS
 
+Everything so far assumed the client already knows the server's IP address. In practice that knowledge comes from DNS, the globally distributed, heavily cached database that maps names to addresses — and because every connection begins with a lookup, DNS misconfiguration has an outsized blast radius. Understanding how resolution and caching work is what makes zero-downtime migrations and DNS-based failover possible.
+
 ### Recursive Resolution
 
 When your browser needs to resolve `api.example.com`, this is what happens:
@@ -490,6 +502,8 @@ DNSSEC adds cryptographic signatures to DNS records, creating a **chain of trust
 ---
 
 ## TLS/SSL
+
+Name resolved and connection established, the remaining problem is that everything we have described so far travels in cleartext through networks you do not control. TLS supplies the encryption and authentication layer that every production service now requires — and, as we saw with proxies, where you terminate it is an architectural decision. This section covers the handshake cost, the certificate machinery you will inevitably debug, and mTLS for service-to-service identity.
 
 ### TLS 1.3 Handshake
 
@@ -598,6 +612,8 @@ This certificate expires on 2026-09-02.
 ---
 
 ## Network Debugging
+
+The preceding sections gave us the theory; this one is about what to type when production misbehaves. The layered model pays off here: each tool below observes a specific layer, so choosing the right one — packets, sockets, HTTP timing, DNS, or the path itself — is most of the diagnosis. We walk through the essential toolkit roughly bottom-up, ending with the MTU issues that tie back to the link layer where we began.
 
 ### tcpdump
 
@@ -764,4 +780,14 @@ ping: local error: message too long, mtu=1492
 
 > **Key Takeaway:** Network debugging is an essential skill for backend engineers. Use `curl -w` for HTTP timing analysis, `ss` for connection state inspection, `tcpdump` for packet-level debugging, and `mtr` for path analysis. Most production networking issues come down to: DNS misconfiguration, certificate problems, firewall blocking, connection exhaustion (TIME_WAIT), or MTU issues. Having these tools in your toolkit lets you quickly identify which layer the problem is at.
 
+## Summary
+
+This section followed a request from the wire up. The layered model is the organizing idea: each layer reads only its own header, which is precisely why you can debug one level at a time — and why knowing your private ranges, CIDR math, and NAT's outbound-only nature is daily work, not trivia. On top of IP sits TCP, whose handshake costs one round trip on every new connection; that single fact motivates connection pooling, keep-alive, and the TIME_WAIT and buffer-sizing discipline (size to the bandwidth-delay product) that high-traffic servers demand. HTTP's evolution is a series of escapes from transport limitations — persistent connections in 1.1, multiplexing in HTTP/2, QUIC replacing TCP in HTTP/3 — while caching headers remain the highest-leverage performance tool the protocol offers.
+
+In real deployments you live behind intermediaries: a reverse proxy fronts your servers (TLS termination, load balancing), an API gateway adds application-aware concerns like auth and rate limiting, and the standing rule is to trust `X-Forwarded-For` only from proxies you operate. Two pillars support all of it. DNS turns names into addresses through a cached hierarchy governed by TTLs — lower them well before any migration, and use health-checked records for failover. TLS secures the channel: TLS 1.3 in one round trip, certificates verified through a chain of trust (a missing intermediate is the classic "verify failed"), and mTLS for service-to-service identity. When something breaks anyway, the debugging toolkit maps to the layers: `curl -w` for HTTP timing, `ss` for socket state, `dig` for DNS, `tcpdump` and `mtr` below that — and MTU black holes for the cases where small requests work and large ones silently hang.
+
+This closes Chapter 1. With the fundamentals of how machines compute, store, schedule, and communicate in place, we turn from the platform to the language: Chapter 2 begins with **2.1 Language Internals**, opening up what actually happens inside the Python interpreter when your code runs.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [2.1 Language Internals](../02-python-deep-knowledge/language-internals.md)

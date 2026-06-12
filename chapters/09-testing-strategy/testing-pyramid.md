@@ -2,17 +2,23 @@
 
 # 9.1 Testing Pyramid
 
-The testing pyramid is a model that guides how you distribute your automated tests across different layers. At the base sits a large number of fast, isolated unit tests. In the middle are integration tests that verify how components work together with real dependencies. At the top are fewer, slower end-to-end and performance tests. The goal is to catch as many bugs as possible at the lowest (cheapest) layer while still verifying that the entire system works when assembled.
+The preceding chapters were about building systems -- data models, APIs, caches, queues -- and then securing them. This chapter is about gaining justified confidence that all of it works, and keeps working as the code changes underneath you. The testing pyramid is the model that guides how you distribute that confidence-building effort across layers: at the base sits a large number of fast, isolated unit tests; in the middle are integration tests that verify how components work together with real dependencies; at the top are fewer, slower end-to-end and performance tests. The goal is to catch as many bugs as possible at the lowest (cheapest) layer while still verifying that the entire system works when assembled.
+
+The stakes are concrete. A team whose tests live at the wrong layer pays for it daily: a forty-five-minute suite that developers quietly stop running, a flaky end-to-end test that fails one build in five for reasons unrelated to the change under review, a mocked-out repository that stays green while the real database rejects the insert in production. By the end of this section you should be able to answer the questions that decide those outcomes: at which layer does a given test belong, and why? When should a dependency be mocked, faked, or run for real in a container? How do you test against a third-party API without making your CI dependent on someone else's uptime? And which numbers from a load test actually predict what users will experience?
 
 The classic failure mode is the inverted pyramid -- the **"ice cream cone"** -- where a team has a thick layer of slow, brittle end-to-end tests on top and almost no unit tests at the bottom. Such a suite takes ages to run, fails intermittently for reasons unrelated to the change under test, and gives imprecise failure messages, so developers stop trusting it. The corrective instinct is to "push coverage down the pyramid": every bug that an E2E test could catch but a faster unit or integration test could catch *just as well* belongs at the lower layer.
 
-### Testing Trophy vs. Pyramid
+This section proceeds bottom-up through the pyramid. We first weigh the pyramid against its main rival, the testing trophy, to establish that the shape of your code should dictate the shape of your suite. **Unit Tests** then covers the foundation: isolation, the Arrange-Act-Assert pattern, parametrization, edge cases, and property-based testing with Hypothesis. **Integration Tests** moves up a layer to real dependencies -- disposable databases via testcontainers, API tests, the vocabulary of test doubles, and strategies for third-party services. Finally, **Performance Testing** covers the apex: load testing with Locust, the four kinds of performance tests, the metrics that matter, and regression detection in CI.
+
+## Testing Trophy vs. Pyramid
 
 The pyramid is a heuristic, not a law. A widely cited counterpoint is Kent C. Dodds's **"testing trophy,"** which argues that for many modern applications -- especially those that are thin layers of glue over frameworks, databases, and libraries -- integration tests deliver the most *confidence per dollar*. The trophy shape (from bottom to top) is a base of static analysis (type checking, linting), then a moderate number of unit tests, a **large bulge of integration tests**, and a thin cap of E2E tests. The reasoning is that in a service that is mostly wiring -- routing, serialization, an ORM query, an HTTP call -- a unit test of any single layer in isolation tells you little, because the bugs live in the *seams between* layers, which only an integration test exercises.
 
 The two models are not really in conflict; they answer the same question for different architectures. A library with rich, algorithm-heavy domain logic (a date-math library, a pricing engine) genuinely wants a fat unit-test base -- the pyramid. A CRUD web service that mostly translates HTTP to SQL wants a fat integration middle -- the trophy. The senior takeaway is to let the *shape of your code* dictate the shape of your test distribution rather than dogmatically chasing one diagram: write the test at the lowest layer that can still give you genuine confidence about the behavior you care about.
 
 ## Unit Tests
+
+We begin at the base of the pyramid, because everything above rests on it: if the unit layer is thin or untrustworthy, the suite collapses into the ice cream cone described above. The subsections that follow work through what makes a good unit test in practice -- isolation first, then the patterns that keep a suite of thousands readable and thorough.
 
 ### Test a Single Unit in Isolation
 
@@ -305,6 +311,8 @@ AssertionError: assert 'A2' == 'AA'
 
 ## Integration Tests
 
+Unit tests deliberately mock away the database, the network, and the filesystem -- which means they can never tell you whether your SQL is valid, your serializer matches the wire format, or your unique constraint actually fires. The middle layer of the pyramid exists to answer exactly those questions, trading some speed for fidelity to the real infrastructure.
+
 ### Test Component Interactions with Real Dependencies
 
 Integration tests verify that your code works correctly when it talks to real external systems -- databases, caches, message brokers, and third-party APIs. Unlike unit tests that replace dependencies with mocks, integration tests spin up actual instances (often via Docker containers) so you can catch problems like incorrect SQL, serialization mismatches, misconfigured connection pools, and transaction isolation bugs. These tests are inherently slower than unit tests, so you run fewer of them, but they catch an entirely different class of defect.
@@ -574,6 +582,8 @@ tests/test_currency.py::test_currency_conversion_uses_live_rate PASSED   [100%]
 
 ## Performance Testing
 
+Unit and integration tests verify that the system is *correct*; neither says anything about whether it is *fast enough*. At the apex of the pyramid sit the tests that answer performance questions -- run less often and against realistic environments, because they are the most expensive to set up and interpret.
+
 ### Load Testing
 
 Load testing determines how your system behaves under expected and peak traffic. You simulate concurrent users sending requests and measure response times, throughput, and error rates. **Locust** is a Python-native load testing tool that defines user behavior as plain Python code, making it natural for backend developers who already work in the Python ecosystem. It supports distributed load generation across multiple machines and provides a real-time web UI for monitoring test runs.
@@ -698,4 +708,14 @@ test_fibonacci_benchmark 4.21    18.93     4.58    0.91     4.39  218.1K   42153
 
 > **Key Takeaway:** Performance testing is not optional for production systems. Use Locust for realistic load simulation, measure percentile latencies (not just averages), and automate regression detection in CI so you never ship a slow change unknowingly.
 
+## Summary
+
+The testing pyramid is an economic argument: catch each bug at the cheapest layer that can catch it. A fat base of fast unit tests, a thinner middle of integration tests, and a thin cap of end-to-end and performance tests keep the suite fast enough to run constantly and precise enough to trust. The pyramid is a heuristic, though, not a law -- the testing trophy reminds us that a service which is mostly wiring between framework, ORM, and network wants a fat integration middle instead. The decision rule is the same either way: write each test at the lowest layer that still gives genuine confidence about the behavior you care about.
+
+At the unit layer, isolation is what buys the speed and the pinpoint failure messages: dependencies become test doubles, the AAA pattern keeps tests readable, `parametrize` covers boundaries exhaustively, and Hypothesis finds the edge cases nobody enumerates by hand. At the integration layer, real dependencies catch what mocks cannot -- invalid SQL, broken constraints, serialization mismatches -- using testcontainers for disposable databases and Django's test client for the full HTTP cycle. Knowing the five test doubles, and mocking only at architectural boundaries, keeps these tests verifying behavior rather than implementation. Third-party services get sandboxes, local fakes, or record-replay cassettes rather than live calls in CI. At the apex, performance tests answer a different question -- not "is it correct?" but "is it fast enough?" -- with load, stress, soak, and spike tests, judged by percentile latencies rather than averages, and wired into CI as regression gates.
+
+Knowing where each test belongs is half the job; the other half is the day-to-day discipline of writing, organizing, and maintaining them, which is the subject of 9.2 Testing Practices.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [9.2 Testing Practices](testing-practices.md)

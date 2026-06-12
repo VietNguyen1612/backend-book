@@ -2,7 +2,15 @@
 
 # 1.1 Data Structures
 
+Every backend system, no matter how elaborate its architecture, ultimately comes down to arranging data in memory and moving it around. The data structures we choose determine whether an API endpoint responds in two milliseconds or two seconds, whether a cache fits in RAM or spills onto disk, and whether a service survives a traffic spike or falls over. Many production incidents that look like infrastructure problems are really data structure problems in disguise: a membership check against a growing list that quietly turned O(n), a hash table degraded by adversarial keys, a database query that cannot use its B-Tree index. This section — the opening of the book — is where we build the vocabulary that everything later rests on, from database internals to distributed caches.
+
+By the end of this section, you should be able to answer questions like: why is appending to a Python list cheap even though arrays are fixed-size? When does a dictionary's O(1) promise break down, and how can an attacker exploit that? Why do databases index with B-Trees rather than hash tables or binary search trees? How does a cache decide what to evict, and how can a system count a billion unique visitors in twelve kilobytes of memory? These are not interview trivia; they are the mechanics behind the tools you operate every day.
+
+We begin with arrays and linked lists, the two fundamental memory layouts from which everything else is built. We then turn to hash tables, the workhorse of associative lookup, including Python's dict internals and the distributed-systems technique of consistent hashing. From there we move to trees, which restore the ordering that hash tables sacrifice and power every database index, and then to graphs, the structure behind dependency resolution, routing, and workflow orchestration. We close with advanced data structures — skip lists, Bloom filters, HyperLogLog, LRU caches, and Union-Find — the specialized tools that trade a little generality (or a little exactness) for dramatic gains in space and time.
+
 ## Arrays & Linked Lists
+
+There are really only two ways to lay data out in memory: in one contiguous block, or as separate nodes connected by pointers. Arrays and linked lists are the purest expressions of these two layouts, and every trade-off we encounter later — in hash tables, trees, and caches — is a variation on this choice. We start here because the consequences of memory layout, particularly for CPU caches, explain performance differences that Big-O notation alone cannot.
 
 ### Arrays (Contiguous Memory Layout)
 
@@ -178,6 +186,8 @@ rb.write("event_5")  # Reuses the slot freed by the read
 ---
 
 ## Hash Tables
+
+Arrays give us O(1) access, but only when we already know the index. The hash table's central trick is to compute the index from the key itself, turning positional access into associative lookup — and it is hard to overstate how much of backend engineering rests on this idea, from Python's `dict` to database hash joins to the routing of keys across a fleet of cache servers. In this section we look at how that trick works, what happens when it goes wrong, and how the same idea scales out to distributed systems.
 
 ### How Hash Tables Work
 
@@ -409,6 +419,8 @@ $ python -c 'print(hash("attacker-controlled-key"))'
 ---
 
 ## Trees
+
+Hash tables buy their constant-time lookups by scattering keys deliberately, which means they sacrifice order: there is no efficient way to ask a hash table for "all keys between 10 and 50" or "the smallest key greater than X." Trees restore that order, supporting lookups, range scans, and ordered iteration in logarithmic time. That combination is why trees — not hash tables — sit underneath nearly every database index you will ever create.
 
 ### Binary Search Tree (BST)
 
@@ -753,6 +765,8 @@ print(ft.range_sum(2, 4))  # Updated: 650
 
 ## Graphs
 
+A tree is a graph with restrictions: one root, no cycles, exactly one path between any two nodes. Drop those restrictions and we get the general graph, which models anything that can be expressed as entities and relationships — service dependencies, road networks, social connections, migration ordering. Where the previous sections were about storing and retrieving data, this one is about reasoning over relationships, and the handful of algorithms covered here recur constantly in backend work.
+
 ### Graph Representations
 
 A graph consists of vertices (nodes) and edges (connections). The two primary representations have very different performance characteristics:
@@ -1011,6 +1025,8 @@ Directed Acyclic Graphs appear everywhere in software systems:
 ---
 
 ## Advanced Data Structures
+
+Everything we have seen so far gives exact answers. At large scale, exactness is often the wrong trade: accepting a small, controlled probability of error — or a narrower set of supported operations — can reduce memory and I/O by orders of magnitude. This final section surveys the specialized structures that make that trade, the ones you will meet inside Redis, PostgreSQL, Cassandra, and your own caching layers rather than in the standard library.
 
 ### Skip List
 
@@ -1318,4 +1334,12 @@ print(f"MST edges: {mst}, Total cost: {cost}")
 
 > **Key Takeaway:** Advanced data structures solve specific problems that general-purpose structures handle poorly. Bloom filters save disk I/O, HyperLogLog counts unique items in constant space, LRU caches speed up repeated lookups, and Union-Find handles dynamic connectivity. You do not need to implement these from scratch in production (use Redis, database features, or well-tested libraries), but understanding how they work helps you choose the right tool and configure it properly.
 
+## Summary
+
+The recurring lesson of this section is that every data structure is a bargain: you pay in one currency — memory, write cost, ordering, exactness — to buy speed in another. Arrays and linked lists set up the foundational trade between contiguous and pointer-based memory layouts: arrays win on random access and cache locality, while linked structures (in Python, `collections.deque`) win on insertion and removal at the ends. Hash tables convert keys into array indices to achieve amortized O(1) lookups, but the bargain has fine print — collision strategy, load factor, and the hash-flooding attack that randomized hashing exists to prevent — and consistent hashing extends the same idea across machines so that adding a server reshuffles only a sliver of the keys. Trees pay a logarithmic factor to keep data ordered: B+ Trees minimize disk reads and power database indexes, heaps give O(1) access to the extreme element, and tries make lookup cost depend on key length rather than collection size. Graphs model relationships directly, and four algorithms — BFS, DFS, Dijkstra, and topological sort — cover most practical problems, from shortest paths to dependency ordering. Finally, the advanced structures trade exactness for scale: Bloom filters skip pointless disk reads, HyperLogLog counts distinct items in kilobytes, LRU caches exploit temporal locality, and Union-Find tracks connectivity in near-constant time.
+
+Choosing among these structures requires a shared language for comparing their costs — what O(log n) really buys you, and when constant factors overwhelm asymptotics — which is exactly where we turn next, in 1.2 Algorithms & Complexity.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [1.2 Algorithms & Complexity](algorithms-and-complexity.md)

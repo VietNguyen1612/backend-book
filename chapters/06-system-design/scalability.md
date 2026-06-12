@@ -2,7 +2,15 @@
 
 # 6.1 Scalability
 
+With this chapter we change altitude. Chapters 1 through 5 were largely about building individual services well -- writing correct Python, modeling data, securing endpoints, designing clean APIs. System design asks a different question: what happens when the thing you built meets ten times, or a thousand times, the traffic it was built for? The failure modes are familiar to anyone who has carried a pager. A single overloaded database server falls over during a marketing campaign. A session stored in one web server's memory vanishes when the autoscaler adds a second server. A popular cache key expires and ten thousand concurrent requests stampede the database that the cache was supposed to protect. None of these are bugs in any one function; they are properties of the system as a whole, and they are the subject of this chapter.
+
+By the end of this section you should be able to answer questions like: when do we scale up a machine versus scale out to more machines, and what does the application have to give up to scale out? Should the load balancer operate at layer 4 or layer 7, and which balancing algorithm fits which workload? Which caching pattern -- cache-aside, write-through, write-behind -- matches a given consistency and durability requirement, and what goes wrong when a hot key or an expiring key concentrates load? And when a network partition forces the choice, does this particular operation need consistency or availability?
+
+The section follows the path a request takes through a growing system. We start with the fundamental choice between horizontal and vertical scaling and the stateless-service discipline that horizontal scaling demands. Load balancing comes next, because a fleet of interchangeable servers is useless without something to spread traffic across them. Then we turn to caching -- the highest-leverage and most error-prone scalability tool -- covering the major patterns, invalidation, stampedes, and hot keys. We close with the CAP theorem and consistency models, the theory that explains why scaled-out, replicated systems sometimes return stale answers and what guarantees we can still afford.
+
 ## Horizontal vs Vertical Scaling
+
+Every scaling conversation starts with the same fork in the road: make the machine bigger, or add more machines. The two options look interchangeable on a capacity-planning spreadsheet, but they place very different demands on your application, so we examine each in turn.
 
 **Vertical Scaling (Scale Up)** means upgrading the hardware of a single machine -- more CPU cores, more RAM, faster SSDs, better network cards. This approach is attractive because it requires zero changes to your application code. A single-threaded application that runs on 1 CPU and 4 GB of RAM will run just as well on a machine with 64 CPUs and 512 GB of RAM (it will just have more headroom). Databases, in particular, benefit from vertical scaling because coordinating writes across multiple machines is inherently difficult. The downsides are clear: there is a hard ceiling on how large a single machine can get (you cannot buy a server with 1 million CPUs), and cost increases non-linearly. Going from 16 GB to 32 GB of RAM might cost 2x, but going from 512 GB to 1 TB can cost 5-10x due to specialized hardware.
 
@@ -18,6 +26,8 @@ Auto-scaling is the automated version of horizontal scaling. Cloud providers let
 - Avoid in-memory caches that cannot tolerate loss -- use them only as a performance optimization layer where a cache miss is handled gracefully.
 
 ## Load Balancing
+
+Once we have committed to a fleet of stateless, interchangeable servers, something has to decide which server handles each request -- and notice when one of them stops being healthy. That component is the load balancer, and its placement, layer, and algorithm shape both performance and failure behavior.
 
 A load balancer sits between clients and a pool of backend servers, distributing incoming requests across the pool. Load balancers are essential for horizontal scaling, high availability, and graceful maintenance.
 
@@ -145,6 +155,8 @@ nginx: configuration file /etc/nginx/nginx.conf test is successful
 > **Key Takeaway:** Layer 4 is fast and protocol-agnostic but blind to content; Layer 7 can route on paths, headers, and cookies and terminate TLS at the cost of CPU. Pick the algorithm to match the workload -- round-robin for uniform requests, least-connections for highly variable request durations, and consistent hashing when you are load-balancing a cache tier and want to preserve hit rates as nodes come and go.
 
 ## Caching
+
+Adding servers and balancing traffic across them scales the stateless tier, but most requests ultimately bottom out in a shared data store that does not scale so easily. Before reaching for sharded databases, the cheapest capacity win is usually to stop asking the database the same question over and over -- which brings us to caching, and to the consistency problems it introduces.
 
 Caching stores frequently accessed data in a faster storage layer (usually memory) to reduce latency and load on the primary data store. The choice of caching pattern has profound implications for consistency, latency, and failure modes.
 
@@ -368,6 +380,8 @@ A request flows through these layers: check L1, if miss check L2, if miss check 
 
 ## CAP Theorem & Consistency
 
+Caching already forced us to reason informally about staleness; once data is replicated across machines -- whether in a cache tier or a distributed database -- staleness stops being an implementation detail and becomes a fundamental constraint. This section gives that constraint its proper names: the CAP theorem, the spectrum of consistency models, and the practical guarantees we can choose between.
+
 **The CAP Theorem** states that a distributed data store can provide at most two of three guarantees simultaneously: **Consistency** (every read receives the most recent write or an error), **Availability** (every request receives a non-error response, though it may not contain the most recent write), and **Partition Tolerance** (the system continues operating despite network partitions between nodes). Since network partitions are inevitable in distributed systems, the real choice is between CP and AP during a partition event.
 
 - **CP systems** (e.g., PostgreSQL with synchronous replication, HBase, ZooKeeper) refuse to respond or return an error if they cannot guarantee that the response is up-to-date. They sacrifice availability for correctness. Use CP for financial transactions, inventory management, and any scenario where stale data causes real-world harm.
@@ -397,4 +411,18 @@ These are the everyday consistency wins: most "the database is eventually consis
 
 > **Key Takeaway**: The CAP theorem is not about choosing two of three properties as a permanent system-wide decision. It is about understanding the trade-off that is forced during network partitions. Most systems are not purely CP or AP -- they make different trade-offs for different operations. A system might use CP for payment processing and AP for recommendation feeds, all within the same architecture.
 
+## Summary
+
+Scalability is not a feature you add; it is a set of constraints you accept in exchange for capacity. The first constraint is statelessness. Vertical scaling buys headroom without code changes but hits a hardware ceiling at non-linear cost, while horizontal scaling has no practical ceiling -- provided every instance can serve any request, which means sessions, uploads, and configuration all live in external stores rather than on any one machine.
+
+Once the fleet is interchangeable, the load balancer becomes the system's front door. The layer choice is a trade between speed and intelligence: L4 is fast and protocol-agnostic, L7 can route on paths, headers, and cookies and terminate TLS. The algorithm should match the workload -- round-robin for uniform requests, least-connections for variable durations, consistent hashing when preserving cache locality matters -- and health checks plus warm-up grace periods keep traffic away from servers that cannot serve it.
+
+Caching is the highest-leverage tool in this section and the most dangerous. Each pattern trades consistency against latency and durability: cache-aside is simple but can go stale, write-through is consistent but slows writes, write-behind is fastest but can lose data. The real engineering lives in the failure modes -- invalidation strategy (TTL, events, versioned keys), stampedes when popular keys expire, penetration on missing keys, and hot keys that no amount of added nodes will fix.
+
+Finally, CAP and PACELC name the trade-off that replication forces: during a partition, choose consistency or availability, per operation rather than per system -- and even without a partition, choose latency or consistency. Session guarantees like read-your-writes fix most user-visible anomalies far more cheaply than global consensus.
+
+Scaling a single service is only the beginning; in 6.2 Distributed Systems we confront what happens when the system itself is spread across machines that fail, lag, and disagree.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [6.2 Distributed Systems](distributed-systems.md)

@@ -2,6 +2,12 @@
 
 # 10.2 System Thinking
 
+Most production disasters are not exotic. The database that buckles under a traffic spike was chosen because it was fashionable, not because anyone wrote down the throughput requirement. The slow query that takes payments down for 47 minutes sailed through staging because staging had ten thousand rows and production had forty-five million. The architecture debate that consumed three weeks of meetings went in circles because nobody agreed on what the system was optimizing for. These are all failures of system thinking -- the discipline of reasoning about constraints, trade-offs, and scale before committing to a design -- and they cost real money, real customers, and real sleep.
+
+Where the previous section was about leading people through technical change, this one is about the reasoning that earns the right to lead. By the end of this section you should be able to answer questions like: how do we compare two architectures without the debate collapsing into taste? Which requirements actually decide a design, and which are decoration? When is a new technology worth its risk, and when is it a permanent operational tax? Is this design even feasible at the scale we expect, and roughly what will it cost? And when the system fails anyway -- because it will -- how do we respond so the same failure does not happen twice?
+
+We start with a trade-off analysis framework: the three questions every decision must answer and a weighted matrix that makes the reasoning auditable. Constraints First then argues that requirements -- especially non-functional ones -- must be pinned down before any option is scored. Prefer Boring Technology supplies a default bias for the many choices the framework cannot settle on its own. Back-of-Envelope Estimation adds the quantitative reflex that separates feasible designs from fantasy. Incident Management covers what to do when the system fails in production and how blameless postmortems turn outages into systemic improvements. Finally, Technology Evaluation assembles these habits into a repeatable process for the highest-stakes decision of all: which technologies to bet on.
+
 ## Trade-off Analysis Framework
 
 Every architectural decision involves trade-offs. There is no perfect choice -- only choices that are better or worse for a specific context. The mark of a senior engineer is not knowing the "right" answer but being able to articulate the trade-offs clearly and make a deliberate, well-reasoned choice.
@@ -154,6 +160,8 @@ This connects directly to the simplicity-versus-flexibility and build-versus-buy
 ---
 
 ## Back-of-Envelope Estimation
+
+The previous three sections were about choosing among options; this one is about checking whether an option is feasible at all. A trade-off matrix and a requirements block are qualitative tools, and sooner or later a design has to survive arithmetic -- rough numbers settle arguments that adjectives cannot.
 
 Back-of-envelope estimation is the ability to quickly approximate the scale of a system: how many servers you need, how much storage, what throughput, what latency. This skill is essential for system design (both in interviews and in real architecture work) because it separates feasible designs from fantasy.
 
@@ -749,4 +757,20 @@ PoC rules:
 
 > **Key Takeaway:** Technology decisions should be deliberate, not accidental. Evaluate technologies systematically using a scorecard that weights criteria by your actual priorities. Run PoCs for high-stakes decisions. Maintain a Technology Radar so the whole team knows what is adopted, what is being evaluated, and what is off-limits. The best technology choice is not the best technology in the abstract -- it is the best technology for your team, your context, and your constraints.
 
+## Summary
+
+System thinking is the discipline of making architectural decisions deliberately rather than by habit, fashion, or the loudest voice in the room. The trade-off analysis framework gives that discipline its shape: name what you are optimizing for, name what you are willing to sacrifice, and check the reversibility before deciding how much analysis the decision deserves. A weighted matrix does not make the choice for you, but it makes your priorities and assumptions visible enough to challenge -- provided you set the weights before you score the options, not after.
+
+The remaining sections refine that core move:
+
+- **Constraints first.** Requirements come before options, and non-functional requirements -- latency targets, availability, consistency, budget -- come before functional ones, because the NFRs are what actually eliminate designs.
+- **Prefer boring technology.** You have roughly three innovation tokens; spend them where novelty differentiates your product, and keep the commodity 90% of the system aggressively boring.
+- **Back-of-envelope estimation.** Rough arithmetic separates feasible designs from fantasy. Estimate with the tail, not just the average -- the celebrity fan-out, not the typical user -- and calibrate by tracking estimates against actuals.
+- **Incident management.** Detect, triage, mitigate, resolve, postmortem. Mitigation comes before root cause, roles prevent chaos, and a blameless postmortem with tracked action items is what turns an outage into a better system.
+- **Technology evaluation.** A radar (adopt, trial, assess, hold), a weighted scorecard, and a time-boxed proof of concept keep technology choices deliberate instead of resume-driven.
+
+This closes Chapter 10: technical leadership gave you the influence to carry decisions, and system thinking gives you the judgment to make decisions worth carrying. With that mindset in place, Chapter 11 turns from principles to practice, beginning with **11.1 Django Specifics (Transferable Concepts)** -- how these architectural ideas show up inside a real web framework.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [11.1 Django Specifics (Transferable Concepts)](../11-django-web-frameworks/django-specifics.md)

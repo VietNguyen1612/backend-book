@@ -2,7 +2,15 @@
 
 # 2.1 Language Internals
 
+Chapter 1 dealt in fundamentals that hold for any language — data structures, operating systems, databases, networks. With this chapter we narrow the lens to Python itself, and we start at the bottom: how the interpreter actually represents objects, manages memory, and schedules threads. These are not academic concerns. They are the difference between a Django worker that holds steady at 200 MB and one that climbs until the OOM killer takes it down; between an endpoint that gets faster when you add threads and one that mysteriously gets slower; between an ORM whose field validation you can extend confidently and one you treat as magic. When production misbehaves in ways the application code cannot explain, the explanation almost always lives at this layer.
+
+By the end of this section you should be able to answer questions like: why does adding `__slots__` cut a service's memory footprint nearly in half? How does Django implement `Model.objects` and field validation without any visible function calls? Why did deleting the last reference to an object not free its memory — and what eventually did? Why did a CPU-bound task get no faster with eight threads, and what should you reach for instead? And when a profiler points at a hot loop, what is CPython actually executing there?
+
+The section follows the interpreter from the outside in. We begin with the **data model** — objects, descriptors, metaclasses, and the protocols that make Python's syntax programmable. We then look at **memory and garbage collection**: reference counting, the cycle collector, weak references, and the tools for finding leaks. That leads naturally to the **GIL**, the lock that makes reference counting safe and CPU-bound threading futile, along with its workarounds and its future. Finally we descend into **CPython internals** — bytecode, frame objects, and the small-object allocator — to see what the virtual machine does with the code you write.
+
 ## Data Model
+
+We start with the single idea from which the rest of Python's behavior follows: everything the interpreter touches is an object governed by a small set of protocols. Attribute access, operator syntax, even class creation itself are all hooks you can intercept — and the frameworks you use every day, from Django's ORM to pytest, are built on exactly these hooks.
 
 ### Everything Is an Object
 
@@ -433,6 +441,8 @@ print(Serializable._versions)
 
 ## Memory & Garbage Collection
 
+Every object we just described — every instance, every descriptor, every class — occupies memory, and something must decide when that memory can be reclaimed. Python makes that decision automatically, but the mechanism is observable: it shapes when destructors run, why certain caches leak, and where a long-running worker's memory actually goes. This section examines the two-tier scheme CPython uses and the tools for inspecting it.
+
 ### Reference Counting
 
 Python's primary garbage collection mechanism is **reference counting**. Every object maintains a count of how many references point to it. When the count drops to zero, the object is deallocated immediately. This gives Python deterministic cleanup behavior -- resources are freed as soon as the last reference disappears.
@@ -786,6 +796,8 @@ print(a is b)  # True -- guaranteed same object
 
 ## GIL (Global Interpreter Lock)
 
+The reference counting we just examined has a price: incrementing and decrementing counts from multiple threads at once would corrupt them without synchronization. CPython's answer is a single global lock rather than per-object locks — a design choice that keeps single-threaded code fast but constrains how Python programs can use multiple cores, with direct consequences for how you architect concurrent backend services.
+
 The GIL is a mutex that protects access to Python objects, ensuring only one thread executes Python bytecode at a time. This simplifies CPython's memory management (reference counting is not thread-safe without it) but means that **CPU-bound** multithreaded programs cannot use multiple cores.
 
 ```python
@@ -938,6 +950,8 @@ print(bool(sysconfig.get_config_var("Py_GIL_DISABLED")))  # True on a free-threa
 ---
 
 ## CPython Internals
+
+So far we have treated the interpreter's behavior — objects, garbage collection, the GIL — from the outside. We close the section by going one level deeper, into the machinery that executes your code: the bytecode the compiler produces, the frame objects that hold execution state, and the allocator that serves the millions of small allocations a Python process makes. This is the layer a profiler ultimately points at, and knowing it turns performance folklore into explanations.
 
 ### Bytecode Compilation and Execution
 
@@ -1151,4 +1165,20 @@ The `getsizeof` probes and the growth loop print something like (sizes are for 6
 
 > **Key Takeaway:** CPython compiles your code to bytecode, executes it on a stack-based VM, and uses a specialized memory allocator for small objects. Use `dis` to understand what Python is actually doing, and understand that list comprehensions, set lookups, and local variable access are fast because of how bytecode works.
 
+## Summary
+
+In this section we descended through CPython's layers, from the object model down to the virtual machine. The unifying theme is that Python's "magic" is a small set of inspectable protocols, and that knowing them converts mysterious production behavior into mechanisms you can reason about.
+
+The **data model** showed that everything is an object with identity, type, and value, and that attribute access, operators, and class creation are all programmable: descriptors implement properties and ORM fields, the MRO governs `super()` in diamond hierarchies, and `__init_subclass__` covers most cases people reach for metaclasses to solve. The working rules: prefer `__init_subclass__` over metaclasses, use `__slots__` when a class will have many instances, and always implement `__repr__`.
+
+**Memory management** combines reference counting, which frees objects deterministically the moment their count hits zero, with a generational garbage collector that exists solely to break reference cycles. Use `weakref` for caches that must not pin their contents, `tracemalloc` (temporarily) to attribute memory to source lines, and never rely on `__del__` for critical cleanup.
+
+The **GIL** is the cost of making reference counting thread-safe: only one thread executes bytecode at a time, so the decision rule is threads for I/O-bound work, processes for CPU-bound work, and `asyncio` for high-concurrency I/O — with free-threaded Python (PEP 703) on the horizon.
+
+Finally, **CPython internals** explained the folklore: list comprehensions win because of dedicated opcodes, `append` is amortized O(1) because lists over-allocate, and frames held too long leak memory.
+
+Concurrency surfaced here only as a constraint; the next section takes it up directly, with the event-loop model that dominates modern Python I/O — 2.2 Async Programming.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [2.2 Async Programming](async-programming.md)

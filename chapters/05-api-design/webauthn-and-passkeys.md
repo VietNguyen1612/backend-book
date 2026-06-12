@@ -2,7 +2,11 @@
 
 # 5.4 WebAuthn & Passkeys
 
-Section 5.3 covered passwords, OAuth, and JWTs -- all of which ultimately rest on a *shared secret* (a password, a client secret, a signing key) that can be phished, leaked, or replayed. WebAuthn removes the shared secret from the login path entirely by using public-key cryptography, and **passkeys** are the user-friendly packaging that has made it mainstream. This section explains the model, the two ceremonies, and the operational gotchas.
+Section 5.3 covered passwords, OAuth, and JWTs -- all of which ultimately rest on a *shared secret* (a password, a client secret, a signing key) that can be phished, leaked, or replayed. In production those failure modes are not hypothetical: breached password dumps feed credential-stuffing attacks against every service where users reused a password, and a convincing phishing page can capture not just the password but the one-time code typed after it. WebAuthn removes the shared secret from the login path entirely by using public-key cryptography, and **passkeys** are the user-friendly packaging that has made it mainstream. For a backend engineer this is no longer a niche topic -- the major platforms ship passkey support by default, and "add passkey login" is now an ordinary product request that lands on the server team.
+
+By the end of this section you should be able to answer: what actually changes hands during a WebAuthn login, and why does a breach of the credential database yield nothing an attacker can use? Why is the protocol phishing-resistant by construction rather than by user vigilance? What makes a credential a *passkey* rather than just a WebAuthn credential, and what does account recovery look like when there is no password to reset?
+
+We begin with why passwordless authentication is worth the migration cost, then build the four-party trust model that everything else hangs on. With the model in place, we walk the two ceremonies end to end -- registration (attestation), which creates a credential, and authentication (assertion), which proves possession of it -- with working server and client code. We then look at passkeys themselves, contrasting synced and device-bound credentials, and close with the security properties and operational gotchas that decide whether a deployment holds up in production.
 
 ## Why Passwordless
 
@@ -40,6 +44,8 @@ The **relying party (RP)** is your application. The **authenticator** generates 
 There are two ceremonies: **registration** (attestation) creates a credential; **authentication** (assertion) proves possession of it. Both follow the same shape: the server issues a random **challenge**, the authenticator signs over it, and the server verifies. The challenge makes every ceremony single-use and replay-proof.
 
 ## Registration (Attestation) Ceremony
+
+With the trust model in place, we can follow the first ceremony end to end. Registration is where the key pair is born: the authenticator generates it, the user approves with a biometric or PIN, and the server records the public half against the account.
 
 ```
   Registration
@@ -184,6 +190,8 @@ const user = await fetch("/login/complete", {
 
 ## Passkeys: Synced vs Device-Bound
 
+The two ceremonies above work for any WebAuthn credential, including a hardware security key used as a second factor. What turned the protocol into a mainstream password replacement is a particular kind of credential with particular backup behavior -- and the distinction shapes how you design account recovery.
+
 A **passkey** is simply a *discoverable* (resident) WebAuthn credential with good UX on top. Two flavors matter operationally:
 
 - **Synced passkeys** are backed up and synchronized across a user's devices by a platform credential manager (iCloud Keychain, Google Password Manager, 1Password, etc.). They survive a lost phone -- the user signs in on a new device and the passkey is already there. This is what makes passkeys a *password replacement* and not just a hardware-key feature.
@@ -192,6 +200,8 @@ A **passkey** is simply a *discoverable* (resident) WebAuthn credential with goo
 Two UX wins fall out of discoverable credentials: **usernameless login** (the server sends no `allow_credentials`, and the authenticator offers the accounts it holds) and **conditional UI / autofill** (`startAuthentication({ ..., useBrowserAutofill: true })`), where passkeys appear in the username field's autofill dropdown.
 
 ## Security Properties & Gotchas
+
+The cryptography gives you strong guarantees out of the box; deployments fail on the operational details around it. These are the points where real implementations go wrong.
 
 - **Phishing resistance is the headline.** Because the assertion is bound to the origin and RP ID, a relayed credential is useless on the wrong domain. This is the one property passwords + OTP cannot match.
 - **The sign counter is a weak signal.** It exists to detect cloned authenticators, but many platform authenticators and synced passkeys report `0` and never increment (a synced key lives on many devices by design). Treat a non-monotonic counter as suspicious only when the stored count is non-zero, as above -- do not hard-fail on `0`.
@@ -203,4 +213,19 @@ In Django, the request/response handlers above slot directly into views (`py_web
 
 > **Key Takeaway:** WebAuthn replaces a phishable shared secret with a per-site key pair whose private half never leaves the user's authenticator. Both ceremonies reduce to "server issues a challenge, authenticator signs it, server verifies against the stored public key, bound to the origin." Use a maintained library for the crypto, make credentials *discoverable* to get passkeys, and design account recovery *first* -- the cryptography is the easy part; not locking users out is the hard part.
 
+## Summary
+
+Passwords fail because they are shared secrets: reusable, phishable, and leakable in a single breach, and even a TOTP second factor can be relayed in real time by an adversary-in-the-middle. WebAuthn replaces the shared secret with a per-site asymmetric key pair -- the private key never leaves the authenticator, the server stores only the public key, and every assertion is bound to the site's origin, which makes the protocol phishing-resistant by construction rather than by user vigilance.
+
+The mental model is four parties: the authenticator holds the private key, the browser enforces origin and RP ID, and the relying party (your server) issues challenges and verifies signatures against the stored public key. Both ceremonies reduce to the same shape -- server issues a random challenge, authenticator signs over it, server verifies -- with registration creating the credential and authentication proving possession of it. The decision rules worth carrying forward:
+
+- Use a maintained library (`py_webauthn`, `@simplewebauthn/browser`) for the COSE/CBOR and encoding plumbing; never hand-roll it.
+- Set `resident_key=REQUIRED` to get discoverable credentials -- that is what makes a passkey, and what enables usernameless login and autofill.
+- Scope the RP ID to the registrable domain, keep `user_id` opaque and stable, treat the sign counter as a weak signal, and default attestation to `none` for consumer apps.
+- Design account recovery *before* letting a passkey become the only factor; the cryptography is the easy part, and not building a lockout machine is the hard part.
+
+This closes Chapter 5: we have moved from designing API surfaces, through integration patterns and authentication, to removing the password from the login path entirely. Chapter 6 shifts from the shape of the interface to the systems behind it, beginning with **6.1 Scalability** -- how a backend keeps working as load grows.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [6.1 Scalability](../06-system-design/scalability.md)

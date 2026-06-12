@@ -2,7 +2,15 @@
 
 # 7.3 Observability
 
+The previous two sections gave us containers, orchestration, and a pipeline that deploys changes safely. None of that tells us what the system is actually doing once it is running. Every production incident begins the same way: something is wrong, and you do not yet know what. A checkout endpoint is slow for some users but not others; error rate creeps up an hour after a deploy; a database connection pool quietly fills until requests start timing out. Observability is the discipline of instrumenting a system so that these questions can be answered from the outside, from the signals the system emits, without attaching a debugger to a production process. Teams that lack it do not have fewer incidents; they have longer ones, because every investigation starts from zero.
+
+By the end of this section you should be able to answer questions that come up in real on-call work and in senior interviews alike. How do you find every log line belonging to one user request as it crosses five services? What is the difference between a counter, a gauge, and a histogram, and why do percentiles require the histogram? What should actually page a human at 3 a.m., and what belongs on a dashboard instead? Where do error trackers like Sentry and tracing tools like OpenTelemetry fit alongside Prometheus, rather than duplicating it?
+
+We build the picture in two layers. First, **Logging**: structured JSON logs, level discipline, correlation IDs that stitch a request's journey across services, central aggregation, and sampling to keep volume sane. Then **Metrics & Monitoring**: Prometheus and PromQL, dashboards in Grafana, the RED and USE frameworks and Google's four golden signals for deciding *what* to measure, alerting design, error tracking and APM, and the operational practices -- on-call, runbooks, capacity and cost -- that turn all this telemetry into action.
+
 ## Logging
+
+Logs are the oldest and most universal observability signal: every application already produces them, which is precisely why they are so often produced badly. The difference between logs you can grep in desperation and logs you can query with confidence comes down to a handful of practices, starting with structure.
 
 ### Structured Logging
 
@@ -257,6 +265,8 @@ A common practical approach: always log errors and slow requests (> P99 latency)
 ---
 
 ## Metrics & Monitoring
+
+Logs answer "what happened in this specific request"; they are poor at answering "how is the system doing overall," because aggregating millions of log lines at query time is slow and expensive. Metrics invert the tradeoff: cheap, pre-aggregated numeric time series that you can graph, compare, and alert on continuously. This section covers the tooling (Prometheus, Grafana, PromQL), the frameworks for choosing which numbers matter (RED, USE, the four golden signals), and the practices that turn the numbers into action: alerting, error tracking and APM, on-call, and capacity and cost planning.
 
 ### Prometheus
 
@@ -635,4 +645,18 @@ Understand the **cost of your architecture**, too: a chatty microservice mesh ge
 
 > **Key Takeaway:** Observability is the combination of logs, metrics, and traces that lets you understand your system's behavior. Use Prometheus for metrics collection, Grafana for visualization, and structured logging for operational insight. Apply the RED method for services and the USE method for resources. Alert on user-facing symptoms, not internal causes. Make every alert actionable and include enough context for rapid diagnosis.
 
+## Summary
+
+Observability rests on a simple premise: when production misbehaves, the only evidence you have is what the system was instrumented to emit. This section covered the two signal families that working backend engineers rely on every day, and the practices that make them usable.
+
+Logging earns its keep through structure and correlation. Emit JSON with explicit fields rather than prose strings, and bind request-scoped context (request ID, trace ID, user) once in middleware so that every log line in every module carries it automatically -- in Python, `structlog` and contextvars make this nearly free. Discipline matters as much as tooling: choose levels deliberately (INFO for business events, ERROR only for failures needing attention), never log secrets or PII, aggregate centrally (ELK, Loki, or a cloud service), and at high traffic sample routine successes while always keeping errors and slow requests in full.
+
+Metrics trade per-request detail for cheap, always-on aggregates. Prometheus scrapes counters, gauges, and histograms; histograms are what make honest percentiles possible, and percentiles are what make latency claims honest -- an average hides the one-in-a-hundred user waiting ten seconds. The RED method tells you what to watch for services, USE for resources, and the golden signals unify both. Alert on user-facing symptoms, never on internal causes, and make every page actionable with a dashboard link and a runbook. Error tracking and APM complete the picture: Sentry groups exceptions by release, tracing decomposes a slow request into spans, and the shared trace ID joins all three signals. The same telemetry, watched over weeks instead of minutes, becomes capacity planning and cost control.
+
+This closes Chapter 7: we can now build images, orchestrate them, deploy them safely, and see what they are doing in production. Chapter 8 turns to keeping that running system safe from hostile input and hostile actors, beginning with 8.1 Application Security.
+
+---
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [8.1 Application Security](../08-security/application-security.md)

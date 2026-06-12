@@ -2,7 +2,15 @@
 
 # 4.2 NoSQL & Specialized Databases
 
+In section 4.1 we treated PostgreSQL as the default home for application data, and for most systems it should be. But a single relational primary has limits that surface in production in predictable ways: page loads that hammer the database with the same queries thousands of times a second, full-text search bolted onto `LIKE` clauses that crawls as the table grows, write volume that no amount of vertical scaling absorbs, and an analytics dashboard whose one big `GROUP BY` saturates the same disks your checkout path depends on. Every system in this section exists because one of those failure modes became common enough that someone built a database shaped specifically around it.
+
+The word "specialized" is doing real work here. None of these systems is better than a relational database in general; each is better at one workload because it gave something up -- joins, ad-hoc queries, strong-by-default consistency, or durability guarantees -- to get there. By the end of this section you should be able to answer the questions that follow from that trade: when does a piece of data belong in Redis rather than PostgreSQL, and what happens to it when memory runs out? Why does a poorly chosen partition key quietly doom a Cassandra or DynamoDB cluster? What does `R + W > N` actually buy you? Do you need a dedicated vector database, or does `pgvector` carry you further than the marketing suggests? And why is "we run reports on the primary" a sentence that should worry you?
+
+We proceed roughly in the order you are likely to meet these systems in a real architecture. We start with Redis, the in-memory store that sits beside almost every backend, then MongoDB and the document model, then Elasticsearch and the inverted index that powers full-text search. From there we move to the scale-out end of the spectrum: Cassandra and the wide-column stores, graph databases and pointer-based traversal, vector databases and embeddings, and time-series databases. We close with the distinction that frames all analytical workloads -- OLTP versus OLAP -- and the columnar storage layout that follows from it.
+
 ## Redis
+
+We begin with the specialized system you are most likely to deploy first. Nearly every production backend eventually puts a cache in front of its relational primary, and in practice that cache is usually Redis -- though, as we will see, treating it as "just a cache" undersells most of what it can do.
 
 Redis is an in-memory data structure store used as a cache, message broker, and general-purpose database. Its power comes from its rich set of data structures, atomic operations, and sub-millisecond latency.
 
@@ -357,6 +365,8 @@ maxmemory-policy allkeys-lru
 
 ## MongoDB
 
+Redis trades durability and rich querying for raw speed; the next system makes a different trade. MongoDB keeps the full-database role -- durable storage, secondary indexes, ad-hoc queries -- but abandons the rigid relational schema in favor of self-contained documents, which changes how you model data in ways worth examining closely.
+
 MongoDB is a document database that stores data as BSON (Binary JSON) documents. Each document is a self-contained unit that can have a different structure from other documents in the same collection, providing schema flexibility.
 
 ### Document Model
@@ -480,6 +490,8 @@ Sharding distributes data across multiple replica sets (shards) using a shard ke
 
 ## Elasticsearch
 
+Flexible documents solve the schema problem, but neither MongoDB nor PostgreSQL is truly built for relevance-ranked text search -- "find the documents most about X" is a different question from "find the rows where column equals X." Answering it well requires a different index structure entirely, and a system designed around that structure.
+
 Elasticsearch is a distributed search and analytics engine built on Apache Lucene. It stores data as JSON documents and builds an inverted index that maps every term to the documents containing that term.
 
 ### Inverted Index
@@ -577,6 +589,8 @@ PUT /_ilm/policy/logs_policy
 
 ## Cassandra & Wide-Column Stores
 
+The systems we have covered so far still assume a dataset that one primary node can comfortably own, with replicas along for availability. When sustained write volume outgrows any single machine -- telemetry, messaging, activity feeds at serious scale -- a different family of databases takes over, and with it a very different set of modeling rules.
+
 Apache Cassandra (and its API-compatible cousin ScyllaDB, plus relatives like HBase and Bigtable) is a wide-column store built for one thing above all: massive, always-available write throughput across many nodes, with no single point of failure. It is a classic **AP** system in CAP terms -- it favors availability and partition tolerance over strong consistency. Reasoning about Cassandra means unlearning relational instincts.
 
 ### Query-First, Denormalized Modeling
@@ -653,6 +667,8 @@ Amazon DynamoDB is a managed key-value/wide-column store that shares Cassandra's
 
 ## Graph Databases
 
+Wide-column stores buy their scalability by giving up joins entirely; graph databases move in the opposite direction and make relationships the first-class citizen. When the questions you ask are primarily about connections -- who knows whom, which accounts share a device -- this is the data model that fits.
+
 Graph databases (Neo4j being the best known, alongside Amazon Neptune, JanusGraph, and others) model data as a network of **nodes** (entities), **edges** (relationships), and **properties** on both. Unlike a relational schema where a relationship is implied by a foreign key and reconstructed at query time via a JOIN, a graph database stores relationships as **direct physical pointers** between nodes.
 
 ### Why Pointer-Based Traversal Wins
@@ -691,6 +707,8 @@ Reach for a graph database when relationships are the primary thing you query: s
 ---
 
 ## Vector Databases & Embeddings
+
+Every index we have seen so far -- B-trees, inverted indexes, graph pointers -- organizes values you can compare exactly: keys, terms, edges. The newest member of the specialized family indexes meaning itself, and it has moved from niche to near-mandatory as semantic search and LLM-backed applications have spread.
 
 Vector databases power semantic search and retrieval-augmented generation (RAG) by storing and searching **embeddings** -- numeric representations of meaning.
 
@@ -744,6 +762,8 @@ Pure vector search has blind spots -- it can miss exact terms (a product SKU, a 
 ---
 
 ## Time-Series Databases
+
+From searching by meaning we turn to a workload defined by its shape rather than its semantics: data that arrives as a relentless append-only stream of timestamped measurements -- metrics, sensor readings, click events. The volume and the access pattern are distinctive enough to have produced their own class of database.
 
 Time-series databases are optimized for the specific workload pattern of time-stamped data: high-throughput appends, time-range queries, and downsampling/aggregation. While general-purpose databases can handle time-series data, specialized databases provide better compression, faster queries, and built-in retention policies.
 
@@ -885,4 +905,14 @@ ORDER BY total DESC;
 
 > **Key Takeaway:** Match the storage layout to the workload. OLTP (small row-level reads/writes) wants a row-oriented primary like PostgreSQL; OLAP (large scans over few columns) wants column-oriented storage -- Parquet/ORC files in a lake, or a columnar engine like ClickHouse -- where column pruning, compression, and predicate pushdown deliver 10-1000x speedups. The recurring discipline is to keep the two apart: ship transactional data to an analytics store rather than running heavy analytics on the database your users depend on.
 
+## Summary
+
+The thread running through this section is that every specialized database is a deliberate trade, and the engineering skill lies in knowing what was traded away. Redis gives up the durability guarantees of a disk-first database for in-memory speed and rich data structures; in exchange you must take persistence (RDB plus AOF) and eviction policy seriously, and reach for Lua scripts when multi-step operations need atomicity. MongoDB gives up normalization and cheap cross-document transactions for schema flexibility -- so you design documents around query patterns and read `explain()` output the way you would read a PostgreSQL plan. Elasticsearch gives up being a system of record entirely; its inverted index makes it the right tool for relevance-ranked search and log analytics beside, never instead of, your primary.
+
+At the scale-out end, the trades sharpen. Cassandra and DynamoDB exchange joins and strong-by-default consistency for linear write scalability: model one table per query, choose a partition key every query can name, dial consistency per operation with `R + W > N`, and avoid tombstone-heavy delete patterns. Graph databases invert that bargain, storing relationships as physical pointers so deep traversals stay fast regardless of dataset size. Vector databases turn meaning into geometry and use ANN indexes to search it; start with `pgvector` and prefer hybrid search over vector-only. Time-series databases exploit the append-only, time-bucketed shape of metrics data. And the OLTP/OLAP divide supplies the discipline that binds it all: row-oriented storage for transactional work, columnar storage for analytics, and never the two on the same machine.
+
+Choosing these systems is one decision; feeding them, migrating them, and keeping their copies of your data consistent is another, and that is where 4.3 Data Management picks up.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [4.3 Data Management](data-management.md)

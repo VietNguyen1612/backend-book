@@ -2,9 +2,15 @@
 
 # 3.2 Design Patterns
 
-Design patterns are reusable solutions to commonly occurring problems in software design. They are not code templates to copy-paste but rather conceptual blueprints that you adapt to your specific situation. The following sections cover the most important patterns, organized by their intent.
+The principles of section 3.1 told us what good design looks like — small interfaces, inverted dependencies, one reason to change. Design patterns are the next step: named, reusable solutions to the problems those principles keep running into. They are not code templates to copy-paste but conceptual blueprints that you adapt to your situation, and in production their absence has a recognizable signature. A retry storm that finishes off a recovering service is a missing circuit breaker. An API that breaks its clients every time an internal column is renamed is a domain model doing double duty as a wire format, where a DTO belonged. A payment charged twice after a queue redelivery is a handler that was never made idempotent. Patterns also give a team a shared vocabulary: "wrap it in an adapter" or "that needs a unit of work" compresses a whiteboard's worth of design discussion into a sentence that both sides understand precisely.
+
+By the end of this section you should be able to answer the questions that come up in real design reviews. When is a factory function enough and when does construction justify a builder? Why is Singleton usually the wrong answer in Python, and what replaces it? When do you decorate instead of subclass, and when does a facade earn its keep? How do you choose between Active Record and Data Mapper, and at what point does CQRS stop being over-engineering? And — the questions with the highest production stakes — how do you make retries, redeliveries, and concurrent consumers safe?
+
+We follow the classic organization by intent. **Creational patterns** govern how objects come into existence; **structural patterns** govern how they compose into larger structures; **behavioral patterns** govern how they collaborate at runtime. From there we leave the GoF catalog for **enterprise application patterns** — DTOs, specifications, and the object-relational choices every data-backed application must make — and close with **concurrency and reliability patterns**, the toolkit that keeps a distributed backend degrading gracefully instead of collapsing.
 
 ## Creational Patterns
+
+We start where every object's life starts: construction. Calling a constructor looks too trivial to deserve patterns, yet deciding *which* class to instantiate, how to assemble a complex configuration, and how many instances may exist is precisely where hard-coded dependencies and untestable code creep in.
 
 Creational patterns abstract the instantiation process, making a system independent of how its objects are created, composed, and represented.
 
@@ -399,6 +405,8 @@ conn#2 ran: SELECT 2
 ---
 
 ## Structural Patterns
+
+Once objects exist, the next question is how they fit together. Where the creational patterns governed construction, this group governs composition — wrapping, adapting, and assembling objects so that incompatible interfaces and cross-cutting concerns do not force changes to code you do not own.
 
 Structural patterns deal with object composition -- how classes and objects are assembled to form larger structures while keeping the structure flexible and efficient.
 
@@ -891,6 +899,8 @@ Reminder(SmsChannel()).send({"message": "renew cert", "due": "Friday"})
 ---
 
 ## Behavioral Patterns
+
+With construction and composition covered, we reach the hardest part of object design: how objects collaborate at runtime. This is the largest group in the catalog, because most of the difficulty in a backend lies not in what the objects are but in who calls whom, who knows about whom, and where responsibility for a decision lives.
 
 Behavioral patterns deal with algorithms and the assignment of responsibilities between objects. They describe not just patterns of objects but also patterns of communication between them.
 
@@ -2400,4 +2410,14 @@ node-B acquires: False
 
 > **Key Takeaway:** Reliability patterns assume failure is normal. Bound everything -- worker pools, queues (backpressure), retries (caps + timeout budgets). Fail fast on dead dependencies (circuit breaker) and isolate them (bulkhead) so one failure does not cascade. Make operations idempotent so retries and redeliveries are safe, and use leases when exactly one instance must act. These patterns are what separate a system that degrades gracefully from one that collapses under its first dependency failure.
 
+## Summary
+
+This section worked through the pattern catalog in the order a design problem unfolds: creating objects, composing them, coordinating them, persisting them, and keeping them alive under failure. The creational patterns answered "how do I construct objects flexibly?" — factory functions for runtime type selection, Builder when construction has too many moving parts for one call, and module-level instances or dependency injection where other languages reach for Singleton. The structural patterns answered "how do these pieces fit together?" — Adapter to translate interfaces you do not control, Decorator to layer cross-cutting behavior without subclassing, Facade to put a simple front on a messy subsystem, Proxy to interpose on access, Composite to treat trees uniformly, and Bridge to keep two dimensions of variation independent.
+
+The behavioral patterns carried the most weight for backend work: Observer decouples event producers from consumers, Strategy swaps algorithms at runtime, Command reifies requests for queues and undo, Chain of Responsibility builds middleware-style pipelines, State makes state machines explicit, and Repository, Unit of Work, and CQRS govern how the domain talks to storage — with CQRS reserved for when read and write paths genuinely diverge. The enterprise patterns added the boundary disciplines: DTOs keep the wire format independent of the schema, Specifications make business rules composable, and the Active Record versus Data Mapper choice trades velocity against domain purity. Finally, the concurrency and reliability patterns assumed failure is normal: bound every queue and pool, cap every retry, break circuits to dead dependencies, isolate them with bulkheads, and make handlers idempotent so redelivery is safe.
+
+Patterns operate inside a process or between a handful of components. The next question is the shape of the whole system — and that is the subject of 3.3 Architectural Styles.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [3.3 Architectural Styles](architectural-styles.md)

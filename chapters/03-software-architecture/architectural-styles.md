@@ -2,9 +2,15 @@
 
 # 3.3 Architectural Styles
 
-Architectural styles are high-level strategies for organizing a system. The choice of architectural style has far-reaching consequences for development workflow, deployment, scaling, and team organization.
+The design patterns of the previous section organize code within a process; architectural styles organize the system itself. An architectural style is a high-level strategy for deciding what gets deployed together, what communicates over a network, and where the data lives -- and that choice has far-reaching consequences for development workflow, deployment, scaling, and team organization. It is also where the most expensive mistakes in backend engineering are made. The team that splits a young product into twelve services inherits distributed-systems failure modes -- partial failures, lost messages, data that is consistent in one service and stale in another -- before it has the operational maturity to handle them. The team that lets a monolith grow without internal boundaries ends up with a system nobody can change safely. Most production incidents that look like bugs are, at root, consequences of an architectural style applied without understanding its trade-offs.
+
+By the end of this section you should be able to answer the questions that recur in every architecture review: When should a monolith be split, and how do you keep one healthy until then? What does it actually cost to own microservices, and how do services share data without sharing a database? How do you keep a business operation consistent when it spans services that cannot share a transaction? Where does Domain-Driven Design pay for itself, and where is it ceremony? And which workloads genuinely fit serverless?
+
+We proceed roughly in the order a system evolves. We start with the **Monolith** -- the right default -- and the discipline that keeps it modular. We then examine **Microservices**: their characteristics, data ownership rules, communication styles, and migration patterns. **Event-Driven Architecture** covers the asynchronous backbone that loosely couples services, including event sourcing and CQRS. **Domain-Driven Design** supplies the vocabulary -- bounded contexts, aggregates, value objects -- for drawing the boundaries all of these styles depend on. **Integration & Deployment Patterns** then addresses how clients reach a fleet of services and how services find each other; **Distributed Transactions & Consistency** confronts the hardest consequence of splitting data across services; and **Serverless & FaaS** closes with the style that pushes operational outsourcing to its limit.
 
 ## Monolith
+
+We begin with the style every system starts as, because how well you structure a monolith determines both how long it stays pleasant to work in and how cleanly it can be split later if the need ever arises.
 
 A monolith is a single deployment unit where all components run in the same process. Despite its reputation, a monolith is the correct starting point for most projects. The key is to build a **modular monolith**: a single deployment unit that is internally organized into modules with clear boundaries.
 
@@ -121,6 +127,8 @@ It is simple, universally understood, and maps directly onto a default Django pr
 ---
 
 ## Microservices
+
+When the limits described above are real -- teams blocking each other, deploys serialized, components with incompatible scaling needs -- the next step is to make the module boundaries physical. This is a far bigger commitment than it first appears, so we look closely at what microservices demand before they pay off.
 
 Microservices architecture decomposes a system into small, independently deployable services, each owning its own data and organized around a business capability. It is a powerful approach for large organizations but comes with significant operational complexity.
 
@@ -418,6 +426,8 @@ OpenTelemetry (OTel) is now the vendor-neutral standard for generating and expor
 
 ## Event-Driven Architecture
 
+The previous section showed that asynchronous, event-based communication is what keeps microservices loosely coupled. Taken seriously, that idea becomes an architectural style in its own right -- one that applies just as well inside a modular monolith as across a service fleet.
+
 Event-Driven Architecture (EDA) is an architectural style where the flow of the program is determined by events -- significant changes in state. Components produce and consume events, leading to loosely coupled systems that can react to changes in real time.
 
 ### Event Sourcing
@@ -699,6 +709,8 @@ The tension is **ordering vs. throughput vs. hot partitions**. Fewer partitions 
 ---
 
 ## Domain-Driven Design (DDD)
+
+Every style so far has assumed we know where the boundaries lie -- between modules, between services, between event producers and consumers. Domain-Driven Design is the discipline for finding those boundaries, which is why its vocabulary keeps surfacing in the sections above.
 
 Domain-Driven Design is an approach to software development that focuses on modeling the software after the real-world domain it serves. It was introduced by Eric Evans and is most valuable for **complex domains** where the business rules are the competitive advantage.
 
@@ -1387,6 +1399,8 @@ In practice, reliable eventually-consistent workflows are built from three primi
 
 ## Serverless & FaaS
 
+We close with the style that takes the decomposition trend to its endpoint: instead of services you operate, individual functions the platform operates for you. Its economics are attractive, but its constraints are sharp enough that fit matters more here than anywhere else in this section.
+
 Function-as-a-Service (FaaS) -- AWS Lambda, Google Cloud Functions, Azure Functions -- runs your code as short-lived, stateless functions triggered by events (an HTTP request, a queue message, a schedule, a database change), with the platform handling all provisioning and scaling, including scaling **to zero** when idle. You pay per invocation and per millisecond of execution rather than for always-on servers.
 
 ### Cold Starts
@@ -1414,4 +1428,16 @@ FaaS shines for **event processing** (react to a queue/storage/database event), 
 
 > **Key Takeaway:** Serverless/FaaS runs stateless, event-triggered functions that scale to zero, billing per invocation. Its defining constraints -- cold-start latency, execution-time and payload limits, no persistent connections, and database connection exhaustion under high concurrency -- make it ideal for bursty event processing, scheduled jobs, webhooks, and glue code, and ill-suited to sustained high-traffic, long-running, or latency-critical workloads. Design handlers stateless and idempotent, and protect databases with a connection proxy.
 
+---
+
+## Summary
+
+An architectural style is a bet about where your system's complexity should live, and the styles in this section form a progression rather than a menu. Start with a **modular monolith**: one deployment unit, internally divided into modules that communicate through explicit interfaces and events. Split into **microservices** only when the organizational pressure is real -- teams blocking each other, conflicting deploy cadences, genuinely different scaling needs -- and only when the module boundaries are already proven, because every service split converts in-process calls into network calls and one database transaction into a distributed-consistency problem. **Event-Driven Architecture** is the loose-coupling backbone for either world; its price is designing every consumer for idempotency and accepting eventual consistency, with event sourcing and CQRS as powerful but heavyweight extensions. **Domain-Driven Design** supplies the boundary-finding discipline underneath all of this -- bounded contexts tell you where models (and services) should end, aggregates define consistency boundaries, and anti-corruption layers keep external models from leaking in; reserve the full toolkit for genuinely complex domains. Once services exist, the **integration patterns** (a thin API gateway, BFFs, sidecars, service discovery) keep cross-cutting concerns out of business code, and **distributed transactions** are handled not with 2PC but with sagas or TCC built on idempotency, the outbox pattern, and retries. **Serverless** fits bursty, short, stateless work and little else.
+
+This closes Chapter 3. We have moved from architecture principles, through design patterns, to the system-level styles above -- and every one of those styles ultimately rests on how data is stored, queried, and kept consistent. That is the subject of Chapter 4, which begins with 4.1 Relational Databases (PostgreSQL Focus).
+
+---
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [4.1 Relational Databases (PostgreSQL Focus)](../04-databases-and-data/relational-databases.md)

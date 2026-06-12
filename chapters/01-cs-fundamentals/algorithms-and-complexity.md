@@ -2,7 +2,15 @@
 
 # 1.2 Algorithms & Complexity
 
+In the previous section we chose data structures by asking what operations they make cheap. This section supplies the vocabulary and the judgment behind that word "cheap." Complexity analysis is what separates the endpoint that works fine in staging from the one that falls over at the first real traffic spike: the O(n²) duplicate check that was instant on 100 test records and takes minutes on a million production rows, the quicksort that hits a recursion limit on already-sorted input, the full sort paid just to read off a single percentile. None of these are exotic failures — they are the predictable consequences of code whose growth rate nobody stated out loud.
+
+By the end of this section you should be able to answer questions like: given a piece of code, what is its time and space complexity, and what value of n makes that matter? When a problem says "longest contiguous window" or "minimum capacity such that," which standard technique applies? Why does Python's built-in sort win for almost everything, and when do counting or radix sort beat the O(n log n) barrier? How do you get a median or a top-k without sorting everything? And when the data is too large to store at all, how do you trade exactness for a single bounded-memory pass?
+
+We proceed roughly from analysis to application. **Big-O Analysis** establishes the measurement framework — complexity classes, amortized costs, best/average/worst cases, and space-time tradeoffs. **Algorithmic Techniques** catalogs the recurring problem-solving patterns: two pointers, sliding windows, binary search on the answer, backtracking, greedy, and friends. **Sorting** and **Selection & Order Statistics** then treat the most common concrete tasks — ordering data, and extracting ranked elements without ordering all of it. **Dynamic Programming** covers problems built from overlapping subproblems, **Graph Algorithms (Extended)** and **String Algorithms** address two specialized but high-leverage domains, and **Randomized & Streaming Algorithms** closes with the techniques you reach for when the input no longer fits in memory at all.
+
 ## Big-O Analysis
+
+Everything else in this section depends on being able to state, precisely, how an algorithm's cost grows with its input. We start with that measuring stick — the complexity classes themselves — and then refine it with the distinctions that matter in practice: amortized versus single-operation cost, best versus worst case, and what you are trading away when you optimize.
 
 ### Understanding Complexity Classes
 
@@ -294,6 +302,8 @@ print(single_number([4, 1, 2, 1, 2]))  # 4
 
 ## Sorting
 
+The patterns above are tools you assemble per problem; sorting is the one concrete task so common that decades of refinement have produced a standard toolbox. The interesting question is no longer "how do I sort" but which algorithm's properties — stability, extra space, worst-case behavior, cache friendliness — match the situation, and that reasoning starts with the comparison sorts.
+
 ### Comparison-Based Sorts
 
 All comparison-based sorting algorithms have a theoretical lower bound of **Omega(n log n)** — you cannot do better if your only operation is comparing two elements. The three main comparison sorts each have different strengths:
@@ -566,6 +576,8 @@ print(top_k_stream(stream, 3))         # [89, 78, 67]
 
 ## Dynamic Programming
 
+The techniques so far have been single-pass or divide-and-conquer in spirit: each piece of work is done once. Dynamic programming addresses the opposite situation — recursive solutions that would redo the same subproblem exponentially many times — and tames it by remembering. It has a reputation as the hardest interview topic, but the underlying recipe is mechanical once the two defining properties are clear.
+
 ### Core Concepts
 
 Dynamic programming (DP) applies when a problem has two properties:
@@ -813,6 +825,8 @@ print(tsp(dist))  # 80 (0->1->3->2->0)
 
 ## Graph Algorithms (Extended)
 
+Section 1.1 covered the bread-and-butter graph algorithms — traversal, single-source shortest paths, topological sort. Here we pick up the more specialized ones that round out the picture: all-pairs shortest paths, maximum flow, and Eulerian paths. They appear less often in application code, but they underpin routing, matching, and capacity-planning problems in system design.
+
 ### Floyd-Warshall
 
 Floyd-Warshall computes the **shortest paths between all pairs of vertices** in O(V^3). It works by iteratively considering whether going through an intermediate vertex k gives a shorter path between any pair (i, j).
@@ -868,6 +882,8 @@ Applications: DNA sequence assembly (de Bruijn graphs), circuit board routing, g
 ---
 
 ## String Algorithms
+
+From graphs we turn to the data type backend code handles more than any other: text. Searching for patterns in strings looks trivial — loop and compare — but the naive approach degrades badly on adversarial or repetitive input, and the algorithms in this section exist to make pattern matching fast no matter what the input looks like.
 
 ### KMP (Knuth-Morris-Pratt)
 
@@ -1016,4 +1032,18 @@ A useful mnemonic: **Monte Carlo gambles on the answer; Las Vegas gambles on the
 
 > **Key Takeaway:** When data is unbounded or too large to store, switch from "compute the exact answer" to "approximate it in one pass with bounded memory." Reservoir sampling gives uniform samples without knowing the length; Misra-Gries finds heavy hitters in tiny space; and knowing the Monte Carlo / Las Vegas distinction explains *why* the randomization in everyday tools (quicksort pivots, retry jitter, SipHash) is there — to convert worst cases into vanishingly rare cases.
 
+## Summary
+
+This section built up from measurement to method. Big-O analysis gave us the measuring stick: complexity classes describe growth rate, not wall-clock time, and the practical discipline is always to ask what n is, how large it will get, and whether the worst case (quicksort on sorted input, hash collisions) or the amortized case (list append, hash resize) is the one your traffic will hit. Almost every optimization is then a trade — space for time via caching and precomputation, accuracy for space via streaming.
+
+The algorithmic techniques are pattern recognition: sorted-array pair problems suggest two pointers, contiguous-range constraints suggest a sliding window, "minimum X that works" with a monotonic check suggests binary search on the answer, exhaustive configuration problems suggest backtracking, and greedy choices demand proof or testing before trust. For ordering data, Timsort is the right answer almost always; the algorithm properties that matter when it is not are stability, extra space, and worst-case guarantees, with non-comparison sorts reserved for integer-like keys in a known range. When you need rank rather than order, quickselect finds one element in O(n) average and a size-k heap finds the top k in O(n log k) — paying for a full sort to extract a single percentile is a recurring, avoidable cost.
+
+Dynamic programming applies when subproblems overlap and compose: start from brute-force recursion, memoize, then tabulate. The specialized domains — all-pairs shortest paths and flow on graphs, KMP and Aho-Corasick on strings, reservoir sampling and Misra-Gries on streams — each replace a naive approach that silently degrades with one whose guarantees hold under adversarial input or unbounded data.
+
+All of this analysis assumes a machine underneath that executes the code — and its processes, memory hierarchy, and schedulers have costs of their own, which is where 1.3 Operating Systems picks up.
+
+---
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [1.3 Operating Systems](operating-systems.md)

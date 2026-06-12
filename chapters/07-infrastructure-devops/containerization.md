@@ -2,7 +2,15 @@
 
 # 7.1 Containerization
 
+The previous chapters were about designing systems -- choosing data models, drawing service boundaries, reasoning about consistency and scale. This chapter turns to the less glamorous but equally consequential question of actually running them. And in modern backend work, the unit you run is the container. The container image is what your CI pipeline produces, what your registry stores, and what every production node executes; if it is bloated, your autoscaler waits minutes for nodes to pull it, and if it is built carelessly, the gcc toolchain and a stray `.env` file ship to production with it. Containers are also the technology that finally retired "works on my machine": the same image, byte for byte, runs in development, staging, and production. When that promise breaks -- a pod restarting in a loop, a deploy that "succeeded" while serving errors, a secret recovered from an image layer -- the cause is almost always one of the mechanisms this section explains.
+
+By the end of this section you should be able to answer questions like: why is this image 1.2 GB and how do we make it 200 MB? Why does changing one source file trigger a five-minute rebuild, and what ordering rule fixes it? What does `OOMKilled` with exit code 137 actually mean, and which setting caused it? How does Kubernetes roll out a new version without dropping a request -- and what single misconfigured probe silently breaks that guarantee? Are Kubernetes Secrets actually encrypted? And when someone says "Docker is deprecated in Kubernetes," what really happened?
+
+The section has two halves that mirror the two jobs. The first, **Docker**, covers building and running containers well: multi-stage builds, layer caching, image security, `.dockerignore`, health checks, networking, volumes, Compose for multi-container setups, registries and image signing, and finally what a container actually is under the hood (OCI, containerd, runc). The second, **Kubernetes**, covers operating containers at scale: the core objects (Pods, Deployments, Services, Ingress), configuration and secrets, resource management and probes, stateful workloads, security (RBAC, Network Policies), scheduling and disruption control, storage, the three layers of autoscaling, manifest management with Helm and Kustomize, Operators, and GitOps. A **Summary** closes the section.
+
 ## Docker
+
+We begin where every container starts: the image. How an image is built determines its size, its build speed, its attack surface, and ultimately how fast your platform can deploy and scale -- so before any orchestration, it pays to get the Dockerfile itself right.
 
 ### Multi-Stage Builds
 
@@ -377,6 +385,8 @@ Because a container is just a process, the operational rules follow directly: ke
 ---
 
 ## Kubernetes
+
+Docker and Compose take you as far as a single host. Production systems need more: replicas spread across machines, automatic rescheduling when a node dies, rolling updates with no downtime, and autoscaling under load. Kubernetes provides all of this through one consistent idea -- you declare the desired state, and controllers continuously reconcile reality to match it. The subsections below build up from the smallest unit, the Pod, to cluster-wide concerns like scheduling, storage, autoscaling, and GitOps.
 
 ### Pods
 
@@ -991,4 +1001,20 @@ apps   Deployment  production  myapp  OutOfSync  Healthy
 
 > **Key Takeaway:** Kubernetes provides a declarative, self-healing platform for running containerized applications at scale. The core abstractions -- Pods, Deployments, Services, Ingress -- handle networking, scaling, and rolling updates. ConfigMaps/Secrets externalize configuration, HPA provides autoscaling, and probes ensure traffic only reaches healthy instances. Always set resource requests/limits, always configure probes, and always use RBAC and Network Policies for security.
 
+## Summary
+
+A container is not a small virtual machine -- it is an ordinary process that the kernel has isolated with namespaces and constrained with cgroups, packaged with its dependencies into an OCI image that runs identically everywhere. That single fact drives everything in this section. Because the image is the unit of deployment, building it well matters: multi-stage builds separate the build toolchain from the runtime so production images shrink by an order of magnitude; layer ordering -- least frequently changing instructions first -- keeps rebuilds fast; non-root users, minimal bases, a tight `.dockerignore`, and runtime-injected secrets keep the attack surface small. At distribution time, immutable git-SHA tags make every running container traceable to a commit, and image signing proves it came from your pipeline. Compose ties containers together on one host; health checks give the platform an opinion about whether the app actually works.
+
+Kubernetes extends the same ideas across a fleet by reconciling declared state. The decision rules worth carrying out of this section:
+
+- Deployments for stateless workloads, StatefulSets when Pods need stable identity and their own volumes, DaemonSets for one-per-node agents.
+- Requests drive scheduling, limits drive enforcement -- always set memory limits, be wary of CPU limits, and know that the resulting QoS class decides eviction order.
+- Liveness probes restart, readiness probes gate traffic, startup probes buy slow apps time; a naive readiness probe quietly defeats zero-downtime rollouts.
+- Anti-affinity and topology spread protect against node and AZ failure; PDBs protect against voluntary disruption; the three autoscalers (HPA, VPA, Cluster Autoscaler) operate at different layers and must not fight.
+- Helm and Kustomize manage manifests at scale; Operators encode operational knowledge; GitOps makes Git the source of truth and rollback a `git revert`.
+
+What this section deliberately left open is how images get built, tested, and promoted into the cluster in the first place -- the pipeline itself -- which is the subject of 7.2 CI/CD & Deployment.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [7.2 CI/CD & Deployment](cicd-and-deployment.md)

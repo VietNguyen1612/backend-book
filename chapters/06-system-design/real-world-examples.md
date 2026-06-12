@@ -2,6 +2,12 @@
 
 # 6.3 Real-World System Design Examples
 
+The previous two sections assembled a toolbox: caching, sharding, replication, and load balancing from 6.1, and partitioning, quorums, consensus, and delivery guarantees from 6.2. But a toolbox is not a design. The judgment that distinguishes a senior engineer -- in an interview and, more importantly, in a design review -- is knowing *which* tool a given product requirement actually calls for, and being able to defend the choice with numbers. That judgment is built by working through complete systems end to end and watching the same handful of building blocks recombine under different constraints. That is what this section does.
+
+By the end, you should be able to answer questions like: how do you generate short, unique identifiers without a single point of contention? When should a feed be assembled at write time rather than read time, and what breaks when one account has fifty million followers? Why does a payment ledger deliberately trade away availability that a chat system happily gives up? Where exactly does the cache go, and what fraction of traffic does it have to absorb? And how do consistent hashing, replication, and quorums compose into a key-value store whose consistency is a dial rather than a constant?
+
+We begin with a reusable seven-step framework that every design below follows. The first two worked examples -- a URL shortener and a distributed rate limiter -- are deliberately compact, each isolating a few core mechanisms: short-code generation and cache-aside reads in one, atomic counters and windowing algorithms in the other. The next pair, a chat system and a notification system, are about moving messages: stateful connections, cross-server routing, and queue-based decoupling with at-least-once delivery. Three read-dominated product features follow -- the news feed (fan-out trade-offs), typeahead (precomputation), and a proximity service (spatial indexing) -- before two designs where storage and correctness dominate: an object-storage upload service and a payment ledger. We close with the Dynamo-style distributed key-value store, which assembles the partitioning, replication, and quorum machinery of 6.2 into a single coherent system.
+
 ## A Reusable Framework
 
 Every system design question -- in an interview or on the job -- yields to the same disciplined sequence. The mistake candidates make is jumping straight to boxes and arrows; the senior move is to *drive out the requirements and the numbers first*, because those determine every later choice. Apply these steps in order, and state your assumptions out loud as you go.
@@ -823,4 +829,12 @@ ARCHITECTURE (the hash ring):
 
 > **Key Takeaway:** The Dynamo design is consistent hashing (with virtual nodes) for partitioning, replication to N nodes for durability, and quorum reads/writes (`W + R > N`) for *tunable* consistency, all wrapped in availability mechanisms -- failover, hinted handoff, and read-repair/anti-entropy -- that keep the store serving through node failures. It is the reference architecture for any distributed cache or key-value store, and its genius is letting each workload dial its own point on the consistency-vs-latency curve rather than baking one choice in.
 
+## Summary
+
+Read these ten designs side by side and the individual systems matter less than the moves they share. The first decision in nearly every one is *which path pays the cost*: the feed chooses between fan-out on write and fan-out on read, the shortener accepts an expensive create to make the 100:1-dominant redirect cheap, and autocomplete pushes all the work into an offline build so the keystroke path is a memory lookup. Identifier and key design recurs just as often -- Base62 counters, content hashes, geohashes, idempotency keys -- because a well-chosen key turns a hard problem into a lookup, a shard route, or a safe retry. Cache placement follows the skew: the hot 20% of URLs, the recent tail of each conversation, the top-k per prefix, the live driver positions -- always the small hot subset in memory, with the durable store behind it. Queues decouple the slow from the urgent (click analytics, feed fan-out, notification delivery), and every consumer assumes at-least-once delivery, which is why idempotency appears in almost every design and is non-negotiable in payments. Skew itself -- the celebrity account, the hammered rate-limit key, the dense city cell -- gets its own handling: hybrid push/pull, local-plus-global limiting, neighbor-cell queries. And consistency is chosen per operation, not per system: feeds are eventually consistent by design, the ledger is ACID by necessity, and Dynamo makes the trade a tunable knob.
+
+What every step of these designs also leaned on, sometimes silently, was arithmetic -- QPS, bytes, ratios. The next section, 6.4 Back-of-Envelope Calculations, makes that arithmetic explicit.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [6.4 Back-of-Envelope Calculations](back-of-envelope.md)

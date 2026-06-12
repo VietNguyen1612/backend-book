@@ -2,7 +2,15 @@
 
 # 7.2 CI/CD & Deployment
 
+In the previous section we learned how to package an application into a container image -- a sealed, reproducible artifact. But an artifact sitting in a registry delivers no value, and the path it takes from a developer's commit to serving production traffic is where many of the worst outages originate. The bug that ships on a Friday afternoon because nobody ran the tests; the deploy that cannot be rolled back because the previous image was overwritten; the schema migration that breaks the old code still serving half the traffic; the production database that nobody can recreate because it was configured by hand three years ago -- these are not application bugs. They are delivery failures, and they are preventable with the machinery this section describes.
+
+By the end of this section you should be able to answer questions that come up constantly in real systems and in interviews: which stages belong in a pipeline, in what order, and why each one is a gate rather than a suggestion; how to choose between blue-green, canary, and rolling deployments when the real constraints are blast radius, rollback speed, and cost; why feature flags decouple deploying code from releasing features; how to change a database schema while two versions of the application are running against it; and why infrastructure defined by clicking through a cloud console is a liability that code review cannot reach.
+
+We proceed in the order a change actually flows. First, **CI/CD Pipelines** covers the automated gauntlet every commit runs -- lint, tests, security scans, builds, and staged deploys -- with a complete GitHub Actions workflow as the worked example. Then **Deployment Strategies** examines what happens at the moment of cutover: how to put new code in front of users without betting the whole fleet on it, and how to coordinate the database migrations that make cutover hard. Finally, **Infrastructure as Code** turns to the platform underneath it all -- the clusters, networks, and databases the pipeline deploys onto -- and argues that they should be versioned, reviewed, and reproduced from code just like the application.
+
 ## CI/CD Pipelines
+
+We start where every change starts: with a commit that must prove itself before it goes anywhere near production. A pipeline is that proof, organized as an ordered series of automated gates, and the stages below are the ones you will find -- in roughly this order -- in nearly every mature engineering organization.
 
 ### Pipeline Stages
 
@@ -359,6 +367,8 @@ Health check 5 passed
 
 ## Deployment Strategies
 
+The pipeline above ends with a deploy step, but "deploy" hides a real decision: how exactly does new code take over from old code in front of live users? The strategies in this section differ mainly in two dimensions -- how much of your traffic is exposed if the new version is broken, and how fast you can get back to the old one. The right choice depends on your infrastructure budget and your tolerance for risk; the wrong choice is not picking one deliberately.
+
 ### Blue-Green Deployment
 
 Blue-green deployment maintains two identical production environments, called "blue" and "green." At any given time, one environment is live (serving all traffic) and the other is idle. To deploy, you deploy the new version to the idle environment, run tests against it, and then switch the load balancer or DNS to point to it. The switch is atomic: all users see the new version simultaneously.
@@ -407,6 +417,8 @@ This multi-phase approach avoids downtime but requires careful planning and typi
 ---
 
 ## Infrastructure as Code
+
+Everything so far has assumed there is somewhere to deploy to: a cluster, a database, a network, a registry. That infrastructure has to come from somewhere, and if it comes from hand-clicked console sessions, it is unversioned, unreviewable, and unreproducible -- the opposite of everything we just built for application code. Infrastructure as Code closes that gap by making the platform itself an artifact of the same discipline: declared in files, reviewed in pull requests, and applied by tools.
 
 ### Terraform
 
@@ -749,4 +761,18 @@ Infrastructure drift occurs when the actual state of your infrastructure diverge
 
 > **Key Takeaway:** Infrastructure as Code ensures that your infrastructure is versioned, reviewable, reproducible, and auditable -- just like application code. Terraform is the industry standard for provisioning cloud resources. Store state remotely with locking. Use modules for reusability. Run `terraform plan` in CI to catch drift. Pair Terraform (for infrastructure) with Ansible (for configuration) when needed.
 
+## Summary
+
+This section followed a change along its entire path from commit to running infrastructure. The first idea was the **pipeline as a series of gates**: lint, type check, and unit tests run in parallel for speed; integration tests, security scans, and the image build verify the artifact; staged deploys with health checks verify the running system. The decision rules are simple -- parallelize independent stages, cache aggressively keyed on lockfiles, tag artifacts immutably with the git SHA, keep secrets in the CI system (preferring OIDC federation over long-lived credentials), and make production deploys pass through an environment gate with real health checks rather than a shallow "process is up" probe.
+
+The second idea was that **deployment strategy is risk management**. Blue-green buys instant, atomic rollback at the price of double infrastructure; canary trades rollback speed for a small blast radius and metric-driven promotion; rolling update is the cheap default that forces old and new versions to coexist. Feature flags sit above all three, decoupling deploy from release and providing a kill switch that needs no rollback at all. The hard constraint underneath every strategy is the database: because two versions run simultaneously during any transition, migrations must be backwards-compatible -- additive by default, expand-contract when a change breaks the old code.
+
+The third idea was **Infrastructure as Code**: declare the desired end state, let the tool compute the diff, and treat the plan output as a reviewable artifact -- especially the destroy counts. Store state remotely with locking, keep secrets out of state and repos, prefer immutable images over in-place patching, and run `terraform plan` on a schedule to catch drift.
+
+A pipeline can verify that a deploy succeeded, but only the running system can tell you whether it keeps working -- which is the subject of 7.3 Observability.
+
+---
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [7.3 Observability](observability.md)

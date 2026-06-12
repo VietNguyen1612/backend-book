@@ -2,7 +2,15 @@
 
 # 1.3 Operating Systems
 
+Most backend code runs many layers above the operating system, and on a good day you can ignore it. Production does not consist of good days. The OS is where a surprising share of real incidents actually originate: a container that takes ten seconds to shut down because the app is PID 1 and never sees `SIGTERM`; a service that stops accepting connections with "Too many open files" while every health check still passes; a Python worker pool that burns four cores yet runs no faster because the GIL serializes the work; an OOM kill that strikes the busiest pod first. None of these are bugs in your application logic — they are the operating system enforcing rules you did not know you had agreed to.
+
+This section gives you the working model behind those rules. By the end you should be able to answer questions like: when do I reach for processes, threads, or coroutines in Python, and what does the GIL actually forbid? Why can two algorithms with the same Big-O differ tenfold in wall-clock time? What does it mean when RSS climbs but VSZ does not? How do I size a worker pool, and how does one ASGI worker hold thousands of connections open? And why is a container, mechanically speaking, just a process with restrictions?
+
+We build the model bottom-up. We start with processes, threads, and coroutines — the units of execution and what each one costs. Then we descend into CPU architecture and caches, where the memory hierarchy explains performance that complexity analysis cannot, and into memory management, covering virtual memory, the stack and heap, and Python's garbage collector. With memory in place we turn to concurrency and synchronization primitives — the locks, semaphores, and failure modes of shared state — and to scheduling, where the OS (and you, when sizing pools) decides who runs. From there we move to I/O models, the foundation of every scalable server, and file systems, where data finally meets the disk. We close with Linux fundamentals: signals, cgroups and namespaces, systemd, and the debugging tools you will reach for in production.
+
 ## Processes & Threads
+
+We begin with the most fundamental abstraction the OS offers: the unit of execution. Whether your Django application handles requests with worker processes, threads, or an async event loop is the single biggest architectural choice it makes about concurrency, and choosing well requires knowing exactly what each unit costs and what it shares.
 
 ### Processes
 
@@ -342,6 +350,8 @@ Modern CPUs are deeply pipelined: they start executing instructions *after* a br
 
 ## Memory Management
 
+The cache hierarchy we just examined is managed by hardware; the next layer up — deciding which process gets which memory, and what "memory" even means to a process — belongs to the OS. This layer is where leaks hide, where containers get OOM-killed, and where Python's garbage collector earns or costs you latency, so it deserves a careful look.
+
 ### Virtual Memory
 
 Each process sees a contiguous address space (e.g., 0 to 2^48 on 64-bit systems) that is **virtual** — it does not correspond directly to physical RAM. The OS maintains a **page table** that maps virtual pages to physical frames (or marks them as not-present, triggering a page fault that may load from disk).
@@ -671,6 +681,8 @@ Little's Law sanity check:  concurrency = throughput x latency
 
 ## I/O Models
 
+So far we have looked at how the OS manages computation and memory; but backend services spend most of their lives waiting — on sockets, on disks, on other services. How a server waits is therefore as consequential as how it computes, and the progression of I/O models below, from blocking reads to io_uring, is the story of how servers went from handling hundreds of connections to handling millions.
+
 ### Blocking I/O
 
 The simplest model: a thread calls `read()` or `write()` and **blocks** (sleeps) until the operation completes. While waiting, the thread cannot do anything else.
@@ -807,6 +819,8 @@ The Linux kernel maintains a **page cache** that caches file data in RAM. Reads 
 
 ## File Systems
 
+The I/O models above describe *how* a server moves bytes; the file system determines what those bytes mean once they reach the disk, and what survives a crash. For a backend engineer this layer matters mostly through its consequences — descriptor limits that cap your connections, the page cache that makes the second read fast, and the durability guarantees your database is quietly depending on.
+
 ### Inodes and File Descriptors
 
 An **inode** stores metadata about a file: permissions, ownership, timestamps, size, and pointers to data blocks. The filename is stored in the directory (which maps names to inode numbers). This is why hard links work — multiple names can point to the same inode.
@@ -893,6 +907,8 @@ This is why B-Trees (with their high branching factor and sequential leaf scanni
 ---
 
 ## Linux Fundamentals
+
+The preceding sections built the conceptual machinery; this final one is about the specific Linux mechanisms you will touch directly in production. Signals, cgroups, namespaces, systemd, and the tracing tools are where the abstractions of this section become commands you actually type during a deployment or an incident.
 
 ### Signals
 
@@ -1043,4 +1059,14 @@ Packet Flow through Netfilter:
 
 > **Key Takeaway:** Linux fundamentals are essential for production backend work. Signals for graceful shutdown, cgroups/namespaces for containerization, systemd for service management, and debugging tools for production troubleshooting. These are not just "ops" skills — every backend developer needs them for debugging production issues, writing Dockerfiles, configuring deployment, and understanding why their application behaves differently in production than in development.
 
+## Summary
+
+This section built a working model of the machine your code actually runs on, from the unit of execution down to the disk. The recurring theme is that the OS's abstractions are excellent but leaky — and production is where they leak.
+
+We started with processes, threads, and coroutines, and the decision rule that follows from the GIL: multiprocessing for CPU-bound work, threads for blocking I/O, asyncio for high-concurrency I/O — and an init shim like `tini` whenever your container's PID 1 spawns children. CPU architecture and caches explained why Big-O is not the whole story: the memory hierarchy spans seven orders of magnitude, so sequential, cache-line-friendly access routinely beats asymptotically equal pointer-chasing, and false sharing or branch mispredictions can quietly halve a hot loop. Memory management gave us virtual memory, the TLB, and Python's two-layer GC, plus the operational rule: watch RSS, not VSZ, because RSS is what the OOM killer and your cgroup limit see. Concurrency primitives came with their own disciplines — guard every critical section, re-check condition predicates in a `while` loop, and impose a global lock order to make deadlock impossible. Scheduling reduced to one sizing rule: CPU-bound pools ≈ cores, I/O-bound pools sized by Little's Law and capped by the slowest downstream. I/O models traced the path from thread-per-connection to epoll and io_uring — the reason one ASGI worker can hold thousands of connections. File systems and Linux fundamentals supplied the production toolkit: descriptor limits, the page cache, `fsync` for durability, signals for graceful shutdown, and cgroups plus namespaces as the actual definition of a container.
+
+Everything here concerned a single machine; the moment a request leaves it, a different set of rules takes over, and that is the subject of 1.4 Networking.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [1.4 Networking](networking.md)

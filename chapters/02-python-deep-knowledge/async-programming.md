@@ -2,7 +2,15 @@
 
 # 2.2 Async Programming
 
+A typical backend request spends most of its life waiting — for a database row, an upstream API, a cache lookup. A thread-per-request server burns a full OS thread on each of those idle waits, and at a few thousand concurrent connections it runs out of memory or file descriptors long before it runs out of CPU. Async programming inverts the model: a single thread holds thousands of in-flight operations and switches between them at well-defined `await` points. It also explains an entire family of production incidents — the API that grinds to a halt because one handler called a synchronous library and froze the event loop, the worker that silently dropped jobs because an untracked task was garbage-collected, the batch script that opened ten thousand connections at once and got the service blocklisted by its own database.
+
+In the previous section we examined how CPython executes code — the GIL, bytecode, and memory model. This section builds on that foundation: because the GIL already serializes Python execution, cooperative single-threaded concurrency is not a compromise but a natural fit for I/O-bound work. By the end you should be able to answer: when does async actually help, and when does it not? What is the difference between `gather`, `wait`, `create_task`, and `TaskGroup`, and which one prevents leaked tasks? How do you safely call blocking code from a coroutine? And how do you keep a high-throughput async service from exhausting memory or connections under load?
+
+We proceed in three steps. First, **asyncio** covers the core machinery — the event loop, task scheduling, synchronization primitives, escape hatches for blocking code, and structured concurrency with `TaskGroup`. Next, **Async Frameworks** shows how that machinery surfaces in the tools you deploy: FastAPI, ASGI servers, and Django's incremental async support. Finally, **Common Async Patterns** turns to the operational concerns that separate a demo from a production service — connection pooling, backpressure, cancellation and timeouts, and testing async code.
+
 ## asyncio
+
+Everything in this section rests on one mechanism, so we start there: a single-threaded event loop that switches between coroutines at `await` points. Once that model is clear, the rest of asyncio — task orchestration, synchronization primitives, and structured concurrency — follows from it.
 
 ### The Event Loop: Cooperative Multitasking
 
@@ -322,6 +330,8 @@ Processed a Processed b Processed c
 
 ## Async Frameworks
 
+In practice you rarely run an event loop by hand — a framework and an ASGI server own it, and your code plugs in as coroutines. This section looks at how the primitives we just covered surface in the tools you actually deploy: FastAPI for new async-first services, the ASGI servers that host them, and Django's gradual path for bringing async into an existing codebase.
+
 ### FastAPI: Async-First API Framework
 
 FastAPI is built on Starlette and Pydantic, offering async-first design with automatic data validation and OpenAPI documentation.
@@ -452,6 +462,8 @@ async def my_async_view(request):
 ---
 
 ## Common Async Patterns
+
+Knowing the primitives and the frameworks is not the same as running an async service under real load. The failure modes that surface in production — connection exhaustion, unbounded memory growth, tasks that hang forever, code that only breaks under concurrency — each have a standard countermeasure, and this section walks through them: pooling, backpressure, cancellation and timeouts, and testing.
 
 ### Connection Pooling
 
@@ -671,4 +683,18 @@ async def test_database_query(db_pool):
 
 > **Key Takeaway:** Always use connection pools, never create connections per-request. Use bounded queues and semaphores for backpressure. Handle cancellation with `try/except CancelledError` and always clean up in `finally`. Use `pytest-asyncio` and `AsyncMock` for testing.
 
+## Summary
+
+Async programming in Python is built on a single idea: one thread, one event loop, and coroutines that voluntarily yield at `await` points. Because the waiting in I/O-bound workloads is free to overlap, a single async worker can hold thousands of slow connections open where a thread-per-request design would collapse. The corollary is the cardinal rule of this section — never block the event loop. A synchronous call inside a coroutine freezes every task at once; blocking code belongs behind `asyncio.to_thread()` (or, for CPU-bound work, a process pool).
+
+The orchestration tools form a small decision tree. Use `asyncio.gather()` when you want all results in order; `asyncio.wait()` when you need fine-grained control such as racing to the first completion; and `TaskGroup` whenever tasks can fail, because its cancel-the-siblings-on-error guarantee prevents both leaked tasks and swallowed exceptions. A bare `create_task()` whose reference you drop can be garbage-collected mid-flight — structured concurrency exists to make that bug impossible.
+
+At the framework layer, FastAPI plus an ASGI server such as Uvicorn is the default for new async services, while Django offers async views, an async ORM, and `sync_to_async` for incremental migration. In production, the recurring patterns are defensive: share connection pools rather than opening connections per request, bound concurrency with semaphores and bounded queues so producers feel backpressure, treat cancellation as a first-class code path (catch `CancelledError`, clean up quickly, re-raise), and test with `pytest-asyncio` and `AsyncMock`.
+
+With the concurrency model in hand, we turn next to **2.3 Advanced Patterns**, where these building blocks combine into higher-level designs.
+
+---
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [2.3 Advanced Patterns](advanced-patterns.md)

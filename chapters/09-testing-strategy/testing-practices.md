@@ -2,7 +2,15 @@
 
 # 9.2 Testing Practices
 
+Section 9.1 gave us the strategy: a pyramid that tells us *how many* tests of each kind to write and *where* to spend our budget. But a well-shaped pyramid built from bad tests is still a liability. The failure modes are familiar to anyone who has maintained a large suite: a build that takes forty minutes so developers stop running it locally; a test that fails every third Tuesday because it reads the system clock; a suite at 90% coverage that nevertheless lets a one-character pricing bug ship, because the lines were executed but nothing meaningful was asserted; two microservice teams who each pass their own tests and discover in staging that the provider renamed a field the consumer depends on. Each of these is a practice problem, not a strategy problem, and each has a specific, well-understood remedy.
+
+This section is about those remedies. By the end of it you should be able to answer: what makes an individual test trustworthy, and how do we eliminate the time, randomness, and ordering dependencies that make tests flaky? How do we keep test data maintainable as models evolve? How do we measure whether our tests would actually *catch* a bug, rather than merely execute the code? How do two services verify they are compatible without ever running at the same time? And -- once a change has passed every pre-production gate -- how do we validate it against real traffic without betting the whole user base on it?
+
+We proceed in two movements. *Test Design Principles* covers the craft of tests themselves: the F.I.R.S.T. qualities, determinism techniques for time and randomness, branch coverage and its limits, factory-based test data, mutation testing, and consumer-driven contract testing with Pact. *Testing in Production (Safely)* then follows the change past the deploy boundary, where feature flags, canary releases, shadow traffic, synthetic monitoring, chaos engineering, and rehearsed disaster recovery extend the same discipline into the only environment that ever tells the full truth.
+
 ## Test Design Principles
+
+Strategy decided where our tests should live; this section is about whether each test deserves to live at all. We start with the qualities that make a single test trustworthy, then work outward through progressively larger questions -- how to keep tests deterministic, how to feed them maintainable data, how to measure whether they would catch a real bug, and how to extend their guarantees across service boundaries.
 
 ### F.I.R.S.T. Principles
 
@@ -411,4 +419,16 @@ The crucial discipline is that **an untested backup is not a backup.** Teams dis
 
 > **Key Takeaway:** Testing in production is a controlled discipline, not a shortcut. Feature flags and canary releases shrink the blast radius of every change; shadow traffic and synthetic monitoring validate new code and critical paths against real conditions; chaos engineering and game days prove your resilience and your team's response before a real outage does. None of it is responsible without the safety net underneath: observability to detect problems in seconds and a fast, rehearsed rollback to contain them -- and a disaster-recovery plan you have actually restored from, not merely written down.
 
+## Summary
+
+This section moved from the craft of individual tests to the discipline of validating software against reality itself. The thread connecting both halves is *trust*: a test suite is only useful if a red build reliably means something is broken and a green build reliably means it is safe to ship.
+
+Under *Test Design Principles*, the F.I.R.S.T. qualities -- fast, independent, repeatable, self-validating, timely -- define what a trustworthy test looks like, and the determinism techniques make repeatability concrete: freeze the clock, seed randomness, randomize test order to flush out hidden coupling, and quarantine (never auto-retry away) flaky tests. The measurement tools then grade the suite itself. Branch coverage tells you what code was executed, with roughly 80% as the pragmatic target; mutation testing with mutmut tells you the harder truth of whether your assertions would notice a bug, since a surviving mutant is a shippable defect no test would catch. factory_boy and Faker keep test data centralized so a model change is a one-line factory edit, and Pact contract tests let a consumer and provider verify compatibility without ever running simultaneously -- the decision rule being that contracts replace shared end-to-end environments for cross-service API checks.
+
+*Testing in Production (Safely)* extended the same rigor past deployment: feature flags decouple deploy from release and provide an instant kill switch; canaries automate the promote-or-rollback decision on golden signals; shadow traffic and synthetics validate without user-facing risk; chaos engineering and game days prove resilience before an outage does; and a DR plan counts only once you have restored from it and measured the real RTO. The prerequisite for all of it is observability plus rehearsed rollback.
+
+This closes Chapter 9. With a testing strategy (9.1) and the practices to execute it (9.2), the remaining questions are no longer technical but organizational -- how a senior engineer drives these disciplines across teams and trade-offs, which is where Chapter 10 begins with 10.1 Technical Leadership.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [10.1 Technical Leadership](../10-senior-architect-mindset/technical-leadership.md)

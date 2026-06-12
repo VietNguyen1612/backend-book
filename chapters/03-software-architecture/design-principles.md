@@ -2,7 +2,15 @@
 
 # 3.1 Design Principles
 
+With Chapter 2 behind us, we know how Python works — how its objects, scopes, and concurrency primitives behave. This chapter asks a different question: how should we arrange code so that a system survives years of changing requirements? The stakes are concrete. Most production incidents that get blamed on "legacy code" trace back to design failures with names: a class that serves three departments, so a change for one silently breaks the others; business logic welded to a database driver, so nothing can be tested without live infrastructure; a "microservices" split whose services must all be deployed together. Design principles are the accumulated vocabulary for recognizing these failure modes before they ship — and for arguing, in a code review, why a particular structure will or will not age well.
+
+By the end of this section you should be able to answer questions like: When does inheritance betray you, and what does "substitutable" actually require of a subclass? Why is duplication sometimes cheaper than abstraction, and when do you extract anyway? How do you measure coupling precisely enough to justify a refactor, rather than gesturing at "spaghetti"? And at what point does a plain Django views-call-models layout deserve to grow ports, adapters, and an explicit domain layer?
+
+We proceed in three steps. First, the SOLID principles — five rules about responsibility, extension, substitution, interfaces, and dependency direction, each shown as a violation and its fix in Python. Then a broader collection of key principles: DRY, KISS, YAGNI, composition over inheritance, the Law of Demeter, separation of concerns, Tell-Don't-Ask, the Twelve-Factor App, a more rigorous treatment of coupling and cohesion, and the anti-patterns these principles exist to prevent. Finally, Clean and Hexagonal Architecture, where the same ideas — especially dependency inversion — scale up from individual classes to the structure of a whole application.
+
 ## SOLID Principles
+
+The five SOLID principles are the standard starting point for any conversation about object-oriented design, and they all attack the same enemy from different angles: code that is risky to change. We take them in order, and for each one the pattern is the same — a realistic violation, the failure it causes, and the restructured version that removes it.
 
 ### S -- Single Responsibility Principle (SRP)
 
@@ -430,6 +438,8 @@ In a Django project, DIP is applied by injecting service dependencies. Instead o
 ---
 
 ## Other Key Principles
+
+SOLID covers how classes relate to one another, but most day-to-day design judgment calls are broader: whether to extract duplicated logic, how much structure a problem deserves, where a system's seams should fall. The principles in this section supply that judgment vocabulary — and because several of them pull against each other, the discussion is as much about when *not* to apply a principle as when to apply it.
 
 ### DRY (Don't Repeat Yourself)
 
@@ -1057,4 +1067,14 @@ A practical progression:
 
 > **Key Takeaway:** Clean Architecture and Hexagonal Architecture are about protecting your business logic from infrastructure details. Dependencies point inward. The domain defines ports (interfaces); the infrastructure provides adapters (implementations). Start simple and introduce these patterns as complexity demands it.
 
+## Summary
+
+This section assembled the vocabulary for one recurring problem: keeping code safe to change. SOLID gave us five class-level rules. A module should have one reason to change, owned by one stakeholder (SRP). New behavior should arrive as new code, not edits to tested code (OCP) — in Python, usually a strategy interface plus new implementations. A subclass must honor every promise its base type makes, or it does not belong in the hierarchy (LSP). Many small interfaces beat one fat one, and `typing.Protocol` makes this nearly free (ISP). And high-level policy should depend on abstractions it owns, with concrete adapters injected from outside (DIP) — the principle that makes business logic testable without infrastructure.
+
+The broader principles are decision rules rather than laws, and they trade off against one another. DRY says one authoritative representation per piece of knowledge, but only after roughly three occurrences — duplication is cheaper than the wrong abstraction. KISS and YAGNI push back against cleverness and speculative generality. Composition over inheritance avoids fragile base classes; the Law of Demeter and Tell-Don't-Ask keep behavior next to the data it guards; separation of concerns and the Twelve-Factor checklist extend the same discipline to layers and deployments. When "reduce coupling" is too vague, instability (`Ce/(Ca+Ce)`) tells you which modules are risky and connascence tells you which couplings to weaken first — the stronger and more distant, the worse. The named anti-patterns are these rules violated at scale.
+
+Clean and Hexagonal Architecture scale DIP up to whole applications: dependencies point inward, the domain defines ports, infrastructure supplies adapters — adopted progressively, only as complexity demands. Principles tell us what good structure looks like; the next section, 3.2 Design Patterns, catalogs the named, reusable solutions that put them into practice.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [3.2 Design Patterns](design-patterns.md)

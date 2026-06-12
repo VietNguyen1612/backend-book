@@ -2,9 +2,15 @@
 
 # 12.1 Communication
 
-Effective communication is arguably the single highest-leverage skill a backend engineer can develop. You may write flawless code, but if you cannot explain your design decisions, convey risk to stakeholders, or leave behind documentation that others can follow, the impact of your work shrinks dramatically. This section covers the concrete artifacts and practices that separate engineers who merely code from engineers who lead.
+Effective communication is arguably the single highest-leverage skill a backend engineer can develop. You may write flawless code, but if you cannot explain your design decisions in a review, convey risk to a skeptical stakeholder, or post an incident update that people can act on, the impact of your work shrinks dramatically. At senior level the limiting factor is rarely technical knowledge; it is the ability to transfer that knowledge to the people who need it -- reviewers, operators, managers, and the engineers who will inherit your systems long after you have moved on.
+
+This section treats communication the way the rest of this book treats systems: as a set of concrete mechanisms with known failure modes and known fixes. By the end you should be able to answer questions like: what belongs in an RFC, and why does circulating it before implementation pay for itself? What makes a runbook usable at 3 AM? How do you translate a database migration into terms an executive can weigh, estimate honestly under pressure, or say no without becoming a roadblock? And when a deadline starts to slip, what do you say, to whom, and how early?
+
+We begin with technical writing -- the durable artifacts (RFCs, READMEs, runbooks, ADRs) that carry your reasoning to readers you will never meet. From there we turn to stakeholder communication: translating technical work into business impact, estimating, and declining requests constructively. The next three sections refine the delivery itself -- writing for your audience, defaulting to asynchronous written-first communication, and communicating status honestly -- before we close with collaboration and mentorship, where communication stops being about individual messages and becomes about making the whole team stronger.
 
 ## Technical Writing
+
+We start with writing because it is the most durable form of communication an engineer produces: a document outlives the meeting, the Slack thread, and often its author's tenure on the team. Four artifacts dominate a backend engineer's written output -- the RFC, the README, the runbook, and the ADR -- and each serves a distinct reader at a distinct moment, from the design review to the 3 AM incident.
 
 ### RFC / Design Document
 
@@ -423,6 +429,8 @@ Store ADRs in version control alongside the code they describe (e.g., `docs/adr/
 
 ## Stakeholder Communication
 
+The artifacts above are written mostly for other engineers. Just as often, though, your reader is a manager, a product owner, or an executive who does not -- and should not need to -- understand the technical internals. Communicating with these stakeholders is fundamentally a translation problem, and it comes with its own recurring situations: explaining why work matters, estimating when it will land, and declining requests you cannot responsibly accept.
+
 ### Translating Technical Concepts to Business Impact
 
 The most common communication failure among backend engineers is describing *what* they are doing in technical terms without connecting it to *why it matters* to the business. Your engineering manager, product manager, and executive sponsors do not need to understand connection pooling or Kafka consumer groups. They need to understand risk, cost, timeline, and user impact.
@@ -563,6 +571,16 @@ Psychological safety is created mostly by what high-status people do, not by wha
 
 > **Key Takeaway -- Collaboration & Mentorship**: Optimize for the strength of the team, not the visibility of your individual heroics. Spread context so no system depends on one person; grow others so your impact outlives your own keyboard time; trade feedback honestly in both directions; and protect the psychological safety that makes all of it possible. The engineers who get promoted fastest are usually the ones who made the people around them better.
 
+## Summary
+
+In this section we treated communication as an engineering discipline with concrete artifacts, audiences, and failure modes. We started with technical writing, the most durable form the discipline takes: the RFC, which forces design thinking before implementation and collects disagreement while it is still cheap; the README, whose chief enemy is staleness; the runbook, written for the least experienced on-call engineer and tested before it is needed; and the ADR, which records why a decision was made so the debate does not recur every quarter.
+
+We then turned outward to stakeholders, where the operating principle is translation: technical change, then user or business effect, then quantified impact. Estimates should be ranges with explicit assumptions and visible contingency, not padded point figures, and "no" should arrive as a trade-off with alternatives rather than a refusal. The three sections on delivery sharpened the mechanics -- lead with the conclusion and make every ask explicit, default to written-first communication so decisions survive the meeting, and surface bad news early, with a plan, because a slip reported three weeks out is a gift and the same slip reported the day before is a betrayal.
+
+Finally, we widened the lens to the team: raising the bus factor by sharing context generously, mentoring by delegating real work rather than scraps, exchanging feedback that is specific, timely, and kind, and protecting the psychological safety that makes all of the above possible. The common thread is that a senior engineer's trustworthiness rests on their written and spoken word reliably matching reality -- and that reputation, compounded over years, is precisely what we examine next in 12.2 Career Progression.
+
 ---
 
 *Last reviewed: 2026-06-08*
+
+**Next:** [12.2 Career Progression](career-progression.md)

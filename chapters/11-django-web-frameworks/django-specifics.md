@@ -2,7 +2,15 @@
 
 # 11.1 Django Specifics (Transferable Concepts)
 
+Django is worth studying closely even if you never deploy it, because nearly everything it does is a concrete, well-documented instance of a pattern that every web framework implements in some form: an application server interface, a middleware chain, an ORM with lazy queries, an event system, a security baseline. It is also where some of the most common production failures in web backends originate. The endpoint that is fast in development and collapses under load is usually an N+1 query problem; the save that mysteriously sends an email twice is usually a signal; the deploy that locks a hot table for minutes is usually a migration. Understanding the machinery beneath the framework's conveniences is what separates using Django from operating it.
+
+By the end of this section you should be able to answer questions like: what actually happens between a socket accepting bytes and your view running, and why does middleware order matter? How does a lazy QuerySet turn one innocent line of template code into a thousand queries, and which of `select_related`, `prefetch_related`, and `values` fixes it? When is a signal the right tool and when is it a trap? What do async views and Channels actually buy you, and what do they not? And which settings stand between a default Django project and one that is safe to expose to the internet?
+
+We follow the path a request takes. **Request/Response Lifecycle** traces bytes from the WSGI/ASGI server through the middleware stack and URL routing into views. **ORM & Database Layer** covers models, migrations, QuerySet evaluation and the N+1 problem, and the transaction and locking tools that keep data correct under concurrency. **Signals & Events** examines Django's observer pattern and when its decoupling helps versus hurts. **Admin & Rapid Development** looks at the auto-generated CRUD interface as an internal power tool. **Async & Real-Time Django** explains async views, the sync/async bridge, and Channels for WebSockets. **Performance** works through per-instance caching, connection pooling, read replicas, and profiling, and **Security** closes with the protections Django gives you for free and the configuration it leaves to you.
+
 ## Request/Response Lifecycle
+
+The most useful piece of Django knowledge is the exact path a request travels from the network socket to your code and back. Nearly every debugging session -- a missing header, a user who appears anonymous, a slow endpoint -- reduces to asking where along this path something went wrong, so we trace it from the very first hop: the application server.
 
 ### The Application Server: WSGI and ASGI
 
@@ -315,6 +323,8 @@ FBVs are easier to understand and debug; CBVs reduce repetition when you have ma
 ---
 
 ## ORM & Database Layer
+
+Once routing has delivered a request to a view, most of what that view does is talk to the database, and in Django that conversation happens through the ORM. This layer is where the bulk of the framework's convenience lives and where the bulk of its production surprises hide, so we work through it from model definitions down to query optimization, locking, and transactional correctness.
 
 ### Model Definitions and Patterns
 
@@ -1497,6 +1507,14 @@ System check identified 4 issues (0 silenced).
 
 > **Key Takeaway:** Django gives you SQL-injection, XSS, CSRF, and clickjacking protection for free -- do not disable them (no raw string SQL, sparing use of `|safe`, leave CSRF on for cookie-auth forms). The vulnerabilities that remain are almost all configuration: `DEBUG=False`, a correct `ALLOWED_HOSTS`, `SECRET_KEY` from the environment, secure cookie flags, and Argon2 hashing. Make `manage.py check --deploy` part of your deploy pipeline.
 
+## Summary
+
+This section walked through Django's core machinery as a set of transferable patterns. The request/response lifecycle is an onion: a WSGI or ASGI server parses HTTP and hands the request to a middleware stack traversed top-down on the way in and bottom-up on the way out, wrapping URL routing and a view at the core -- which is why most mysterious header and authentication bugs turn out to be middleware ordering problems. The ORM is an Active Record abstraction over SQL, not a replacement for understanding it: lazy QuerySets make N+1 queries the default failure mode, fixed with `select_related` and `prefetch_related`, while `F` expressions, transactions, `select_for_update`, and `on_commit` hooks keep concurrent writes correct. Signals decouple cross-cutting reactions but hide control flow; keep business-critical logic in explicit service functions and reserve signals for optional side effects. The admin is a free CRUD interface for internal operations, not a public-facing application. Async views and Channels buy concurrency for I/O-bound work and long-lived connections, not speed for CPU-bound code -- and ordinary CRUD remains simplest on sync WSGI. Performance tuning follows the data path in order: cache the response, cut queries, reuse connections, offload heavy work to a task queue, then scale reads with replicas -- always measuring first. Security is mostly configuration: Django blocks SQL injection, XSS, CSRF, and clickjacking by default, and `manage.py check --deploy` verifies the settings you must still get right.
+
+Every one of these mechanisms has a counterpart in Flask, FastAPI, Rails, and Express; the next section, 11.2 Web Framework-Agnostic Patterns, examines those shared patterns directly, independent of any single framework.
+
 ---
 
 *Last reviewed: 2026-06-08*
+
+**Next:** [11.2 Web Framework-Agnostic Patterns](framework-agnostic-patterns.md)

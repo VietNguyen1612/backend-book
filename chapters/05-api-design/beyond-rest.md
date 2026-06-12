@@ -2,7 +2,15 @@
 
 # 5.2 Beyond REST
 
+In the previous section we treated REST as the default vocabulary for backend APIs, and for many systems it is exactly the right one. But REST's request/response, resource-at-a-URL model has real limits that show up in production: a mobile client over-fetches fields it never renders and burns the user's battery and data plan; a screen that needs five related resources makes five round-trips; two internal services exchange millions of JSON payloads per minute and spend a surprising share of their CPU on serialization; a dashboard polls every few seconds for data the server already knows has not changed; and a checkout endpoint blocks for thirty seconds because it sends a confirmation email inline. None of these are failures of design discipline -- they are workloads that plain REST was never shaped for, and each has spawned a well-established alternative.
+
+This section is about those alternatives and, just as importantly, about when each one earns its added complexity. By the end you should be able to answer questions like: when does GraphQL's client-driven querying justify its caching and security overhead, and why is DataLoader non-negotiable? Why do internal microservices increasingly speak gRPC while public APIs stay on REST? When do you reach for Server-Sent Events instead of WebSocket, and what breaks when you scale persistent connections past one server? And when should an API stop answering synchronously at all and hand the work to a queue?
+
+We proceed roughly in order of how far each option departs from REST. We start with GraphQL, which keeps HTTP and JSON but moves control of the response shape to the client. We then turn to gRPC, which replaces both the encoding and the transport semantics with Protocol Buffers over HTTP/2. Next come WebSocket and Server-Sent Events, which abandon request/response in favor of long-lived push connections. Finally we look at message queues and async APIs -- RabbitMQ, Kafka, Celery, webhooks, and AsyncAPI -- where the caller stops waiting for an answer entirely.
+
 ## GraphQL
+
+REST's contract is server-driven: the server decides what each endpoint returns, and clients take it or leave it. GraphQL inverts that contract -- the server publishes a typed schema of what *can* be asked, and each client composes precisely the query it needs. Everything that follows, from resolvers to the N+1 problem to query cost analysis, is a consequence of handing that control to the client.
 
 **Schema-First Design**
 
@@ -378,6 +386,8 @@ REST is better when: (a) your API is simple CRUD with flat resources, (b) HTTP c
 
 ## gRPC
 
+GraphQL optimizes for flexible clients, but it still ships text-based JSON over ordinary HTTP -- fine at the edge, wasteful between services that call each other thousands of times per second. gRPC attacks that interior path: a compact binary encoding, code-generated clients in every language, and HTTP/2 transport that supports streaming in both directions. It is the option you reach for when both ends of the conversation are servers you control.
+
 **Protocol Buffers (protobuf)**
 
 gRPC uses Protocol Buffers as its interface definition language and serialization format. You define your service and message types in `.proto` files, then use the `protoc` compiler to generate client and server code in any supported language. Protobuf messages are serialized to a compact binary format that is 5-10x smaller than JSON and 5-10x faster to serialize/deserialize.
@@ -651,6 +661,8 @@ gRPC is ideal for inter-service communication (especially in polyglot environmen
 
 ## WebSocket & Server-Sent Events
 
+GraphQL and gRPC change what travels over the connection, but both still assume the client initiates every exchange. Some workloads invert that assumption: a chat message, a price tick, or a streamed LLM token must reach the client the moment the server has it, not on the next poll. This section covers the two standard ways to keep a connection open for server push -- full-duplex WebSocket and the simpler, HTTP-native Server-Sent Events -- and what it takes to scale them beyond a single server.
+
 **WebSocket**
 
 WebSocket provides full-duplex, persistent communication over a single TCP connection. The connection starts as an HTTP request that is "upgraded" to the WebSocket protocol. Once established, both the client and server can send messages at any time without the overhead of establishing new connections. This makes WebSocket ideal for real-time applications: chat, gaming, live collaboration, and trading platforms.
@@ -889,6 +901,8 @@ Additional scaling considerations: impose connection limits per server, implemen
 > **Key Takeaway:** Use SSE for one-way server-to-client streaming -- it is simpler, works with standard HTTP infrastructure, and reconnects automatically. Reserve WebSocket for truly bidirectional use cases. For multi-server deployments, you will need an external pub/sub system like Redis to bridge connections across instances.
 
 ## Message Queues & Async APIs
+
+Everything so far -- REST, GraphQL, gRPC, even push connections -- keeps the caller and the callee alive at the same moment. The final step away from REST is to drop that requirement: the producer hands work to a broker and moves on, and a consumer processes it whenever it can. This decoupling is what lets an API respond in milliseconds while emails, reports, and downstream integrations happen in the background; here we look at the main tools for it in a Python shop -- RabbitMQ, Kafka, Celery, webhooks, and the AsyncAPI specification that documents them.
 
 **RabbitMQ**
 
@@ -1329,4 +1343,14 @@ AsyncAPI is the OpenAPI equivalent for asynchronous APIs. It provides a specific
 
 > **Key Takeaway:** Choose your async pattern based on the use case. Celery is the go-to for Python background tasks with retry and workflow support. RabbitMQ is best for complex routing and traditional work queues. Kafka is best for high-throughput event streaming and event replay. Always sign webhooks with HMAC and implement retry with exponential backoff.
 
+## Summary
+
+This section surveyed the four main paths beyond plain REST, each motivated by a workload REST handles poorly. GraphQL hands control of the response shape to the client through a typed schema and resolvers; that flexibility pays off when many clients need different views of nested data, but it obliges you to batch lookups with a per-request DataLoader, paginate with Relay-style connections, authorize at field granularity, and budget queries with depth limits, cost analysis, and persisted queries -- in GraphQL, a single POST can do the damage of thousands of REST calls. gRPC moves in the opposite direction: Protocol Buffers and code generation lock both ends to a strict contract, and HTTP/2 multiplexing plus binary framing make it the default for internal service-to-service traffic, with four communication patterns from unary calls to bidirectional streams. The practical rule is to use gRPC inside the system boundary and expose REST or GraphQL at the edge.
+
+For server push, the decision rule is direction: Server-Sent Events for one-way server-to-client streams (it is plain HTTP, with reconnection for free), WebSocket only when traffic genuinely flows both ways -- and once you run more than one server, an external pub/sub layer such as Redis must bridge connections across instances. Finally, message queues remove the requirement that caller and callee be alive at the same time: Celery for Python background tasks with retries and workflows, RabbitMQ for routing and work queues with dead-letter safety nets, Kafka for high-throughput streams with replay, and HMAC-signed webhooks for callbacks across organizational boundaries.
+
+Whatever protocol your API speaks, every one of these channels carries requests that must be tied to an identity and checked against permissions -- the subject of 5.3 Authentication & Authorization.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [5.3 Authentication & Authorization](authentication-and-authorization.md)

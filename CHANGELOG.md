@@ -2,7 +2,21 @@
 
 All notable changes from the audit & improvement pass. Dates are absolute.
 
-## [Unreleased] — 2026-06-08
+## [Unreleased] — 2026-06-12
+
+### Reverted — Gemini "mental model" pass
+
+- Reverted the four 2026-06-12 commits (`9647857`, `6bcaab4`, `94b2620`, `caba46c`) that scattered "Beginner's Mental Model" analogy callouts across 32 files and then duplicated the same analogies again as prose paragraphs (often back-to-back with the callout, sometimes under the wrong heading — e.g. the system-call restaurant analogy under "I/O Models").
+
+### Book-structure pass (DDIA-style)
+
+- **Heading hierarchy**: all 36 section files promoted from the old H1→H3/H4 convention to proper book hierarchy (H1 title, H2 major sections, H3/H4 subsections); fence-aware, anchors unchanged. Re-enabled markdownlint `MD001` (heading-increment) now that the hierarchy is regular; one heading in 9.1 promoted to H2 to satisfy it ("Testing Trophy vs. Pyramid", which sits before the first H2).
+- **Narrative scaffolding** (additive only — no existing prose, code, output blocks, or callouts changed): every section file now has
+  - a 2–3 paragraph introduction after the title: production stakes, the questions the section answers, and a roadmap of its H2 sections in order;
+  - short bridge paragraphs under H2 sections that previously opened abruptly with a definition/subheading/code (~100 bridges total, only where needed);
+  - a closing `## Summary` recapping each section's decision rules, ending with a named hand-off to the next section (chapter-closing files wrap up the chapter; 12.2 closes the book);
+  - a `**Next:** [N.M Title](…)` link as the last line, so the book reads front-to-back (12.2 links back to the index).
+- Search index regenerated; all checks green: markdownlint 0 errors, ruff clean, links/fences/TOC/stamps pass, index fresh.
 
 ### Phase 1 — Known fixes
 

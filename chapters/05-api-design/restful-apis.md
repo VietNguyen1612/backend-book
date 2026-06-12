@@ -2,7 +2,15 @@
 
 # 5.1 RESTful APIs
 
+The previous chapter was about data at rest -- how we store it, index it, and keep it consistent. This chapter turns to the other half of a backend engineer's job: the interface your service exposes to the outside world. For most systems that interface is an HTTP API, and the dominant style for designing one is REST. The stakes are concrete. An API is a contract with clients you do not control and often cannot even identify; once a mobile app or a partner integration depends on a URL shape or an error format, changing it breaks someone. Many production incidents trace back to API design decisions made casually: a POST endpoint that double-charges a customer because a retry was not idempotent, a list endpoint that times out at page 50,000 because pagination used `OFFSET`, a CDN that serves one client's cached response to another because a `Vary` header was missing. These are design problems, not implementation bugs, and they are the subject of this section.
+
+By the end of this section you should be able to answer questions like: what actually makes an API RESTful, beyond putting nouns in URLs? When is it safe for a client to retry a request, and how do you make an unsafe operation retryable? How should you version an API, paginate a large collection, and report errors so that every endpoint behaves the same way? And how do you keep documentation truthful as the code evolves?
+
+We proceed in three steps. *REST Principles* covers the foundations -- resources and URIs, HTTP method semantics and idempotency, status codes, HATEOAS, the Richardson Maturity Model, and content negotiation. *API Design Best Practices* then turns those principles into the recurring decisions of real API work: versioning, pagination, filtering, error formats, idempotency keys, rate limiting, and bulk operations. Finally, *API Documentation* looks at OpenAPI and how to keep the documented contract and the running code from drifting apart.
+
 ## REST Principles
+
+REST is less a protocol than a set of constraints layered on top of HTTP, and most of its practical value comes from a handful of them: name things with URIs, act on them with the standard HTTP methods, and report outcomes with status codes. We start with the first of these, because everything else in this section builds on how resources are identified.
 
 **Resources Identified by URIs**
 
@@ -283,6 +291,8 @@ Vary: Accept, Accept-Encoding
 > **Key Takeaway:** The core of REST is a clean division of labor: the URI names the *resource* (a noun) and the HTTP method names the *action*, while the status code reports the *outcome*. Get those three right -- nouns in paths, correct method semantics including idempotency, and accurate status codes -- and you have a predictable API even without full HATEOAS, which most teams skip.
 
 ## API Design Best Practices
+
+The principles above tell you what a well-formed REST API looks like; they say little about the decisions that consume most of your design time in practice. How do you evolve the API without breaking existing clients? How do you return a million-row collection? What does an error look like? This section works through those recurring questions, starting with the one that determines how much freedom you have to answer all the others: versioning.
 
 **Versioning**
 
@@ -778,6 +788,8 @@ Response with partial success (overall HTTP 207 Multi-Status or 200):
 
 ## API Documentation
 
+Conventions like the ones above only pay off if clients can discover them, and an API contract that lives in tribal knowledge or a stale wiki page will be violated by both sides. This final section covers how to express the contract in a machine-readable form and keep it honest as the implementation changes.
+
 **OpenAPI (Swagger)**
 
 OpenAPI is the industry-standard specification for describing REST APIs in a machine-readable format (YAML or JSON). From a single specification file, you can auto-generate interactive documentation (Swagger UI, ReDoc), client SDKs in dozens of languages, server stubs, and test suites.
@@ -876,4 +888,19 @@ Documentation that drifts from the actual implementation is worse than no docume
 
 > **Key Takeaway:** REST APIs succeed or fail based on consistency. Pick conventions for URL structure, error format, pagination, and versioning -- then enforce them across every endpoint. Use OpenAPI as the single source of truth, and validate it automatically in CI.
 
+## Summary
+
+In this section we treated API design as contract design. The foundation is REST's division of labor: the URI names a resource (a noun), the HTTP method names the action, and the status code reports the outcome. Method semantics matter beyond style -- idempotency determines what clients and infrastructure can safely retry, and caching only works when methods and status codes are used as specified. The Richardson Maturity Model gives this a vocabulary: the jump that matters is to Level 2 (resources plus verbs plus status codes), where HTTP's machinery starts working for you; Level 3 hypermedia is part of the formal definition but rarely implemented, and pragmatic Level 2 is the honest production answer. Content negotiation lets one resource serve many representations, provided the server declares its choices in `Vary` so caches stay correct.
+
+From those principles we derived the recurring design decisions:
+
+- Version explicitly -- URL path versioning is the most widely adopted -- so you can evolve without breaking clients.
+- Prefer cursor or keyset pagination over offsets for large or changing collections, and always paginate on a stable, unique sort key.
+- Keep filtering, sorting, and the error envelope consistent across every endpoint, and allowlist any user input that lands in a SQL identifier position.
+- Make unsafe operations retryable with idempotency keys, communicate limits through rate-limit headers, and batch high-volume writes through bulk endpoints with per-item results.
+
+Finally, the contract should live in an OpenAPI specification -- generated from code or written design-first -- and be enforced by contract tests in CI, because documentation that drifts from the implementation is worse than none. REST is the default choice for public HTTP APIs, but it is not the only one; the next section, 5.2 Beyond REST, examines the alternatives -- and when they are the better fit.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [5.2 Beyond REST](beyond-rest.md)

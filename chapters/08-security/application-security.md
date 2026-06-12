@@ -2,6 +2,12 @@
 
 # 8.1 Application Security
 
+The previous chapter was about keeping systems running; this chapter is about keeping them safe while they run. The shift in mindset is real: instead of asking "what happens when a disk fails," we now ask "what happens when someone deliberately feeds my endpoint input designed to break it." Application security is where that adversarial thinking matters most to a working backend engineer, because the application layer is the attack surface you personally write. A single string formatted into a SQL query can dump your entire user table; one `|safe` filter in a template can hand every visitor's session cookie to an attacker; an unguarded URL-fetching endpoint can leak your cloud credentials from the instance metadata service; a `pickle.loads` on attacker-controlled bytes is remote code execution, full stop. None of these require a sophisticated adversary -- they are scripted, scanned for, and exploited within hours of deployment.
+
+By the end of this section you should be able to answer questions like: how does each of the major OWASP attack classes actually work, and what is the idiomatic Django/Python defense for each? Why are parameterized queries and allowlist validation the two defenses that keep reappearing? Which security headers should every response carry, and what does each one actually prevent? When do you hash, when do you encrypt, and when is base64 neither? And why is nonce reuse with AES-GCM catastrophic while the nonce itself need not be secret?
+
+We proceed in three passes. First, *OWASP Top 10 Essentials* walks the canonical attack classes one by one -- injection, broken authentication, XSS, CSRF, broken access control, misconfiguration, insecure deserialization, and SSRF -- each with vulnerable and corrected code. Then *Input Validation & Security Headers* steps back from individual attacks to the cross-cutting defenses: allowlist validation, parameterized query patterns across drivers and ORMs, security headers, CORS, file upload handling, and rate limiting. Finally, *Cryptography Fundamentals* covers the concepts underneath it all -- hashing versus encryption versus encoding, AEAD, HMAC, signatures, secure randomness, and key management -- so that you can choose the right primitive instead of misusing a vetted library.
+
 ## OWASP Top 10 Essentials
 
 The Open Web Application Security Project (OWASP) maintains a regularly updated list of the most critical security risks to web applications. Every backend developer must understand these attack vectors and know how to defend against them. Below, each item is explained in depth with vulnerable and secure code examples.
@@ -857,6 +863,8 @@ The defense is identical in spirit to parameterized SQL: never let user input ch
 
 ## Input Validation & Security Headers
 
+The OWASP catalogue above treated each attack class in isolation, but you may have noticed the same two defenses recurring: validate input strictly, and keep data separate from code. This section makes those cross-cutting defenses explicit and adds the browser-facing layer -- security headers, CORS, upload handling, and rate limiting -- that protects you even when an application-level mistake slips through.
+
 ### Whitelist Validation
 
 Whitelist validation (also called allowlist validation) is the practice of defining exactly what input is acceptable and rejecting everything else. This is fundamentally more secure than blacklist validation, which tries to enumerate all dangerous inputs -- an approach that inevitably misses edge cases and novel attack vectors.
@@ -1402,4 +1410,16 @@ The hardest part of applied cryptography is not encrypting -- it's protecting th
 
 > **Key Takeaway:** Pick the primitive that matches the goal -- hash for integrity, encrypt for confidentiality, HMAC/signature for authenticity, encoding for transport (never for security). Default to AEAD (AES-GCM/ChaCha20-Poly1305) with a unique nonce per message, generate all secrets with a CSPRNG, compare secrets in constant time, and keep keys in a KMS with envelope encryption and rotation. Don't roll your own crypto; misuse, not math, is what gets breached.
 
+## Summary
+
+Application security comes down to a small number of principles applied relentlessly. The OWASP Top 10 attacks look diverse -- injection, XSS, CSRF, broken access control, insecure deserialization, SSRF -- but almost all of them reduce to the same root cause: the application allowed untrusted input to change the *structure* of something (a SQL query, an HTML page, a shell command, an LDAP filter, an object graph, an outbound request) rather than treating it as inert data. The defenses follow from that diagnosis. Parameterized queries and ORMs keep data out of SQL; auto-escaping templates keep data out of HTML; `subprocess` argument lists keep data out of the shell; JSON keeps data from becoming executable objects; and ownership checks enforced server-side, at the query level, keep one user's data out of another's hands.
+
+The second section turned those instincts into mechanism: allowlist validation that defines what is acceptable rather than enumerating what is dangerous; security headers (HSTS, CSP, `X-Content-Type-Options`, frame controls) set at both the application and the web server; CORS restricted to named origins, never `*` with credentials; file uploads validated by content rather than extension; and rate limiting at both nginx and application level on anything an attacker would automate. Defense in depth is the operating assumption -- any single layer will eventually fail.
+
+Finally, cryptography is a matter of choosing the right primitive, not implementing one: hash for integrity, a slow salted KDF for passwords, AEAD encryption with unique nonces for confidentiality, HMAC or signatures for authenticity, `secrets` for anything that protects something, constant-time comparison for anything secret, and keys in a KMS with envelope encryption and rotation.
+
+All of this assumes the platform underneath the application is itself sound -- TLS termination, network boundaries, secrets storage, and hardened hosts -- which is the subject of 8.2 Infrastructure Security.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [8.2 Infrastructure Security](infrastructure-security.md)

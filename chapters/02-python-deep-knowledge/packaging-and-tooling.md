@@ -2,7 +2,15 @@
 
 # 2.4 Packaging & Tooling
 
+The previous sections of this chapter were about the language itself — its data model, its concurrency story, its design patterns. This section is about everything that surrounds the code: how a project declares and locks its dependencies, how quality is enforced before code reaches a shared branch, and how you find out where the time actually goes when something is slow. These concerns feel less glamorous than metaclasses or the event loop, but they are where a disproportionate share of production incidents originate. "Works on my machine" is almost always a dependency-resolution story; a `NoneType` crash that a type checker would have caught is a tooling story; and a service that burns CPU in a function nobody suspected is a profiling story.
+
+By the end of this section you should be able to answer questions like: why does a lock file exist when `requirements.txt` already pins versions, and which of `uv`, Poetry, or pip-tools should a new project pick? What does a pre-commit pipeline actually buy a team beyond formatting consistency? When a request handler is slow, how do you go from "the endpoint is slow" to the specific line that is burning CPU — and why is `cProfile` the wrong tool to attach to a production process? And which standard-library habits (logging configuration, `pathlib`, `subprocess`, atomic writes) separate a script from a service?
+
+We proceed in the order a project matures. *Dependency Management* covers `pyproject.toml`, the modern tool landscape, and virtual environments — the foundation everything else sits on. *Code Quality* layers on the automated gates: `ruff` for linting and formatting, `pre-commit` to enforce them, and `pytest` to verify behavior. *Profiling & Optimization* turns to performance: measuring before guessing, and a decision procedure for what to optimize once you have measured. Finally, *Standard Library Essentials* closes the chapter with the stdlib facilities — logging and filesystem/process interaction — that production code leans on every day.
+
 ## Dependency Management
+
+Everything in this section exists to answer one question: how do we guarantee that the code running in production was built against exactly the dependencies we tested? The answer has three layers — a declaration of what the project needs, a lock of the exact versions that satisfy it, and an isolated environment to install them into. We start with the file where the declaration lives.
 
 ### `pyproject.toml`: The Modern Standard
 
@@ -167,6 +175,8 @@ uv run pytest
 ---
 
 ## Code Quality
+
+A reproducible environment tells you what code is running; it says nothing about whether that code is any good. The next layer of tooling enforces quality mechanically — linting, formatting, type checking, and testing — so that correctness checks happen on every commit rather than depending on a reviewer's attention.
 
 ### Ruff: The All-in-One Linter and Formatter
 
@@ -449,6 +459,8 @@ TOTAL                        86      5    94%
 ---
 
 ## Profiling & Optimization
+
+Quality gates catch code that is wrong; they do not catch code that is slow. When performance becomes the problem, the tools change — from static analysis to measurement. The discipline here is the same one we will see throughout this book: observe before you act, because the bottleneck is rarely where you think it is.
 
 ### cProfile: Function-Level Profiling
 
@@ -833,4 +845,20 @@ For configuration and CLIs: `argparse` (stdlib) handles command-line parsing (or
 
 > **Key Takeaway:** Replace `print` with a configured `logging` setup (module loggers, lazy `%s` formatting, `logger.exception()` for tracebacks, structured logs in prod, no secrets). Use `pathlib.Path` over `os.path`, call external programs with `subprocess.run([...], check=True)` and never `shell=True` on untrusted input, and make file writes crash-safe with a temp file plus atomic `os.replace`.
 
+## Summary
+
+This section covered the machinery that turns Python code into a dependable production artifact. The thread running through all of it is reproducibility and automation: anything a human must remember to do will eventually not get done.
+
+Dependency management rests on three layers. `pyproject.toml` declares what the project needs and configures its tools in one place; a lock file (`uv.lock`, `poetry.lock`, or a pip-compiled `requirements.txt`) freezes the exact transitive versions so every environment installs the same thing; and a virtual environment isolates those installs per project. The decision rule for tooling: `uv` for new projects, Poetry where it is already entrenched, pip-tools when you want minimal machinery.
+
+Code quality is enforced, not requested. `ruff` consolidates linting and formatting into one fast tool; `pre-commit` runs it — together with `mypy` and hygiene hooks — on every commit, so defects are caught before they reach a shared branch; `pytest` with fixtures, parametrization, and coverage verifies behavior, with the caveat that coverage measures execution, not assertion.
+
+Profiling follows one rule above all: measure before optimizing. `cProfile` finds hot functions (relative comparison only — its overhead inflates absolute times), `line_profiler` finds hot lines, and `py-spy` samples live production processes without code changes. Once measured, fix the algorithm first; micro-optimization comes last.
+
+Finally, the standard library carries production services daily: configured `logging` instead of `print`, `pathlib` over string paths, `subprocess.run` with argument lists, and atomic writes via `os.replace`.
+
+This closes Chapter 2. We now know the language deeply — its data model, concurrency, patterns, and tooling. Chapter 3 changes altitude: instead of asking how Python works, we ask how to structure the systems we build with it, beginning with 3.1 Design Principles.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [3.1 Design Principles](../03-software-architecture/design-principles.md)

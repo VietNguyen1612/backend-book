@@ -2,6 +2,12 @@
 
 # 4.3 Data Management
 
+The previous two sections were about choosing and operating a database; this one is about living with it. Most database incidents in mature systems are not caused by the engine at all -- they are caused by the things we do around it: a migration that takes an exclusive lock on a hot table during peak traffic, a connection pool sized to the application's ambition rather than the database's limits, a ledger that drifts by fractions of a cent because money was stored as a float, or an analytics pipeline that quietly loaded null user IDs for a week before anyone noticed the dashboards were wrong. None of these failures show up in a benchmark or a schema review; they show up at 2 a.m., in production, after the data has already spread.
+
+By the end of this section you should be able to answer the questions these incidents raise. How do you rename a column on a table with a hundred million rows without downtime? When is soft delete the right call, and what does it quietly break? How should money, timestamps, and status values be typed so that bad data is structurally impossible? How many connections should your fleet actually open against the database, and what timeouts stop one stuck query from becoming an outage? And once the operational data is sound, how does it flow into a warehouse shaped for analytics rather than transactions?
+
+We take these in the order a system tends to encounter them. We start with migration strategies, because schema change is the most frequent and highest-risk touch point with a live database. We then look at recurring data patterns -- soft delete, audit trails, multi-tenancy, event sourcing -- followed by the unglamorous but expensive matter of storing money and time correctly. From there we turn to connection and resource management, the operational discipline that keeps the database reachable under load. Finally we leave the transactional world: ETL and data pipelines move data out of the operational store, and dimensional modeling shapes it for the analysts who consume it.
+
 ## Migration Strategies
 
 Database migrations are one of the highest-risk operations in production systems. A bad migration can lock tables, corrupt data, or cause downtime. Understanding which changes are safe and which require careful planning is essential.
@@ -178,6 +184,8 @@ Always version-control your migrations and never modify a migration that has alr
 ---
 
 ## Data Patterns
+
+Safe migrations tell you how to change a schema; they do not tell you what the schema should say. Certain requirements -- recoverable deletion, an answer to "who changed this and when", many customers in one deployment, a complete history of state changes -- recur in almost every backend, and each has a well-worn pattern with known costs. This section walks through four of them, in roughly increasing order of commitment.
 
 ### Soft Delete
 
@@ -574,6 +582,8 @@ Serverless functions (AWS Lambda, Cloud Functions) break the pooling model: the 
 
 ## ETL & Data Pipelines
 
+Everything so far has kept the data inside the operational database. But the questions a business asks of its data -- trends, cohorts, dashboards -- are poorly served by the system that handles its transactions, so sooner or later data must move: out of the OLTP store, through cleaning and reshaping, into a warehouse or lake. This section covers that movement -- the pipelines, the orchestration, the streaming infrastructure, and the quality checks that decide whether the numbers downstream can be trusted.
+
 ### ETL vs ELT
 
 **ETL (Extract, Transform, Load)** is the traditional pattern: extract data from source systems, transform it (clean, enrich, aggregate, reshape) in a processing layer, and then load the transformed data into the destination (data warehouse). This approach makes sense when the destination has limited compute resources or when you want to minimize the data stored.
@@ -923,4 +933,18 @@ CREATE TABLE dim_customer (
 
 > **Key Takeaway:** Model analytics dimensionally: a central fact table of measurable events at a clearly-defined grain, surrounded by descriptive dimension tables (star schema). Prefer star over snowflake unless a dimension is large and volatile. Declare the grain before anything else -- it is the decision everything else depends on. And choose your SCD type by whether history matters: Type 1 overwrites and forgets, Type 2 versions rows to preserve full history (the usual choice), Type 3 keeps just the previous value.
 
+---
+
+## Summary
+
+This section was about the work that surrounds a database in production. Schema change came first because it is the riskiest routine operation: additive changes (new tables, nullable columns, concurrent indexes) are safe, while anything breaking -- renames, type changes, new NOT NULL constraints -- demands the expand-contract pattern: add the new structure, write to both, backfill, switch reads, and only then remove the old. The rule is never to rename or drop in a single deploy.
+
+The recurring data patterns each trade simplicity for a guarantee. Soft delete keeps rows recoverable at the price of filtering every query; audit trails answer compliance questions, with triggers keeping them transparent to application code; multi-tenancy runs from cheap row-level isolation to expensive per-tenant databases, and most systems rightly start at the cheap end; event sourcing preserves complete history but should be reserved for domains that genuinely need it. Beneath the patterns sit the unforgiving basics: money as exact decimals or integer minor units with a currency and a rounding policy, time as UTC `timestamptz` with the IANA zone stored separately, and state columns constrained so invalid values cannot enter.
+
+Operationally, connections are the scarce resource -- size the aggregate pool to the database's limits, set timeouts at every layer, and front serverless workloads with a proxy. Finally, data leaves the operational store through pipelines (ELT where the warehouse has the compute, CDC for real-time integration, quality checks built in) and lands in dimensionally modeled schemas: fact tables at a declared grain, star-shaped dimensions, and SCD Type 2 when history matters.
+
+This closes Chapter 4. We have now covered how data is stored, queried, scaled, and managed; the next question is how that data is exposed to the outside world, which is where Chapter 5 begins with 5.1 RESTful APIs.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [5.1 RESTful APIs](../05-api-design/restful-apis.md)

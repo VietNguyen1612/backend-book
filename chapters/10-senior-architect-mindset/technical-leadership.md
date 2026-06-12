@@ -2,7 +2,15 @@
 
 # 10.1 Technical Leadership
 
+The previous chapters of this book have been about technical depth: data modeling, distributed systems, performance, security, testing. With this chapter we change register. Past a certain level of seniority, your impact is no longer measured chiefly by the code you write but by the decisions you shape, the documents you circulate, and the reviews you give -- artifacts of influence that outlive any single codebase. A well-reasoned decision record is still useful five years after the engineer who wrote it has left; a healthy review culture keeps catching defects long after any individual fix is forgotten. Technical leadership is the discipline of producing those durable artifacts deliberately rather than by accident.
+
+By the end of this section you should be able to answer a set of practical questions. Which decisions deserve a written record, and what must that record capture for it to be worth keeping? How do you circulate a design so that objections surface while they are still cheap to address? How do you make technical debt visible -- and negotiable -- to people who do not read code? And what separates a code review that catches real defects from one that litigates style?
+
+We proceed in roughly the order these practices appear in a decision's life. We start with Architecture Decision Records, the durable "minutes" of an architectural choice. We then step back to the RFC / design-doc process that produces those decisions in the first place. From deliberate decisions we turn to the undeliberate ones: technical debt management, including how to classify debt, quantify it in business terms, and decide between refactoring and rewriting. Finally we close with code review excellence, the daily practice through which all of these standards are actually enforced.
+
 ## Architecture Decision Records (ADR)
+
+Of all the artifacts a technical leader produces, the decision record is the simplest and the most durable, so it is where we begin.
 
 An Architecture Decision Record is a short document that captures a single significant architectural decision along with its full context. The most important aspect of an ADR is that it records **why** a decision was made, not merely what was decided. Teams that only document the "what" find themselves relitigating the same debates months later because nobody remembers the constraints, trade-offs, and reasoning that shaped the original choice.
 
@@ -159,6 +167,8 @@ The most common failure mode is writing the doc *after* the code is already writ
 
 ## Technical Debt Management
 
+ADRs and design docs govern the decisions a team makes deliberately. But every system also carries the residue of decisions made under deadline pressure, with incomplete knowledge, or without anyone noticing a decision was being made at all. Managing that residue -- consciously, visibly, and in language the business understands -- is the third leadership discipline.
+
 Technical debt is the implied cost of future rework caused by choosing an expedient solution now instead of a better approach that would take longer. Like financial debt, technical debt is not inherently bad -- sometimes borrowing is the right business decision -- but unmanaged debt compounds and eventually cripples a team's ability to deliver.
 
 ### The Tech Debt Quadrant
@@ -238,6 +248,8 @@ In all other cases, prefer incremental refactoring using techniques like the Str
 ---
 
 ## Code Review Excellence
+
+Decision records, design docs, and a debt backlog operate on the scale of weeks and quarters. The instrument of technical leadership that operates daily -- and through which all the standards above are actually enforced or quietly eroded -- is the code review.
 
 Code review is one of the highest-leverage activities in software engineering. Studies consistently show that code review catches 60-90% of defects before they reach production, which is a higher defect detection rate than most testing strategies. Beyond defect detection, code reviews spread knowledge across the team, enforce consistency, mentor junior engineers, and create a shared sense of ownership.
 
@@ -343,6 +355,20 @@ _____________________________________________________________________________
 
 > **Key Takeaway:** Code review is not a gate to slow people down -- it is a collaborative practice that improves code quality, spreads knowledge, and builds team cohesion. Invest in making your review process efficient (small PRs, automated style checks, clear checklists) and humane (constructive tone, clear severity levels, praise for good work).
 
+## Summary
+
+The common thread of this section is that technical leadership is exercised through durable, written artifacts rather than through authority. An Architecture Decision Record captures the *why* of a significant choice -- context, decision, consequences -- so the team is not forced to relitigate it later. Write one whenever a decision shapes the system's structure, is hard to reverse, or has long-term implications, and treat the record as append-only: a reversed decision gets a new ADR that supersedes the old one, never an edit that erases the history.
+
+The RFC / design-doc process is how you arrive at decisions worth recording. The discipline is to write the design before the code, while changing your mind still costs minutes rather than sprints; the RFC is the conversation, the ADR its minutes. Gate it with a lightweight norm -- roughly, any change over a week of work or touching a public API or data model -- and resist demanding docs for trivial changes.
+
+Technical debt is a tool, not a sin. Fowler's quadrant tells you how to respond to each kind of debt; quantifying its cost in incidents, velocity, and onboarding time tells the business why it matters. Pay it down through a protected, tracked allocation, and reach for a rewrite only when the architecture fundamentally cannot meet requirements, the team deeply understands the existing system, and the business explicitly sponsors the cost.
+
+Finally, code review is where these standards live or die day to day: review correctness, design, and security; automate style; keep changes under roughly 400 lines; and deliver feedback that explains, suggests, and distinguishes blockers from nits.
+
+These practices govern how decisions are made and enforced; the next section, 10.2 System Thinking, turns to how senior engineers reason about the systems those decisions create.
+
 ---
 
 *Last reviewed: 2026-06-08*
+
+**Next:** [10.2 System Thinking](system-thinking.md)

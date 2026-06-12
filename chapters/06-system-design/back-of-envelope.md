@@ -2,9 +2,15 @@
 
 # 6.4 Back-of-Envelope Calculations
 
-Back-of-envelope calculations (also called Fermi estimates) help you quickly determine the scale of a system and make informed architecture decisions. In a system design interview, they demonstrate that you think about scale before diving into design.
+Back-of-envelope calculations (also called Fermi estimates) help you quickly determine the scale of a system and make informed architecture decisions before any benchmark exists. Every design in section 6.3 rested on a sizing judgment made early, with incomplete information: whether the data fits on one machine, whether a cache absorbs the read load, how many workers a queue needs. Those judgments cannot wait for a load test -- by the time you can benchmark, the architecture is already chosen. Estimation is how we make them defensible, and in a system design interview it demonstrates that you think about scale before diving into design.
+
+After working through this section, you should be able to answer questions like: how many requests per second is 100 million per month, really? Does five years of data fit on a single database server, or does it force a partitioned store? How much memory does a cache need to absorb 80% of reads? How many WebSocket servers does 10 million daily users imply, and how many worker threads does a notification queue need at peak? None of these require precision -- they require the right order of magnitude, stated with explicit assumptions.
+
+We proceed in two steps. First we establish the reference numbers worth memorizing -- latencies, throughputs, storage sizes, and time-scale conversions that anchor every estimate. Then we apply them in three full walkthroughs of increasing statefulness: a URL shortener (read-heavy, cache-dominated), a chat system (storage- and connection-dominated), and a notification system (throughput- and worker-dominated). Each walkthrough ends by naming the one number that actually drives the architecture.
 
 ## Reference Numbers to Memorize
+
+Estimates are only as fast as your recall of the underlying constants, so we start by laying out the small table of numbers that every calculation in this section -- and most you will do in practice -- is built from. You do not need them to many digits; you need the right power of ten.
 
 ```
 LATENCY NUMBERS:
@@ -47,6 +53,8 @@ The two latency numbers worth internalizing above all others: an SSD read (~150 
 > **Common pitfall:** Mixing up the unit prefixes is the single most common way these estimates go wrong. 1 us = 1,000 ns, 1 ms = 1,000 us = 1,000,000 ns, and 1 GB/s = 1,000 MB/s. A misplaced factor of 1,000 turns "fits on one box" into "needs a cluster," so write the units next to every number and check that the powers of ten line up before you trust the verdict.
 
 ## Walkthrough Example 1: URL Shortener Scale Estimation
+
+With the reference numbers in hand, we can put the method to work. We begin with the gentlest case -- a URL shortener -- because it exercises the full sequence (writes, reads, storage, cache, bandwidth) while keeping every individual calculation small.
 
 **Problem**: Design a URL shortener that handles 100 million new URLs per month and a 100:1 read-to-write ratio. Estimate the storage, bandwidth, and caching requirements.
 
@@ -106,6 +114,8 @@ Notice the shape of the answer: writes are trivial (40/sec, 10 KB/s), storage is
 
 ## Walkthrough Example 2: Chat System Scale Estimation
 
+The URL shortener was forgiving: everything fit on one box except the read path. Our second walkthrough removes that comfort. A chat system is stateful -- it holds millions of long-lived connections and accumulates storage far faster -- so the same estimation steps now produce numbers that force distribution.
+
 **Problem**: Design a chat system for 10 million daily active users (DAU). Each user sends an average of 40 messages per day. Estimate the storage, connection, and message throughput requirements.
 
 ```
@@ -163,6 +173,8 @@ The decisive number here is storage: 220 TB over five years is what rules out a 
 
 ## Walkthrough Example 3: Notification System Scale Estimation
 
+The first two examples sized storage and connections; the final one sizes work. A notification system is dominated by outbound calls to third-party providers, so the estimate must account for per-call latency, provider rate limits, and batching -- factors the earlier walkthroughs never touched.
+
 **Problem**: A notification system for an e-commerce platform with 50 million registered users. On average, each user receives 3 notifications per day. Estimate throughput and worker capacity.
 
 ```
@@ -208,4 +220,14 @@ The interesting result is how cheap the workers are: even at a 5x flash-sale pea
 
 > **Key Takeaway**: Back-of-envelope calculations are not about getting exact numbers. They are about getting the right order of magnitude. The difference between 100 requests/second and 100,000 requests/second determines whether you need a single server or a distributed cluster. Always start with the daily active users, derive the operations per second, estimate storage per record, multiply out over your retention period, and then determine how many servers/instances each component needs. Present your assumptions clearly -- they matter more than the final numbers.
 
+## Summary
+
+The method of this section is deliberately mechanical: start from daily active users or daily volume, divide by 86,400 (~10^5) seconds to get operations per second, apply a peak multiplier (3x for chat, 5x for flash sales), estimate bytes per record, multiply out over the retention window, and only then ask what each component needs. The reference numbers make this fast. One million requests per day is ~12 per second; a billion is ~12,000. An SSD random read (~150 us) is ~65x faster than an HDD read (~10 ms), and a same-datacenter round-trip (~0.5 ms) is ~300x faster than a cross-ocean one (~150 ms). A record is typically a few hundred bytes, so a billion of them is a few hundred gigabytes -- single-server territory -- while 5 years of chat history (~220 TB) is not.
+
+The three walkthroughs each surfaced one decisive number. For the URL shortener it was 4,000 reads/sec, pushing the design toward replicas and a 1.75 GB cache. For the chat system it was 220 TB of storage and 3 million concurrent connections, forcing a partitioned store and 60 stateful servers. For the notification system it was per-call latency and batch size, where a 500-token FCM batch made one worker do the work of a hundred serial senders. The pattern repeats: the estimate's job is to find the number that picks the architecture, with assumptions stated plainly.
+
+Two of those walkthroughs leaned on a cache to absorb most of the load; the next section, 6.5 Caching & CDN Deep-Dive, examines how those caches actually behave -- and misbehave -- in production.
+
 *Last reviewed: 2026-06-08*
+
+**Next:** [6.5 Caching & CDN Deep-Dive](caching-and-cdn.md)

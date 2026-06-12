@@ -6,7 +6,15 @@
 
 ---
 
-## Table of Contents
+## How This Book Is Organized
+
+The twelve chapters are grouped into five parts, ordered so that each part stands on the ones before it. Read front to back if you can -- every section ends with a **Next** link that follows this order, and each opens with a summary of what it assumes. Or jump in anywhere: the part introductions below tell you where you are landing.
+
+---
+
+## Part I: Foundations (Chapters 1–2)
+
+Everything in this book ultimately runs as processes, sockets, and bytes -- written here in Python. Part I builds that base twice over: first the computer science that is true in every language (data structures, algorithms, operating systems, networking), then Python itself, down to the interpreter, so the later chapters can say "the GIL" or "an epoll loop" without stopping to explain.
 
 ### [1. Computer Science Fundamentals](chapters/01-cs-fundamentals/README.md)
 
@@ -33,6 +41,10 @@ Beyond syntax into how Python actually works. Language internals (data model, GI
 | 2.4 Packaging & Tooling | [packaging-and-tooling.md](chapters/02-python-deep-knowledge/packaging-and-tooling.md) |
 
 ---
+
+## Part II: Designing the Backend (Chapters 3–5)
+
+With the fundamentals in place, Part II turns to the decisions that shape a single service: the principles and patterns that keep a codebase changeable as it grows, the database where the hardest state lives, and the API surface through which everyone else consumes your work.
 
 ### [3. Software Architecture](chapters/03-software-architecture/README.md)
 
@@ -71,6 +83,10 @@ Building and consuming APIs the right way. RESTful API design (versioning, pagin
 
 ---
 
+## Part III: Systems at Scale (Chapters 6–7)
+
+One well-designed service is not yet a system. Part III is about what changes when load and machine count grow: scaling and distributed systems with worked end-to-end designs, then the infrastructure -- containers, pipelines, observability -- that keeps it all running in production.
+
 ### [6. System Design](chapters/06-system-design/README.md)
 
 Thinking at scale. Horizontal/vertical scaling, load balancing algorithms, caching strategies (cache-aside, write-through, stampede & hot-key handling), CAP/PACELC, quorums, and consistency models. Distributed systems: consensus (Raft), logical/vector clocks, distributed unique IDs, distributed locking, service communication patterns, circuit breakers. Real-world designs: URL shortener, rate limiter, chat, notifications, news feed, typeahead, geo/proximity, object storage, payments, and a Dynamo-style distributed cache.
@@ -97,6 +113,10 @@ Running code in production. Docker (multi-stage builds, security, layer caching,
 
 ---
 
+## Part IV: Quality & Trust (Chapters 8–9)
+
+A system that scales is still a liability if it leaks data or breaks on every deploy. Part IV covers defense -- application and infrastructure security, from the OWASP Top 10 to secrets and compliance -- and confidence: a testing strategy that catches each bug at the cheapest layer able to catch it.
+
 ### [8. Security](chapters/08-security/README.md)
 
 Protecting your systems and data. OWASP Top 10 (injection, XSS, CSRF, SSRF, broken auth/access control), input validation, security headers, CORS. Cryptography fundamentals (password hashing, symmetric/asymmetric, HMAC, signatures, AEAD, key management). Infrastructure security: secrets management (Vault, AWS/GCP, workload identity), encryption, dependency scanning/SBOM, zero-trust, and compliance & privacy (GDPR/CCPA, PCI-DSS, SOC 2/ISO 27001).
@@ -118,6 +138,10 @@ Writing tests that actually catch bugs. The testing pyramid (and the trophy view
 | 9.2 Testing Practices | [testing-practices.md](chapters/09-testing-strategy/testing-practices.md) |
 
 ---
+
+## Part V: From Engineer to Architect (Chapters 10–12)
+
+The final part is about leverage beyond your own keyboard: the architect's habits of decision-making and system thinking, how the principles from the earlier parts surface in the framework you use every day (Django here, but the patterns are universal), and the communication and career skills that multiply everything else.
 
 ### [10. Senior / Architect Mindset](chapters/10-senior-architect-mindset/README.md)
 

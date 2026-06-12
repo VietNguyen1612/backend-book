@@ -16,6 +16,7 @@ All notable changes from the audit & improvement pass. Dates are absolute.
   - short bridge paragraphs under H2 sections that previously opened abruptly with a definition/subheading/code (~100 bridges total, only where needed);
   - a closing `## Summary` recapping each section's decision rules, ending with a named hand-off to the next section (chapter-closing files wrap up the chapter; 12.2 closes the book);
   - a `**Next:** [N.M Title](…)` link as the last line, so the book reads front-to-back (12.2 links back to the index).
+- **Root README**: chapters grouped into five named parts (I Foundations, II Designing the Backend, III Systems at Scale, IV Quality & Trust, V From Engineer to Architect), each with a short framing paragraph explaining the ordering, plus a "How This Book Is Organized" reading guide.
 - Search index regenerated; all checks green: markdownlint 0 errors, ruff clean, links/fences/TOC/stamps pass, index fresh.
 
 ### Phase 1 — Known fixes
